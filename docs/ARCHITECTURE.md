@@ -146,3 +146,5 @@ Minden nyíl adatátadást jelent, nem közvetlen függőséget — az engine-ek
 ## 5. Kapcsolódó architekturális döntések (hivatkozás az ADR-ekre)
 
 Ez a dokumentum az architektúra kezdeti, alapállapotát rögzíti, ezért önmagában nem igényel Architecture Decision Record-ot. A jövőben, ha ez az architektúra jelentősen módosul (például réteg hozzáadása, engine-ek összevonása vagy szétválasztása), azt a `PROJECT_CONSTITUTION.md` 8. elve szerint ADR-ben kell rögzíteni a `docs/adr/` mappában.
+
+Az implementációs technológia kiválasztása (Python + PySide) az [ADR-0001](adr/0001-python-pyside-tech-stack.md) dokumentumban került rögzítésre.
