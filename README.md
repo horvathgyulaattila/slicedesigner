@@ -8,7 +8,7 @@ Kapcsolódó dokumentumok: [docs/PROJECT_CONSTITUTION.md](docs/PROJECT_CONSTITUT
 
 ## Cél
 
-A Slice Designer egy desktop alkalmazás, amely 3D modellekből (első körben STL) CNC-re előkészített szeletelt alkatrészeket készít. A program nem CAD rendszer, hanem egy célzott gyártás-előkészítő eszköz.
+A Slice Designer egy desktop alkalmazás, amely 3D modellekből (első körben STL) gyártásra előkészített, szeletelt alkatrészeket készít. A program nem CAD rendszer, hanem egy célzott, technológia-független gyártás-előkészítő eszköz.
 
 ## Jelenlegi állapot
 
