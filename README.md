@@ -28,6 +28,7 @@ Javasolt sorrend első olvasásra:
 8. `docs/AI_WORKFLOW.md` – hogyan zajlik a fejlesztés AI közreműködésével
 9. `docs/PROMPT_STANDARD.md` – sablon jövőbeni implementációs feladatokhoz
 10. `docs/DOMAIN_MODEL.md` – a projekt közös fogalomrendszere
+11. `docs/SPECIFICATION_STANDARD.md` – sablon a funkcionális specifikációkhoz
 
 A `docs/adr/` mappa a jövőbeni architekturális döntéseket, a `docs/specifications/` pedig a részletes specifikációkat fogja tartalmazni.
 

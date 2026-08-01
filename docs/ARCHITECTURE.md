@@ -112,7 +112,7 @@ A rétegek szigorúan egyirányban függenek: GUI → Project → Engine-ek. For
 
 **Réteg:** Prezentációs
 
-**Felelősség:** Megjelenítés és felhasználói interakció fogadása. Nem tartalmaz üzleti vagy geometriai logikát (Engineering Principles, GUI felelőssége). Kizárólag a Project komponensen keresztül kommunikál, engine-t közvetlenül nem hív.
+**Felelősség:** Megjelenítés és felhasználói interakció fogadása, beleértve az Assembly és az egyes Slice-ok interaktív, forgatható/zoomolható 3D vizualizációját. Nem tartalmaz üzleti vagy geometriai logikát (Engineering Principles, GUI felelőssége) — a vizualizációhoz szükséges geometriai adatokat (pl. Slice pozíció, vastagság, geometria típusa; Assembly szerkezete) a Domain Modelben rögzített attribútumok alapján a Project biztosítja, a GUI nem számol geometriát, kizárólag megjelenít. Kizárólag a Project komponensen keresztül kommunikál, engine-t közvetlenül nem hív.
 
 **Domain Model kapcsolat:** —
 
@@ -148,3 +148,5 @@ Minden nyíl adatátadást jelent, nem közvetlen függőséget — az engine-ek
 Ez a dokumentum az architektúra kezdeti, alapállapotát rögzíti, ezért önmagában nem igényel Architecture Decision Record-ot. A jövőben, ha ez az architektúra jelentősen módosul (például réteg hozzáadása, engine-ek összevonása vagy szétválasztása), azt a `PROJECT_CONSTITUTION.md` 8. elve szerint ADR-ben kell rögzíteni a `docs/adr/` mappában.
 
 Az implementációs technológia kiválasztása (Python + PySide) az [ADR-0001](adr/0001-python-pyside-tech-stack.md) dokumentumban került rögzítésre.
+
+A GUI interaktív 3D vizualizációs technológiájának kiválasztása (PyVista + pyvistaqt) az [ADR-0002](adr/0002-pyvista-3d-visualization.md) dokumentumban került rögzítésre.

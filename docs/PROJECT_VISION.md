@@ -27,6 +27,7 @@ A Slice Designer elsődlegesen egyszemélyes, saját használatra készülő esz
 * Anyagfüggetlen tervezés: nincs kitüntetett anyagtípus (fa, akril, fém stb.), a működés paraméterezhető, anyagspecifikus hardcode-olt logika nélkül.
 * Nesting: az alkatrészek optimális elrendezése a Material-on.
 * DXF Export: gyártásra kész kimenet előállítása.
+* Interaktív 3D előnézet: az összeállítás és az egyes szeletek modellen belüli helyzetének megjelenítése forgatható, zoomolható 3D nézetben, a GUI részeként.
 
 ## 4. Amit a projekt nem céloz meg (nem-cél)
 

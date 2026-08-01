@@ -39,7 +39,7 @@ Minden jelentős, alternatívák közötti architekturális döntés itt kerül 
 
 ## 4. `docs/specifications/` – részletes specifikációk
 
-A ROADMAP Phase 2 (Functional Specifications) alatt készülő, egy-egy engine-hez tartozó specifikációk helye — egy fájl / fő funkció (Slice Engine, Gap System, Dowel System, Backplate, Numbering, Nesting, DXF Export). Elnevezési konvenció: a meglévő dokumentumstílust követő `NAGYBETŰS_ALÁHÚZÁSOS.md` (pl. `SLICE_ENGINE_SPEC.md`). A pontos tartalmi sablon a Phase 2 megkezdésekor, a `PROMPT_STANDARD.md` mintájára készül majd.
+A ROADMAP Phase 2 (Functional Specifications) alatt készülő, egy-egy engine-hez tartozó specifikációk helye — egy fájl / fő funkció (Mesh Import, Slice Engine, Gap System, Dowel System, Backplate, Numbering, Nesting, DXF Export). Elnevezési konvenció: a meglévő dokumentumstílust követő `NAGYBETŰS_ALÁHÚZÁSOS.md` (pl. `SLICE_ENGINE_SPEC.md`). A pontos tartalmi sablont a `SPECIFICATION_STANDARD.md` rögzíti.
 
 ## 5. `src/` – alkalmazáskód
 
