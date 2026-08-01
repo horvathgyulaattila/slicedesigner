@@ -10,6 +10,8 @@ Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](PROJECT_CONSTITUTION.md), [
 
 Ez a dokumentum definiálja a Slice Designer projekt közös fogalomrendszerét (Ubiquitous Language). Minden későbbi specifikáció, architekturális döntés és implementáció ezekre a fogalmakra épül, hogy a projekt minden résztvevője ugyanazt értse ugyanazon fogalmak alatt.
 
+> **Megjegyzés (2026-08-01):** A Numbering fogalom kivételesen, a Phase 1 hivatalos megkezdése előtt került rögzítésre, mert a ROADMAP Phase 2 (Functional Specifications) listája már hivatkozott rá, miközben a Domain Model nem tartalmazta — ez dokumentáción belüli ellentmondást okozott. A kiegészítés a projektgazda jóváhagyásával, kizárólag erre a fogalomra korlátozva történt; a Phase 1 további tartalma (koordinátarendszer, mértékegységek stb.) változatlanul a Phase 1 hivatalos megkezdésére vár.
+
 ## Alapelvek
 
 * A dokumentum technológiafüggetlen.
@@ -47,7 +49,7 @@ Minden fogalom azonos szerkezetben szerepel: Definíció, Szerepe, Kapcsolódó 
 
 **Szerepe:** A gyártásra kerülő alkatrészek alapegysége.
 
-**Kapcsolódó fogalmak:** Slice Set, Material, Dowel Hole, Backplate
+**Kapcsolódó fogalmak:** Slice Set, Material, Dowel Hole, Backplate, Numbering
 
 ---
 
@@ -87,7 +89,17 @@ Minden fogalom azonos szerkezetben szerepel: Definíció, Szerepe, Kapcsolódó 
 
 **Szerepe:** Rögzített referenciát biztosít a szeletek elhelyezéséhez.
 
-**Kapcsolódó fogalmak:** Slice, Assembly
+**Kapcsolódó fogalmak:** Slice, Assembly, Numbering
+
+---
+
+### Numbering
+
+**Definíció:** A szeletek egyedi azonosítóval történő megjelölése, amely mind a szelet geometriájába bevésve/kivágva, mind a hozzá tartozó Backplate pozíción megjelenik.
+
+**Szerepe:** Biztosítja a szeletek és a Backplate pozíciók egyértelmű megfeleltetését, lehetővé téve a hibamentes összeszerelést.
+
+**Kapcsolódó fogalmak:** Slice, Backplate
 
 ---
 
@@ -158,6 +170,7 @@ Minden fogalom azonos szerkezetben szerepel: Definíció, Szerepe, Kapcsolódó 
 * A Dowel és Dowel Hole együtt biztosítja az illesztést.
 * A Nest az alkatrészek Material-okra történő elrendezése.
 * Az Export a teljes előkészített eredmény.
+* A Numbering minden Slice-hoz egyedi azonosítót rendel, és ezt a hozzá tartozó Backplate pozíción is megjeleníti.
 
 ## A dokumentum határai
 
