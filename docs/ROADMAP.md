@@ -14,6 +14,8 @@ Ez a dokumentum meghatározza a Slice Designer fejlesztési fázisainak sorrendj
 
 A ROADMAP nem backlog, nem feladatlista és nem specifikáció. A célja, hogy bármelyik AI vagy új fejlesztő azonnal lássa, hol tart a projekt, mely fázisok készültek el, mi a következő lépés, és mely dokumentumok tekinthetők lezártnak. A ROADMAP kizárólag a fejlesztési folyamatot írja le, technikai megoldásokat nem.
 
+> **Megjegyzés (2026-08-01):** A Phase 0 korábbi ✅ Approved jelölése tévesen került rögzítésre — a kilépési feltétel ("A projekt dokumentációja önmagában értelmezhető") ténylegesen nem teljesült, mivel több Phase 0-hoz tartozó dokumentum vázlat állapotban maradt. A Phase 0 ezért 🟡 In Progress-re, a rá épülő Phase 1 pedig ⬜ Not Started-ra lett visszaminősítve.
+
 ## Állapotjelölések
 
 | Jelölés | Jelentés |
@@ -28,7 +30,7 @@ A ROADMAP nem backlog, nem feladatlista és nem specifikáció. A célja, hogy b
 
 ### Phase 0 – Project Foundation
 
-Állapot: ✅ Approved
+Állapot: 🟡 In Progress
 
 Feladata:
 
@@ -49,7 +51,7 @@ Kilépési feltétel: A projekt dokumentációja önmagában értelmezhető.
 
 ### Phase 1 – Domain Design
 
-Állapot: 🟡 In Progress
+Állapot: ⬜ Not Started
 
 Feladata:
 
