@@ -29,7 +29,7 @@ Javasolt sorrend első olvasásra:
 9. `docs/PROMPT_STANDARD.md` – sablon jövőbeni implementációs feladatokhoz
 10. `docs/DOMAIN_MODEL.md` – a projekt közös fogalomrendszere
 
-A `docs/adr/` mappa a jövőbeni architekturális döntéseket, a `docs/specifications/` a részletes specifikációkat, a `docs/prompts/` pedig a konkrét implementációs promptokat fogja tartalmazni.
+A `docs/adr/` mappa a jövőbeni architekturális döntéseket, a `docs/specifications/` pedig a részletes specifikációkat fogja tartalmazni.
 
 ## Filozófia
 
