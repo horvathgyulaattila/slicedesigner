@@ -21,7 +21,9 @@ A rétegek szigorúan egyirányban függenek: GUI → Project → Engine-ek. For
 ### Mesh Import
 
 **Réteg:** Domain
+
 **Felelősség:** STL formátumú modell betöltése, validálása, Mesh domain objektum előállítása.
+
 **Domain Model kapcsolat:** Mesh
 
 ---
@@ -29,7 +31,9 @@ A rétegek szigorúan egyirányban függenek: GUI → Project → Engine-ek. For
 ### Slice Engine
 
 **Réteg:** Domain
+
 **Felelősség:** A Mesh keresztmetszeteinek (szeleteinek) előállítása a szeletelési tengely mentén, Slice Set létrehozása.
+
 **Domain Model kapcsolat:** Mesh, Slice, Slice Set
 
 ---
@@ -37,7 +41,9 @@ A rétegek szigorúan egyirányban függenek: GUI → Project → Engine-ek. For
 ### Gap Engine
 
 **Réteg:** Domain
+
 **Felelősség:** A Slice Set elemeinek pozicionálása a Gap paraméter szerint, valamint a Gap fizikai megvalósítását biztosító Spacer specifikáció előállítása.
+
 **Domain Model kapcsolat:** Gap, Spacer, Slice Set
 
 ---
@@ -45,7 +51,9 @@ A rétegek szigorúan egyirányban függenek: GUI → Project → Engine-ek. For
 ### Dowel Engine
 
 **Réteg:** Domain
+
 **Felelősség:** Dowel és Dowel Hole pozíciójának és geometriájának számítása a szeletek egymáshoz viszonyított illesztéséhez.
+
 **Domain Model kapcsolat:** Dowel, Dowel Hole, Slice
 
 ---
@@ -53,7 +61,9 @@ A rétegek szigorúan egyirányban függenek: GUI → Project → Engine-ek. For
 ### Backplate Engine
 
 **Réteg:** Domain
+
 **Felelősség:** A Backplate geometriájának előállítása, és a szeletek Backplate-hez viszonyított pozicionálása.
+
 **Domain Model kapcsolat:** Backplate, Slice
 
 ---
@@ -61,7 +71,9 @@ A rétegek szigorúan egyirányban függenek: GUI → Project → Engine-ek. For
 ### Numbering Engine
 
 **Réteg:** Domain
+
 **Felelősség:** Minden Slice egyedi azonosítóval ellátása — bevésve/kivágva a szelet geometriájába —, valamint a hozzá tartozó Backplate pozíción a szelet helyének megjelölése, biztosítva a hibamentes összeszerelést.
+
 **Domain Model kapcsolat:** Slice, Backplate, Numbering
 
 ---
@@ -69,7 +81,9 @@ A rétegek szigorúan egyirányban függenek: GUI → Project → Engine-ek. For
 ### Nesting Engine
 
 **Réteg:** Domain
+
 **Felelősség:** Az elkészült alkatrészek (Slice, Backplate) optimális elrendezése a rendelkezésre álló Material-okon.
+
 **Domain Model kapcsolat:** Material, Nest, Slice
 
 ---
@@ -77,7 +91,9 @@ A rétegek szigorúan egyirányban függenek: GUI → Project → Engine-ek. For
 ### DXF Export Engine
 
 **Réteg:** Domain
+
 **Felelősség:** A Nest alapján gyártásra kész Export (DXF) kimenet előállítása.
+
 **Domain Model kapcsolat:** Nest, Export
 
 ---
@@ -85,7 +101,9 @@ A rétegek szigorúan egyirányban függenek: GUI → Project → Engine-ek. For
 ### Project
 
 **Réteg:** Koordinációs
+
 **Felelősség:** Az engine-ek végrehajtási sorrendjének (pipeline) összefogása, a Project állapotának tartása, mentés és betöltés kezelése, valamint a paraméterek továbbítása az egyes engine-ek felé. A Project maga nem tartalmaz geometriai vagy üzleti logikát — kizárólag koordinál.
+
 **Domain Model kapcsolat:** Project
 
 ---
@@ -93,7 +111,9 @@ A rétegek szigorúan egyirányban függenek: GUI → Project → Engine-ek. For
 ### GUI
 
 **Réteg:** Prezentációs
+
 **Felelősség:** Megjelenítés és felhasználói interakció fogadása. Nem tartalmaz üzleti vagy geometriai logikát (Engineering Principles, GUI felelőssége). Kizárólag a Project komponensen keresztül kommunikál, engine-t közvetlenül nem hív.
+
 **Domain Model kapcsolat:** —
 
 ## 3. Adatfolyam / munkafolyamat a rendszeren belül
