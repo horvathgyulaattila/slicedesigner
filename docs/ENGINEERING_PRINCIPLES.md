@@ -1,6 +1,6 @@
 # Mérnöki Alapelvek
 
-Státusz: Piszkozat
+Státusz: Elfogadva
 Tulajdonos:
 Létrehozva: 2026-07-30
 Utolsó módosítás: 2026-08-01
