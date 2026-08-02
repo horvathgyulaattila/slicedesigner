@@ -32,19 +32,9 @@ A rétegek szigorúan egyirányban függenek: GUI → Project → Engine-ek. For
 
 **Réteg:** Domain
 
-**Felelősség:** A Mesh keresztmetszeteinek (szeleteinek) előállítása a szeletelési tengely mentén, Slice Set létrehozása.
+**Felelősség:** A Mesh keresztmetszeteinek (szeleteinek) előállítása a szeletelési tengely mentén — a Gap paraméter figyelembevételével, úgy, hogy a szeletek és a köztük tervezett hézagok együttesen a Mesh szeletelési tengely menti méretét adják ki —, Slice Set létrehozása.
 
-**Domain Model kapcsolat:** Mesh, Slice, Slice Set
-
----
-
-### Gap Engine
-
-**Réteg:** Domain
-
-**Felelősség:** A Slice Set elemeinek pozicionálása a Gap paraméter szerint, valamint a Gap fizikai megvalósítását biztosító Spacer specifikáció előállítása.
-
-**Domain Model kapcsolat:** Gap, Spacer, Slice Set
+**Domain Model kapcsolat:** Mesh, Slice, Slice Set, Gap
 
 ---
 
@@ -52,9 +42,19 @@ A rétegek szigorúan egyirányban függenek: GUI → Project → Engine-ek. For
 
 **Réteg:** Domain
 
-**Felelősség:** Dowel és Dowel Hole pozíciójának és geometriájának számítása a szeletek egymáshoz viszonyított illesztéséhez.
+**Felelősség:** Dowel és Dowel Hole pozíciójának és geometriájának számítása a szeletek egymáshoz viszonyított illesztéséhez, a Slice Engine által pozicionált Slice Set alapján, a modell külső palástján belül maradva.
 
 **Domain Model kapcsolat:** Dowel, Dowel Hole, Slice
+
+---
+
+### Gap Engine
+
+**Réteg:** Domain
+
+**Felelősség:** A Gap fizikai megvalósítását biztosító Spacer specifikáció előállítása, a Slice Engine által már a Gap figyelembevételével pozicionált Slice Set alapján, a Dowel Engine által már meghatározott Dowel-pozíciók figyelembevételével és előnyben részesítésével.
+
+**Domain Model kapcsolat:** Gap, Spacer, Slice Set, Dowel
 
 ---
 
@@ -121,13 +121,14 @@ A rétegek szigorúan egyirányban függenek: GUI → Project → Engine-ek. For
 A feldolgozási folyamat lineáris pipeline-t követ, amelyet a Project koordinál:
 
 ```
-Mesh Import → Slice Engine → Gap Engine → Dowel Engine → Backplate Engine
+Mesh Import → Slice Engine → Dowel Engine → Gap Engine → Backplate Engine
      → Numbering Engine → Nesting Engine → DXF Export Engine
 ```
 
 * A **Mesh Import** állítja elő a Mesh-t, amely a **Slice Engine** bemenete.
-* A **Slice Engine** kimenete a Slice Set, amelyet a **Gap Engine** pozicionál a Gap paraméter szerint.
-* A **Dowel Engine** a pozicionált Slice Set-hez számítja az illesztőelemeket.
+* A **Slice Engine** a Mesh-ből, a Gap paraméter figyelembevételével, már helyesen pozicionált Slice Set-et állít elő.
+* A **Dowel Engine** a pozicionált Slice Set-hez számítja az illesztőelemeket, a modell külső palástján belül maradva.
+* A **Gap Engine** a Dowel Engine által már meghatározott Dowel-pozíciók figyelembevételével és előnyben részesítésével állítja elő a Spacer elemeket.
 * A **Backplate Engine** ezután állítja elő a Backplate geometriát és a szeletek pozícióját azon.
 * A **Numbering Engine** a kész Slice Set-et és a Backplate-et egészíti ki azonosítókkal — ezért csak a Backplate Engine után futhat.
 * A **Nesting Engine** az összes elkészült alkatrészt (megjelölt Slice-ok, Backplate) elrendezi a Material-okon.
@@ -139,6 +140,7 @@ Minden nyíl adatátadást jelent, nem közvetlen függőséget — az engine-ek
 
 * A GUI kizárólag a Project-tel kommunikál, sosem hívja közvetlenül az engine-eket.
 * A Project ismeri a pipeline végrehajtási sorrendjét és orchestrálja az engine-eket, de maga nem végez geometriai számítást vagy üzleti döntést.
+* A Project a `use_spacers`, `use_dowels`, `use_backplate` kapcsolók alapján dönti el, lefuttatja-e a Gap Engine-t, a Dowel Engine-t, illetve a Backplate Engine-t; kikapcsolt kapcsoló esetén az adott engine nem fut le. A pipeline indítása előtt a Project ellenőrzi, hogy legalább egy kapcsoló be van-e kapcsolva — ha egyik sem, hiba. Ez konfiguráció-teljességi ellenőrzés, nem geometriai vagy üzleti döntés.
 * Az engine-ek egymástól függetlenek: nem hívják egymást közvetlenül, kizárólag a Project által továbbított, jól definiált adatszerkezeteken keresztül érintkeznek.
 * Minden engine a GUI-tól függetlenül, önállóan futtatható és tesztelhető, és determinisztikusan működik (Engineering Principles).
 * Hibakezelés fail-fast elven történik: egy engine érvénytelen vagy hiányos bemenet esetén explicit hibát jelez a Project felé, amely azt továbbítja a GUI-nak megjelenítésre — csendes alapértelmezés vagy automatikus javítás egyetlen rétegben sem történik.
@@ -150,3 +152,9 @@ Ez a dokumentum az architektúra kezdeti, alapállapotát rögzíti, ezért önm
 Az implementációs technológia kiválasztása (Python + PySide) az [ADR-0001](adr/0001-python-pyside-tech-stack.md) dokumentumban került rögzítésre.
 
 A GUI interaktív 3D vizualizációs technológiájának kiválasztása (PyVista + pyvistaqt) az [ADR-0002](adr/0002-pyvista-3d-visualization.md) dokumentumban került rögzítésre.
+
+A Slice Engine és a Gap Engine közötti felelősség-felosztás pontosítása (a Gap figyelembevétele már a szeletelés során) az [ADR-0003](adr/0003-gap-aware-slicing.md) dokumentumban került rögzítésre.
+
+Az opcionális összeépítési mechanizmusok (Spacer/Dowel/Backplate ki/bekapcsolhatósága) bevezetése az [ADR-0004](adr/0004-optional-assembly-mechanisms.md) dokumentumban került rögzítésre.
+
+A pipeline-sorrend cseréje (Dowel Engine a Gap Engine elé kerül, a Spacer a Dowel-pozíciókhoz igazodik) az [ADR-0005](adr/0005-dowel-before-gap-ordering.md) dokumentumban került rögzítésre.

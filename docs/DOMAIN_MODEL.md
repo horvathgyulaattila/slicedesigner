@@ -47,7 +47,7 @@ Minden fogalom azonos szerkezetben szerepel: Definíció, Szerepe, Attribútumok
 
 **Szerepe:** Egyben tartja a munkafolyamat során létrejövő összes adatot és beállítást.
 
-**Attribútumok (felsorolás szinten):** Mesh-referencia, mentési útvonal, létrehozás/módosítás időpontja, aktuális paraméter-állapot.
+**Attribútumok (felsorolás szinten):** Mesh-referencia, mentési útvonal, létrehozás/módosítás időpontja, aktuális paraméter-állapot, összeépítési kapcsolók (Spacer/Dowel/Backplate engedélyezettsége).
 
 **Kapcsolódó fogalmak:** Mesh, Assembly, Export
 
@@ -212,8 +212,10 @@ Minden fogalom azonos szerkezetben szerepel: Definíció, Szerepe, Attribútumok
 * Egy Project egy Mesh-t tartalmaz.
 * Egy Mesh-ből Slice Set készül.
 * A Slice Set Slice elemekből áll.
+* Egy Slice Set szeleteinek összvastagsága és a közöttük lévő Gap-ek együttesen adják ki a forrás Mesh szeletelési tengely menti méretét — az összeállított modell mérete megegyezik az eredeti Mesh méretével.
 * A Slice-eket egy Backplate pozicionálhatja.
 * A Dowel és Dowel Hole együtt biztosítja az illesztést.
+* A Spacer pozíciója a Dowel pozíciójához igazodik, ahol lehetséges — a Dowel az elsődleges illesztési mechanizmus, a Spacer erre épül.
 * A Nest az alkatrészek Material-okra történő elrendezése.
 * Az Export a teljes előkészített eredmény.
 * A Numbering minden Slice-hoz egyedi azonosítót rendel, és ezt a hozzá tartozó Backplate pozíción is megjeleníti.
