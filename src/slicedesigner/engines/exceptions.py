@@ -11,3 +11,7 @@ class InvalidMeshError(SliceDesignerError):
 
 class InvalidSliceError(SliceDesignerError):
     """A Slice Engine bemenete érvénytelen, vagy a szeletelés nem végezhető el."""
+
+
+class InvalidDowelError(SliceDesignerError):
+    """A Dowel Engine bemenete érvénytelen, vagy a Dowel-elhelyezés nem végezhető el."""

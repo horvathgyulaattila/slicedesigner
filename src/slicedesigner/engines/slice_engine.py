@@ -37,6 +37,16 @@ _AXIS_NORMAL: dict[SliceAxis, tuple[float, float, float]] = {
 }
 
 
+class HoleKind(Enum):
+    """Egy CW (lyuk-) kontúr eredetének/típusának megkülönböztetése.
+
+    Lásd: DOWEL_SYSTEM_SPEC.md 4. szakasz.
+    """
+
+    DOWEL_THROUGH = "dowel_through"
+    DOWEL_BLIND = "dowel_blind"
+
+
 @dataclass(frozen=True)
 class Contour:
     """Egy zárt kontúr a szeletelési síkban, 2D pontlistaként (mm).
@@ -45,9 +55,16 @@ class Contour:
     ellentétes (CCW) = szilárd anyag (sziget) határa; óramutató
     járásával megegyező (CW) = kivágott lyuk határa
     (DOWEL_SYSTEM_SPEC.md 4. szakasz).
+
+    A `hole_kind` és `depth_mm` a Slice Engine által előállított,
+    egyszerű geometriai lyukaknál (és minden szolid határnál) `None` —
+    kizárólag a Dowel Engine által vágott Dowel Hole-oknál kerül
+    kitöltésre (DOWEL_SYSTEM_SPEC.md 4. szakasz).
     """
 
     points: tuple[tuple[float, float], ...]
+    hole_kind: HoleKind | None = None
+    depth_mm: float | None = None
 
 
 @dataclass(frozen=True)
