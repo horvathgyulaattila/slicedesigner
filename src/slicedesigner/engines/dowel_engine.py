@@ -8,10 +8,17 @@ import math
 from dataclasses import dataclass, replace
 
 import networkx as nx
-from shapely.geometry import LinearRing, Point, Polygon
+from shapely.geometry import Point
 
 from slicedesigner.engines.exceptions import InvalidDowelError
-from slicedesigner.engines.slice_engine import Contour, HoleKind, Slice, SliceSet
+from slicedesigner.engines.slice_engine import (
+    Contour,
+    HoleKind,
+    Island,
+    Slice,
+    SliceSet,
+    reconstruct_islands,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,47 +65,7 @@ class DowelPosition:
     region_id: int
 
 
-@dataclass(frozen=True)
-class _Island:
-    """Egy Slice-on belüli, geometriailag különálló anyagrész (belső segédtípus)."""
-
-    slice_index: int
-    solid: Contour
-    holes: tuple[Contour, ...]
-    polygon: Polygon
-
-
-def _is_ccw(points: tuple[tuple[float, float], ...]) -> bool:
-    return bool(LinearRing(points).is_ccw)
-
-
-def _reconstruct_islands(slice_: Slice) -> list[_Island]:
-    """Egy Slice lapos kontúrlistájából szigetek (szolid + hozzá tartozó lyukak)
-    építése."""
-    solids = [c for c in slice_.contours if _is_ccw(c.points)]
-    holes = [c for c in slice_.contours if not _is_ccw(c.points)]
-
-    islands: list[_Island] = []
-    for solid in solids:
-        solid_polygon = Polygon(solid.points)
-        own_holes = [
-            h
-            for h in holes
-            if solid_polygon.contains(Polygon(h.points).representative_point())
-        ]
-        island_polygon = Polygon(solid.points, holes=[h.points for h in own_holes])
-        islands.append(
-            _Island(
-                slice_index=slice_.index,
-                solid=solid,
-                holes=tuple(own_holes),
-                polygon=island_polygon,
-            )
-        )
-    return islands
-
-
-def _build_regions(all_islands: dict[int, list[_Island]]) -> dict[int, list[_Island]]:
+def _build_regions(all_islands: dict[int, list[Island]]) -> dict[int, list[Island]]:
     """Régió-azonosítás: szomszédos szeletek átfedő szigetei összefüggő komponensben."""
     graph: nx.Graph = nx.Graph()
     for slice_index, islands in all_islands.items():
@@ -112,7 +79,7 @@ def _build_regions(all_islands: dict[int, list[_Island]]) -> dict[int, list[_Isl
                 if island_a.polygon.intersects(island_b.polygon):
                     graph.add_edge((a, pos_a), (b, pos_b))
 
-    regions: dict[int, list[_Island]] = {}
+    regions: dict[int, list[Island]] = {}
     for region_id, component in enumerate(nx.connected_components(graph), start=1):
         regions[region_id] = [
             all_islands[slice_index][pos] for slice_index, pos in sorted(component)
@@ -120,19 +87,19 @@ def _build_regions(all_islands: dict[int, list[_Island]]) -> dict[int, list[_Isl
     return regions
 
 
-def _circle_fits(island: _Island, x_mm: float, y_mm: float, radius_mm: float) -> bool:
+def _circle_fits(island: Island, x_mm: float, y_mm: float, radius_mm: float) -> bool:
     return bool(Point(x_mm, y_mm).buffer(radius_mm).within(island.polygon))
 
 
-def _region_islands_by_slice(region_islands: list[_Island]) -> dict[int, list[_Island]]:
-    by_slice: dict[int, list[_Island]] = {}
+def _region_islands_by_slice(region_islands: list[Island]) -> dict[int, list[Island]]:
+    by_slice: dict[int, list[Island]] = {}
     for island in region_islands:
         by_slice.setdefault(island.slice_index, []).append(island)
     return by_slice
 
 
 def _longest_run(
-    by_slice: dict[int, list[_Island]],
+    by_slice: dict[int, list[Island]],
     slice_indices_sorted: list[int],
     x_mm: float,
     y_mm: float,
@@ -178,7 +145,7 @@ def _longest_run(
 
 def _match_manual_position_to_region(
     manual: ManualDowelPosition,
-    regions: dict[int, list[_Island]],
+    regions: dict[int, list[Island]],
     check_radius_mm: float,
 ) -> int | None:
     """Egy kézi pozícióhoz tartozó régió azonosítása; None, ha egyik régióhoz sem
@@ -230,7 +197,7 @@ def _overlaps_any(
 
 
 def _find_best_auto_candidate(
-    by_slice: dict[int, list[_Island]],
+    by_slice: dict[int, list[Island]],
     slice_indices_sorted: list[int],
     check_radius_mm: float,
     already_placed: list[DowelPosition],
@@ -405,7 +372,7 @@ def apply_dowels(
 
     check_radius_mm = dowel_diameter_mm / 2 + resolved_clearance_mm
 
-    all_islands = {s.index: _reconstruct_islands(s) for s in slice_set.slices}
+    all_islands = {s.index: reconstruct_islands(s) for s in slice_set.slices}
     regions = _build_regions(all_islands)
     slices_by_index = {s.index: s for s in slice_set.slices}
 

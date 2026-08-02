@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 import trimesh
+from shapely.geometry import LinearRing, Polygon
 from shapely.geometry.polygon import orient
 
 from slicedesigner.engines.exceptions import InvalidSliceError
@@ -238,3 +239,48 @@ def create_slice_set(
         slices=tuple(slices),
         slice_count=slice_count,
     )
+
+
+def is_ccw(points: tuple[tuple[float, float], ...]) -> bool:
+    """Egy zárt kontúr pontjainak körüljárási iránya (True = CCW = szilárd határ)."""
+    return bool(LinearRing(points).is_ccw)
+
+
+@dataclass(frozen=True)
+class Island:
+    """Egy Slice-on belüli, geometriailag különálló anyagrész (szolid + lyukak).
+
+    Megosztott segédtípus a lyuk-vs-sziget megkülönböztetést igénylő
+    downstream engine-ek (Dowel, Gap) számára.
+    """
+
+    slice_index: int
+    solid: Contour
+    holes: tuple[Contour, ...]
+    polygon: Polygon
+
+
+def reconstruct_islands(slice_: Slice) -> list[Island]:
+    """Egy Slice lapos kontúrlistájából szigetek (szolid + hozzá tartozó lyukak)
+    építése."""
+    solids = [c for c in slice_.contours if is_ccw(c.points)]
+    holes = [c for c in slice_.contours if not is_ccw(c.points)]
+
+    islands: list[Island] = []
+    for solid in solids:
+        solid_polygon = Polygon(solid.points)
+        own_holes = [
+            h
+            for h in holes
+            if solid_polygon.contains(Polygon(h.points).representative_point())
+        ]
+        island_polygon = Polygon(solid.points, holes=[h.points for h in own_holes])
+        islands.append(
+            Island(
+                slice_index=slice_.index,
+                solid=solid,
+                holes=tuple(own_holes),
+                polygon=island_polygon,
+            )
+        )
+    return islands

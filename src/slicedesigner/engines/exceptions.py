@@ -15,3 +15,7 @@ class InvalidSliceError(SliceDesignerError):
 
 class InvalidDowelError(SliceDesignerError):
     """A Dowel Engine bemenete érvénytelen, vagy a Dowel-elhelyezés nem végezhető el."""
+
+
+class InvalidGapError(SliceDesignerError):
+    """A Gap Engine bemenete érvénytelen, vagy a Spacer-elhelyezés nem végezhető el."""
