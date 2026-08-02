@@ -7,3 +7,7 @@ class SliceDesignerError(Exception):
 
 class InvalidMeshError(SliceDesignerError):
     """A Mesh Import engine bemenete vagy a betöltött geometria érvénytelen."""
+
+
+class InvalidSliceError(SliceDesignerError):
+    """A Slice Engine bemenete érvénytelen, vagy a szeletelés nem végezhető el."""

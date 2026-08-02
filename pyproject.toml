@@ -15,6 +15,9 @@ dependencies = [
     "trimesh",
     "ezdxf",
     "numpy",
+    "shapely",
+    "scipy",
+    "networkx",
 ]
 
 [dependency-groups]
@@ -45,6 +48,10 @@ strict = true
 
 [[tool.mypy.overrides]]
 module = "trimesh.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "shapely.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
