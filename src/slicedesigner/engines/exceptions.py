@@ -19,3 +19,8 @@ class InvalidDowelError(SliceDesignerError):
 
 class InvalidGapError(SliceDesignerError):
     """A Gap Engine bemenete érvénytelen, vagy a Spacer-elhelyezés nem végezhető el."""
+
+
+class InvalidBackplateError(SliceDesignerError):
+    """A Backplate Engine bemenete érvénytelen, vagy a csap-elhelyezés nem
+    végezhető el."""

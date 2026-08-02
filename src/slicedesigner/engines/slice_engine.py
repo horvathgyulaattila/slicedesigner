@@ -86,12 +86,20 @@ class SliceSet:
     """A Slice Engine kimenete: egy Mesh-hez tartozó szeletek összessége.
 
     Lásd: SLICE_ENGINE_SPEC.md 4. szakasz.
+
+    A `slice_axis` a Slice Engine hívásakor használt szeletelési tengelyt
+    rögzíti — a downstream engine-eknek (pl. Backplate) szükségük van rá
+    a kontúr-koordináták valós tengelyekhez való hozzárendeléséhez.
+    Alapértéke `SliceAxis.Z`, hogy a kézzel épített (teszt-)SliceSetek,
+    amelyek nem adják meg explicit módon, ne törjenek — a tényleges
+    `create_slice_set()` hívás mindig explicit módon adja át.
     """
 
     source_mesh: Mesh
     gap_mm: float
     slices: tuple[Slice, ...]
     slice_count: int
+    slice_axis: SliceAxis = SliceAxis.Z
 
 
 def create_slice_set(
@@ -235,6 +243,7 @@ def create_slice_set(
 
     return SliceSet(
         source_mesh=mesh,
+        slice_axis=slice_axis,
         gap_mm=gap_mm,
         slices=tuple(slices),
         slice_count=slice_count,
