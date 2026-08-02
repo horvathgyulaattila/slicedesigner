@@ -21,6 +21,8 @@ A ROADMAP nem backlog, nem feladatlista és nem specifikáció. A célja, hogy b
 > **Megjegyzés (2026-08-01, folytatás 2):** A Phase 1 (Domain Design) kilépési feltétele teljesült — a DOMAIN_MODEL.md tartalmazza a koordinátarendszert, a mértékegységeket, valamint mind a 14 fogalom attribútum-szintű kiegészítését; a projektgazda a Claude Code általi végrehajtás után review-olta és jóváhagyta. A Phase 1 ezért ✅ Approved-ra, a Phase 2 (Functional Specifications) pedig 🟡 In Progress-re került.
 >
 > **Megjegyzés (2026-08-01, folytatás 3):** A Phase 2 (Functional Specifications) mind a nyolc tervezett specifikációja (Mesh Import, Slice Engine, Gap System, Dowel System, Backplate, Numbering, Nesting, DXF Export) elkészült és a projektgazda jóváhagyta — a kilépési feltétel teljesült. A munka során több, korábban elfogadott specifikáció és architekturális döntés is felülvizsgálatra és pontosításra került (ADR-0003–0005), amikor a részletes kidolgozás új, korábban fel nem ismert függőségeket vagy ellentmondásokat tárt fel. A Phase 2 ezért ✅ Approved-ra, a Phase 3 (Architecture Freeze) pedig 🟡 In Progress-re került.
+>
+> **Megjegyzés (2026-08-01, folytatás 4):** A Phase 3 (Architecture Freeze) kilépési feltétele teljesült — az architektúra és a nyolc specifikáció rendszerezett áttekintése megtörtént (ARCHITECTURE.md belső konzisztencia, DOMAIN_MODEL.md kereszthivatkozások, szétszórt backlog-bejegyzések rendezése, a teljes pipeline adatszerződéseinek végigfuttatása), a feltárt hiányosságok javításra kerültek, és a projektgazda jóváhagyta. A Phase 3 ezért ✅ Approved-ra, a Phase 4 (Implementation) pedig 🟡 In Progress-re került.
 
 ## Állapotjelölések
 
@@ -94,7 +96,7 @@ Kilépési feltétel: Minden fő funkció rendelkezik jóváhagyott specifikáci
 
 ### Phase 3 – Architecture Freeze
 
-Állapot: 🟡 In Progress
+Állapot: ✅ Approved
 
 Feladata:
 
@@ -110,7 +112,7 @@ Kilépési feltétel: Az architektúra Approved állapotú.
 
 ### Phase 4 – Implementation
 
-Állapot: ⬜ Not Started
+Állapot: 🟡 In Progress
 
 A fejlesztés kizárólag jóváhagyott specifikáció alapján történik. Minden modul külön implementációs ciklusban készül.
 
