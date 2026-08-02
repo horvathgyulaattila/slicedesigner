@@ -19,6 +19,8 @@ A ROADMAP nem backlog, nem feladatlista és nem specifikáció. A célja, hogy b
 > **Megjegyzés (2026-08-01, folytatás):** A Phase 0-hoz tartozó mind a hét dokumentum (PROJECT_VISION, ENGINEERING_PRINCIPLES, ARCHITECTURE, PROJECT_STRUCTURE, CODING_STANDARDS, AI_WORKFLOW, PROMPT_STANDARD) érdemi tartalommal elkészült és a projektgazda jóváhagyta — a kilépési feltétel teljesült. A Phase 0 ezért ✅ Approved-ra, a Phase 1 pedig 🟡 In Progress-re került, mivel a DOMAIN_MODEL.md már tartalmaz érdemi munkát (a Numbering-kivétel révén).
 >
 > **Megjegyzés (2026-08-01, folytatás 2):** A Phase 1 (Domain Design) kilépési feltétele teljesült — a DOMAIN_MODEL.md tartalmazza a koordinátarendszert, a mértékegységeket, valamint mind a 14 fogalom attribútum-szintű kiegészítését; a projektgazda a Claude Code általi végrehajtás után review-olta és jóváhagyta. A Phase 1 ezért ✅ Approved-ra, a Phase 2 (Functional Specifications) pedig 🟡 In Progress-re került.
+>
+> **Megjegyzés (2026-08-01, folytatás 3):** A Phase 2 (Functional Specifications) mind a nyolc tervezett specifikációja (Mesh Import, Slice Engine, Gap System, Dowel System, Backplate, Numbering, Nesting, DXF Export) elkészült és a projektgazda jóváhagyta — a kilépési feltétel teljesült. A munka során több, korábban elfogadott specifikáció és architekturális döntés is felülvizsgálatra és pontosításra került (ADR-0003–0005), amikor a részletes kidolgozás új, korábban fel nem ismert függőségeket vagy ellentmondásokat tárt fel. A Phase 2 ezért ✅ Approved-ra, a Phase 3 (Architecture Freeze) pedig 🟡 In Progress-re került.
 
 ## Állapotjelölések
 
@@ -73,7 +75,7 @@ Kilépési feltétel: A projekt egységes fogalomrendszerrel rendelkezik.
 
 ### Phase 2 – Functional Specifications
 
-Állapot: 🟡 In Progress
+Állapot: ✅ Approved
 
 Minden fő funkció külön specifikációban készül, például:
 
@@ -92,7 +94,7 @@ Kilépési feltétel: Minden fő funkció rendelkezik jóváhagyott specifikáci
 
 ### Phase 3 – Architecture Freeze
 
-Állapot: ⬜ Not Started
+Állapot: 🟡 In Progress
 
 Feladata:
 
