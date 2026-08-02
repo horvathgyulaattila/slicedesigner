@@ -88,10 +88,8 @@ Fail-fast elven:
 
 * **Gap Engine / Dowel Engine / Slice Engine** — a bemeneti Slice Set forrása (attól függően, melyik futott le utoljára).
 * **Numbering Engine** — a Backplate Engine kimenetét fogadja majd (a pipeline következő lépése).
-* Domain Model: Backplate, Slice, Assembly.
+* Domain Model: Backplate, Slice, Sziget, Assembly.
 * **Megjegyzés:** a `non_backplate_islands`-ben szereplő szigetek a Dowel Engine és a Gap Engine szempontjából nem különböznek a többi szigettől — azok az engine-ek kizárólag geometriai átfedés alapján dolgoznak, a Backplate-kapcsolódástól függetlenül, és korábban futnak le a pipeline-ban (ADR-0005), így nem is ismerhetik ezt a listát.
-* **Megjegyzés (nyitva hagyott, nem blokkoló pont):** a csapok és a Dowel/Spacer pozíciók elméletileg átfedhetik egymást ugyanazon a szigeten — ezt jelenleg nem kezeli automatikus egyeztetés.
-* **Backlog (nem e specifikáció hatóköre):** paraméterezhető vágósíkkal történő modell-"lesíkolás" — jelenleg a közös sík hiánya (kizárt szigetek nélkül) egyszerűen hiba.
 
 ## 9. Nyitott kérdések
 

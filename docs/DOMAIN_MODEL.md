@@ -73,7 +73,19 @@ Minden fogalom azonos szerkezetben szerepel: Definíció, Szerepe, Attribútumok
 
 **Attribútumok (felsorolás szinten):** vastagság, geometria típusa, pozíció a szeletelési tengely mentén, sorszám a Slice Set-en belül.
 
-**Kapcsolódó fogalmak:** Slice Set, Material, Dowel Hole, Backplate, Numbering
+**Kapcsolódó fogalmak:** Slice Set, Sziget, Material, Dowel Hole, Backplate, Numbering
+
+---
+
+### Sziget
+
+**Definíció:** Egy Slice-on belüli, a Slice többi részétől geometriailag különálló, önmagában összefüggő anyagrész.
+
+**Szerepe:** A ténylegesen különálló, gyártás után önálló fizikai darabként kezelendő egység — minden csap-, Dowel-, Spacer- és számozás-elhelyezési szabály erre, nem a teljes Slice-ra vonatkozik.
+
+**Attribútumok (felsorolás szinten):** azonosító (a szelet sorszáma + saját betűjele), geometria (zárt kontúr(ok), a szülő Slice geometriájának egy összefüggő része).
+
+**Kapcsolódó fogalmak:** Slice, Dowel Hole, Backplate, Numbering
 
 ---
 
@@ -212,6 +224,7 @@ Minden fogalom azonos szerkezetben szerepel: Definíció, Szerepe, Attribútumok
 * Egy Project egy Mesh-t tartalmaz.
 * Egy Mesh-ből Slice Set készül.
 * A Slice Set Slice elemekből áll.
+* Egy Slice egy vagy több Szigetből áll; több Sziget esetén azok egymástól fizikailag különálló darabok.
 * Egy Slice Set szeleteinek összvastagsága és a közöttük lévő Gap-ek együttesen adják ki a forrás Mesh szeletelési tengely menti méretét — az összeállított modell mérete megegyezik az eredeti Mesh méretével.
 * A Slice-eket egy Backplate pozicionálhatja.
 * A Dowel és Dowel Hole együtt biztosítja az illesztést.

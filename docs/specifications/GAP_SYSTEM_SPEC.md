@@ -26,7 +26,9 @@ ARCHITECTURE.md-ből átvéve, nem bővítve (ADR-0003, ADR-0005 szerint): a Gap
 
 ## 4. Kimenet
 
-Spacer-ek listája. Minden Gap-hez (N-1 db, szomszédos szeletpáronként) tartozik a metszet elkülönülő régióinak listája; minden régióhoz a ténylegesen elhelyezett Spacer-ek listája.
+**Slice Set** — változatlanul továbbadva (a Gap Engine a Slice Set geometriáját nem módosítja, lásd 6. szakasz).
+
+**Spacer-ek listája.** Minden Gap-hez (N-1 db, szomszédos szeletpáronként) tartozik a metszet elkülönülő régióinak listája; minden régióhoz a ténylegesen elhelyezett Spacer-ek listája.
 
 Minden Spacer:
 
@@ -42,7 +44,7 @@ Minden Spacer:
 
 | Név | Alapérték | Érvényességi tartomány | Jelentés |
 |---|---|---|---|
-| `spacer_diameter_mm` | nincs (kötelező) | `> 0` | A henger alakú Spacer átmérője. |
+| `spacer_diameter_mm` | nincs (kötelező) | `> 0` | A henger alakú Spacer átmérője. Ha `use_dowels` igaz, ennek az értéknek meg kell egyeznie a Dowel Engine saját `spacer_diameter_mm` paraméterével — az egyeztetés a Project felelőssége. |
 | `spacer_count_per_gap` | `3` | `≥ 1` | Az elhelyezendő Spacer-ek célszáma metszet-régiónként. |
 | `min_spacers_per_region` | `1` | `1 ≤ x ≤ spacer_count_per_gap` | A minimálisan elfogadható Spacer-szám egy metszet-régióban, ha a cél (`spacer_count_per_gap`) nem fér el. |
 

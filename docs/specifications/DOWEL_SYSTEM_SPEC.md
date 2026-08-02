@@ -48,7 +48,7 @@ Minden érintett Slice-hoz tartozó Dowel Hole: átmérő (= `dowel_diameter_mm`
 | Név | Alapérték | Érvényességi tartomány | Jelentés |
 |---|---|---|---|
 | `dowel_diameter_mm` | nincs (kötelező) | `> 0` | A Dowel (és a hozzá tartozó furatok) átmérője. |
-| `spacer_diameter_mm` | `0` | `≥ 0` | Csak a `min_edge_clearance_mm` alapértékének számításához; a tényleges Spacer-elhelyezés a Gap Engine feladata. |
+| `spacer_diameter_mm` | `0` | `≥ 0` | Csak a `min_edge_clearance_mm` alapértékének számításához; a tényleges Spacer-elhelyezés a Gap Engine feladata. Ha `use_spacers` igaz, ennek az értéknek meg kell egyeznie a Gap Engine saját `spacer_diameter_mm` paraméterével — az egyeztetés a Project felelőssége. |
 | `min_edge_clearance_mm` | `max(dowel_diameter_mm, spacer_diameter_mm) / 2` | `≥ 0` | A Dowel-pozíciónak (a rá kerülő Spacer méretét is figyelembe véve) ennyi biztonsági távolságot kell tartania a szelet külső szélétől. |
 | `dowel_count_per_region` | `3` | `≥ 1` | Az elhelyezendő Dowel-ek célszáma összefüggő 3D anyagrégiónként. |
 | `min_dowels_per_region` | `1` | `1 ≤ x ≤ dowel_count_per_region` | A minimálisan elfogadható Dowel-szám egy régióban, ha a cél nem fér el. |

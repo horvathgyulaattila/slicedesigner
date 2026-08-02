@@ -12,7 +12,7 @@ Ez a dokumentum írja le a Slice Designer tervezett rendszerarchitektúráját.
 
 ## 1. Áttekintés
 
-A Slice Designer architektúrája három rétegre épül: **Domain réteg** (engine-ek), **Koordinációs réteg** (Project) és **Prezentációs réteg** (GUI). Minden fő feladatnak (Mesh betöltés, szeletelés, illesztés, pozicionálás, jelölés, elrendezés, export) külön, egyetlen felelősségű engine felel meg, az Engineering Principles moduláris felépítés elvének megfelelően.
+A Slice Designer architektúrája három rétegre épül: **Domain réteg** (engine-ek), **Koordinációs réteg** (Project) és **Prezentációs réteg** (GUI). Minden fő feladatnak (Mesh betöltés, szeletelés, illesztés, távolságtartás, pozicionálás, jelölés, elrendezés, export) külön, egyetlen felelősségű engine felel meg, az Engineering Principles moduláris felépítés elvének megfelelően.
 
 A rétegek szigorúan egyirányban függenek: GUI → Project → Engine-ek. Fordított irányú függés nincs: egyetlen engine sem ismeri vagy hívja a Project-et vagy a GUI-t. Az engine-ek egymástól is függetlenek — nem hívják egymást közvetlenül, csak a Project által köztük továbbított adatokon keresztül érintkeznek.
 
@@ -128,10 +128,10 @@ Mesh Import → Slice Engine → Dowel Engine → Gap Engine → Backplate Engin
 * A **Mesh Import** állítja elő a Mesh-t, amely a **Slice Engine** bemenete.
 * A **Slice Engine** a Mesh-ből, a Gap paraméter figyelembevételével, már helyesen pozicionált Slice Set-et állít elő.
 * A **Dowel Engine** a pozicionált Slice Set-hez számítja az illesztőelemeket, a modell külső palástján belül maradva.
-* A **Gap Engine** a Dowel Engine által már meghatározott Dowel-pozíciók figyelembevételével és előnyben részesítésével állítja elő a Spacer elemeket.
+* A **Gap Engine** a Dowel Engine által már meghatározott Dowel-pozíciók figyelembevételével és előnyben részesítésével állítja elő a Spacer elemeket; a Spacer-lista a Backplate Engine-t és a Numbering Engine-t megkerülve, közvetlenül a Nesting Engine bemenete.
 * A **Backplate Engine** ezután állítja elő a Backplate geometriát és a szeletek pozícióját azon.
 * A **Numbering Engine** a kész Slice Set-et és a Backplate-et egészíti ki azonosítókkal — ezért csak a Backplate Engine után futhat.
-* A **Nesting Engine** az összes elkészült alkatrészt (megjelölt Slice-ok, Backplate) elrendezi a Material-okon.
+* A **Nesting Engine** az összes elkészült alkatrészt (megjelölt Slice-ok, Backplate, valamint a Gap Engine-től közvetlenül kapott Spacer-lista) elrendezi a Material-okon.
 * A **DXF Export Engine** a végleges Nest alapján állítja elő az Export-ot.
 
 Minden nyíl adatátadást jelent, nem közvetlen függőséget — az engine-ek a Project-en keresztül, jól definiált be- és kimeneti adatszerkezeteken (a Domain Model fogalmain) keresztül kommunikálnak.

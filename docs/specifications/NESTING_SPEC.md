@@ -19,7 +19,7 @@ ARCHITECTURE.md-ből átvéve, nem bővítve: az elkészült alkatrészek (Slice
 | Attribútum | Típus | Kötelező |
 |---|---|---|
 | Slice Set | Numbering Engine kimenete | igen |
-| Backplate objektum | Backplate Engine kimenete | nem |
+| Backplate objektum | Numbering Engine kimenete (a Backplate Engine eredeti objektumának, azonosítókkal kiegészített változata) | nem |
 | Spacer lista | Gap Engine kimenete | nem |
 | `material_definitions` | lista `{material_id, thickness_mm, sheet_width_mm, sheet_height_mm, kerf_mm}` | igen |
 | `slice_material_id` | hivatkozás `material_definitions`-re | igen |
@@ -77,9 +77,8 @@ Fail-fast elven:
 
 ## 8. Kapcsolódó engine-ek és Domain Model fogalmak
 
-* **Numbering Engine** — a bemeneti Slice Set forrása.
+* **Numbering Engine** — a bemeneti Slice Set, valamint a (számozással kiegészített) Backplate objektum forrása.
 * **Gap Engine** — a Spacer-lista forrása.
-* **Backplate Engine** — a Backplate objektum forrása.
 * **DXF Export Engine** — a Nesting Engine kimenetét fogadja majd.
 * Domain Model: Nest, Material, Slice, Backplate, Spacer.
 
