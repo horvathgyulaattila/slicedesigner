@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos:
 Létrehozva: 2026-07-30
-Utolsó módosítás: 2026-08-01
+Utolsó módosítás: 2026-08-02
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](PROJECT_CONSTITUTION.md), [PROJECT_VISION.md](PROJECT_VISION.md), [ENGINEERING_PRINCIPLES.md](ENGINEERING_PRINCIPLES.md), [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md), [adr/](adr/)
 
 ## Cél
@@ -158,3 +158,5 @@ A Slice Engine és a Gap Engine közötti felelősség-felosztás pontosítása 
 Az opcionális összeépítési mechanizmusok (Spacer/Dowel/Backplate ki/bekapcsolhatósága) bevezetése az [ADR-0004](adr/0004-optional-assembly-mechanisms.md) dokumentumban került rögzítésre.
 
 A pipeline-sorrend cseréje (Dowel Engine a Gap Engine elé kerül, a Spacer a Dowel-pozíciókhoz igazodik) az [ADR-0005](adr/0005-dowel-before-gap-ordering.md) dokumentumban került rögzítésre.
+
+A build backend és a Domain réteg alapkönyvtárainak (mesh-kezelés, DXF-írás) kiválasztása (uv + hatchling, trimesh, ezdxf, PySide6) az [ADR-0006](adr/0006-build-tooling-and-core-libraries.md) dokumentumban került rögzítésre.

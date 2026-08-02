@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "slicedesigner"
+version = "0.1.0"
+description = "Célzott gyártás-előkészítő alkalmazás 3D modellekből (STL) szeletelt alkatrészek előállításához."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "PySide6",
+    "pyvista",
+    "pyvistaqt",
+    "trimesh",
+    "ezdxf",
+]
+
+[dependency-groups]
+dev = [
+    "ruff",
+    "mypy",
+    "pytest",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/slicedesigner"]
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.mypy]
+python_version = "3.11"
+disallow_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[[tool.mypy.overrides]]
+module = "slicedesigner.engines.*"
+strict = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos:
 Létrehozva: 2026-07-30
-Utolsó módosítás: 2026-08-01
+Utolsó módosítás: 2026-08-02
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](PROJECT_CONSTITUTION.md), [ENGINEERING_PRINCIPLES.md](ENGINEERING_PRINCIPLES.md), [AI_WORKFLOW.md](AI_WORKFLOW.md)
 
 ## Cél
@@ -46,3 +46,11 @@ Ez a dokumentum fogja rögzíteni a Slice Designer kódbázisára vonatkozó kó
 * Kizárólag a beépített `logging` modul; `print()` végleges kódban nem megengedett.
 * Minden modul saját logger-t használ (`logging.getLogger(__name__)`).
 * A naplózási szint kívülről paraméterezhető, nincs hardkódolt szint (Engineering Principles, paraméterezhetőség).
+
+## 7. Determinizmus (Python-specifikus)
+
+* A hash-alapú sorrendfüggés elkerülése érdekében a fejlesztői és a teszt-környezetben a `PYTHONHASHSEED` környezeti változó rögzített, dokumentált értékre (`0`) van állítva; erre a tesztfuttatás (pytest) és a domain-réteg indítási konfigurációja is támaszkodik.
+* A domain-logika nem támaszkodhat halmaz (`set`) vagy szótár (`dict`) iterációs sorrendjére olyan helyen, ahol az kihatna a végeredményre (pl. szeletek, szigetek, Dowel-pozíciók sorrendje) — az ilyen gyűjteményeken végzett bejárás előtt explicit rendezés szükséges (pl. pozíció vagy sorszám szerint).
+* Lebegőpontos (float) számítások eredménye a különböző futtatások között bitre azonos kell legyen ugyanazon bemeneten, ugyanazon a gépen — ez nem igényel speciális numerikus könyvtárat, de tiltja a nem-determinisztikus párhuzamosítást (pl. nem rögzített szálszámú, redukciós sorrendet nem garantáló numerikus műveletek) a domain rétegben.
+* Lebegőpontos értékek összehasonlítása (pl. a SLICE_ENGINE_SPEC.md `max_scale_tolerance` jellegű küszöbértékeinél) kizárólag explicit, dokumentált tűréssel (`abs(a - b) <= tolerance`) történhet, közvetlen egyenlőségvizsgálat (`==`) nem megengedett.
+* Ha egy engine véletlenszerűséget használ (pl. Nesting Engine elrendezési heurisztika), a véletlenszám-generátor kizárólag explicit, paraméterként átadott, dokumentált seeddel inicializálható (Engineering Principles, Determinisztikus működés) — globális, implicit véletlenszám-állapot nem használható.
