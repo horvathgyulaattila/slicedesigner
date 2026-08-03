@@ -1,10 +1,10 @@
 # Slice Designer
 
-Státusz: Piszkozat
+Státusz: Elfogadva
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-07-30
-Utolsó módosítás: 2026-08-01
-Kapcsolódó dokumentumok: [docs/PROJECT_CONSTITUTION.md](docs/PROJECT_CONSTITUTION.md), [docs/ROADMAP.md](docs/ROADMAP.md), [docs/PROJECT_VISION.md](docs/PROJECT_VISION.md), [docs/ENGINEERING_PRINCIPLES.md](docs/ENGINEERING_PRINCIPLES.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/AI_WORKFLOW.md](docs/AI_WORKFLOW.md), [docs/DOMAIN_MODEL.md](docs/DOMAIN_MODEL.md)
+Utolsó módosítás: 2026-08-03
+Kapcsolódó dokumentumok: [docs/PROJECT_CONSTITUTION.md](docs/PROJECT_CONSTITUTION.md), [docs/ROADMAP.md](docs/ROADMAP.md), [docs/PROJECT_VISION.md](docs/PROJECT_VISION.md), [docs/ENGINEERING_PRINCIPLES.md](docs/ENGINEERING_PRINCIPLES.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md), [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md), [docs/AI_WORKFLOW.md](docs/AI_WORKFLOW.md), [docs/PROMPT_STANDARD.md](docs/PROMPT_STANDARD.md), [docs/DOMAIN_MODEL.md](docs/DOMAIN_MODEL.md), [docs/SPECIFICATION_STANDARD.md](docs/SPECIFICATION_STANDARD.md)
 
 ## Cél
 
@@ -12,7 +12,7 @@ A Slice Designer egy desktop alkalmazás, amely 3D modellekből (első körben S
 
 ## Jelenlegi állapot
 
-A projekt jelenleg a kezdeti fázisban van: a könyvtárszerkezet és a dokumentációs keretrendszer jött létre. Alkalmazáskód és geometriai algoritmusok még nem készültek.
+A projekt a Phase 4 (Implementation) lezárásánál tart: mind a nyolc domain engine (Mesh Import, Slice Engine, Dowel System, Gap System, Backplate, Numbering, Nesting, DXF Export) elkészült, és automatizált teszttel (89 teszt) le van fedve. A következő fázis (Phase 5, Integration) a modulok `Project`-en keresztüli összekapcsolása és a GUI.
 
 ## Hogyan érdemes olvasni a dokumentációt
 
@@ -30,7 +30,7 @@ Javasolt sorrend első olvasásra:
 10. `docs/DOMAIN_MODEL.md` – a projekt közös fogalomrendszere
 11. `docs/SPECIFICATION_STANDARD.md` – sablon a funkcionális specifikációkhoz
 
-A `docs/adr/` mappa a jövőbeni architekturális döntéseket, a `docs/specifications/` pedig a részletes specifikációkat fogja tartalmazni.
+A `docs/adr/` mappa a projekt architekturális döntéseit (ADR-0001–ADR-0008), a `docs/specifications/` pedig a nyolc engine részletes, jóváhagyott specifikációját tartalmazza.
 
 ## Filozófia
 

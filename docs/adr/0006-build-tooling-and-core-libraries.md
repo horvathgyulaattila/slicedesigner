@@ -38,3 +38,13 @@ Az ADR-0001 rögzítette a Python + PySide implementációs alapot, de nem fogla
 * A `docs/CODING_STANDARDS.md` egy új, 7. szakasszal egészül ki a determinizmus Python-specifikus részleteiről (hash randomization, lebegőpontos pontosság) — ezt az ADR-0001 "Következmények" szakasza már előre jelezte, eddig nem valósult meg.
 * Jövőbeli specifikációk implementációja esetén, ha a `trimesh` vagy `ezdxf` funkciói nem elegendők egy adott feladatra, azt külön ADR-ben kell rögzíteni.
 * Nincs érintett korábbi forráskód (Phase 4 kódja e feladat előtt nem létezett).
+
+## Frissítés (2026-08-03)
+
+A Phase 4 előrehaladtával az eredeti döntés (geometriai alapkönyvtárak) természetes bővüléseként további, közvetlen függőségek kerültek a `pyproject.toml`-ba — mindegyik a már itt rögzített `trimesh` funkcióinak kiegészítéseként, saját, célzott indoklással a bevezetésük idején (Dowel/Gap/Backplate/Numbering/Nesting Engine promptjai):
+
+* `numpy` — a `trimesh` által visszaadott tömbök API-jának közvetlen, explicit függőségként rögzítve (Slice Engine).
+* `shapely` — 2D poligon-műveletek (unió, metszet, körüljárási irány kikényszerítése) — a Slice Engine `section()`-alapú keresztmetszet-előállításának természetes kiegészítése.
+* `scipy`, `networkx` — a `trimesh` `section_multiplane()`/`Path2D.is_closed` opcionális, futásidejű függőségei, célzottan hozzáadva a `trimesh[easy]` extra helyett (Slice/Dowel Engine).
+
+Ez a döntés (geometriai ökoszisztéma választása) tartalmilag nem változott — csak a ténylegesen szükséges könyvtárak listája vált konkréttá, ahogy az implementáció haladt.

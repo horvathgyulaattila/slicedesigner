@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos:
 Létrehozva: 2026-07-30
-Utolsó módosítás: 2026-08-02
+Utolsó módosítás: 2026-08-03
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](PROJECT_CONSTITUTION.md), [PROJECT_VISION.md](PROJECT_VISION.md), [ENGINEERING_PRINCIPLES.md](ENGINEERING_PRINCIPLES.md), [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md), [adr/](adr/)
 
 ## Cél
@@ -160,3 +160,7 @@ Az opcionális összeépítési mechanizmusok (Spacer/Dowel/Backplate ki/bekapcs
 A pipeline-sorrend cseréje (Dowel Engine a Gap Engine elé kerül, a Spacer a Dowel-pozíciókhoz igazodik) az [ADR-0005](adr/0005-dowel-before-gap-ordering.md) dokumentumban került rögzítésre.
 
 A build backend és a Domain réteg alapkönyvtárainak (mesh-kezelés, DXF-írás) kiválasztása (uv + hatchling, trimesh, ezdxf, PySide6) az [ADR-0006](adr/0006-build-tooling-and-core-libraries.md) dokumentumban került rögzítésre.
+
+A kontúr körüljárási irányának mint szolid/lyuk megkülönböztetésnek a konvenciója (CCW = szilárd anyag, CW = lyuk) az [ADR-0007](adr/0007-contour-winding-convention.md) dokumentumban került rögzítésre.
+
+A Nesting Engine csomagolási algoritmusának megválasztása (befoglaló-téglalap alapú polc-csomagolás a specifikáció "valódi alak" megfogalmazása helyett) az [ADR-0008](adr/0008-nesting-bounding-box-packing.md) dokumentumban került rögzítésre.

@@ -3,7 +3,7 @@
 Státusz: Aktív
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-07-31
-Utolsó módosítás: 2026-08-01
+Utolsó módosítás: 2026-08-03
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](PROJECT_CONSTITUTION.md), [AI_WORKFLOW.md](AI_WORKFLOW.md), [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md), [DOMAIN_MODEL.md](DOMAIN_MODEL.md)
 
 ## Cél
@@ -23,6 +23,8 @@ A ROADMAP nem backlog, nem feladatlista és nem specifikáció. A célja, hogy b
 > **Megjegyzés (2026-08-01, folytatás 3):** A Phase 2 (Functional Specifications) mind a nyolc tervezett specifikációja (Mesh Import, Slice Engine, Gap System, Dowel System, Backplate, Numbering, Nesting, DXF Export) elkészült és a projektgazda jóváhagyta — a kilépési feltétel teljesült. A munka során több, korábban elfogadott specifikáció és architekturális döntés is felülvizsgálatra és pontosításra került (ADR-0003–0005), amikor a részletes kidolgozás új, korábban fel nem ismert függőségeket vagy ellentmondásokat tárt fel. A Phase 2 ezért ✅ Approved-ra, a Phase 3 (Architecture Freeze) pedig 🟡 In Progress-re került.
 >
 > **Megjegyzés (2026-08-01, folytatás 4):** A Phase 3 (Architecture Freeze) kilépési feltétele teljesült — az architektúra és a nyolc specifikáció rendszerezett áttekintése megtörtént (ARCHITECTURE.md belső konzisztencia, DOMAIN_MODEL.md kereszthivatkozások, szétszórt backlog-bejegyzések rendezése, a teljes pipeline adatszerződéseinek végigfuttatása), a feltárt hiányosságok javításra kerültek, és a projektgazda jóváhagyta. A Phase 3 ezért ✅ Approved-ra, a Phase 4 (Implementation) pedig 🟡 In Progress-re került.
+>
+> **Megjegyzés (2026-08-03, folytatás 5):** A Phase 4 (Implementation) mind a nyolc, ROADMAP Phase 2-ben rögzített engine-je (Mesh Import, Slice Engine, Dowel System, Gap System, Backplate, Numbering, Nesting, DXF Export) elkészült, review-n átment, és a projektgazda jóváhagyta (89/89 automatizált teszt, `PYTHONHASHSEED=0 uv run pytest`). A munka során két, a specifikációk által Phase 4-re hagyott, keresztmetsző implementációs döntés (kontúr körüljárási irány, ADR-0007; Nesting Engine csomagolási algoritmus, ADR-0008) ADR-ben rögzítésre került. A Phase 4 ezért ✅ Approved-ra, a Phase 5 (Integration) pedig 🟡 In Progress-re került.
 
 ## Állapotjelölések
 
@@ -112,15 +114,15 @@ Kilépési feltétel: Az architektúra Approved állapotú.
 
 ### Phase 4 – Implementation
 
-Állapot: 🟡 In Progress
+Állapot: ✅ Approved
 
-A fejlesztés kizárólag jóváhagyott specifikáció alapján történik. Minden modul külön implementációs ciklusban készül.
+A fejlesztés kizárólag jóváhagyott specifikáció alapján történt. Mind a nyolc engine (Mesh Import, Slice Engine, Dowel System, Gap System, Backplate, Numbering, Nesting, DXF Export) elkészült, automatizált teszttel (89 teszt) lefedve.
 
 ---
 
 ### Phase 5 – Integration
 
-Állapot: ⬜ Not Started
+Állapot: 🟡 In Progress
 
 Feladata:
 
