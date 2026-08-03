@@ -18,6 +18,7 @@ dependencies = [
     "shapely",
     "scipy",
     "networkx",
+    "rtree>=1.4.1",
 ]
 
 [dependency-groups]
@@ -25,6 +26,7 @@ dev = [
     "ruff",
     "mypy",
     "pytest",
+    "pytest-qt",
 ]
 
 [tool.hatch.build.targets.wheel]
