@@ -33,3 +33,7 @@ class InvalidNumberingError(SliceDesignerError):
 class InvalidNestingError(SliceDesignerError):
     """A Nesting Engine bemenete érvénytelen, vagy egy toldott darab al-azonosítója nem
     helyezhető el."""
+
+
+class InvalidDxfExportError(SliceDesignerError):
+    """A DXF Export Engine bemenete érvénytelen, vagy a fájl-mentés nem végezhető el."""
