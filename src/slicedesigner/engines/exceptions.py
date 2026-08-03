@@ -28,3 +28,8 @@ class InvalidBackplateError(SliceDesignerError):
 
 class InvalidNumberingError(SliceDesignerError):
     """A Numbering Engine bemenete érvénytelen, vagy egy azonosító nem helyezhető el."""
+
+
+class InvalidNestingError(SliceDesignerError):
+    """A Nesting Engine bemenete érvénytelen, vagy egy toldott darab al-azonosítója nem
+    helyezhető el."""
