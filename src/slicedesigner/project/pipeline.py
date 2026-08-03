@@ -265,6 +265,34 @@ def _validate_config(config: PipelineConfig) -> None:
         )
 
 
+def import_mesh_preview(params: MeshImportParams) -> Mesh:
+    """A Mesh Import engine (`import_mesh()`) önálló hívása GUI-előnézethez.
+
+    Kizárólag a `import_mesh()` hívását végzi el, a `params` mezőit
+    ugyanúgy szétbontva, ahogy `run_pipeline()` is teszi a mesh-import
+    lépésben — más engine-t nem hív, azon felül nem validál, amit maga az
+    `import_mesh()` már elvégez. Ez a függvény kizárólag GUI-előnézet
+    célra készült (a fájlválasztás utáni azonnali 3D megjelenítéshez), és
+    nem helyettesíti a `run_pipeline()`-on belüli tényleges mesh-importot.
+
+    Args:
+        params: a Mesh Import engine kívülről állítandó paraméterei.
+
+    Returns:
+        A betöltött és validált Mesh.
+
+    Raises:
+        SliceDesignerError: az `import_mesh()` saját, dokumentált kivétele
+            (pl. `InvalidMeshError`) — változatlanul továbbterjed.
+    """
+    return import_mesh(
+        file_path=params.file_path,
+        origin_alignment=params.origin_alignment,
+        min_plausible_size_mm=params.min_plausible_size_mm,
+        max_plausible_size_mm=params.max_plausible_size_mm,
+    )
+
+
 def run_pipeline(config: PipelineConfig) -> PipelineResult:
     """A rögzített engine-pipeline feltételes, végponttól-végpontig futtatása.
 

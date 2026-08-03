@@ -9,9 +9,10 @@ feladat része (ROADMAP Phase 5, lásd `slicedesigner.project.pipeline`).
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from enum import Enum
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -138,8 +139,14 @@ def _make_enum_combo(enum_cls: type[Enum]) -> QComboBox:
     return combo
 
 
-def _build_file_picker(dialog_caption: str) -> tuple[QWidget, QPushButton, QLabel]:
-    """Fájlválasztó gomb + útvonal-felirat (kötelező fájl-paraméterekhez)."""
+def _build_file_picker(
+    dialog_caption: str, *, on_selected: Callable[[str], None] | None = None
+) -> tuple[QWidget, QPushButton, QLabel]:
+    """Fájlválasztó gomb + útvonal-felirat (kötelező fájl-paraméterekhez).
+
+    `on_selected`, ha meg van adva, kizárólag sikeres fájlválasztás esetén
+    (nem "Mégse") hívódik meg, a kiválasztott útvonallal.
+    """
     container = QWidget()
     layout = QHBoxLayout(container)
     layout.setContentsMargins(0, 0, 0, 0)
@@ -152,6 +159,8 @@ def _build_file_picker(dialog_caption: str) -> tuple[QWidget, QPushButton, QLabe
         file_path, _ = QFileDialog.getOpenFileName(container, dialog_caption)
         if file_path:
             path_label.setText(file_path)
+            if on_selected is not None:
+                on_selected(file_path)
 
     browse_button.clicked.connect(_on_browse_clicked)
     layout.addWidget(browse_button)
@@ -211,7 +220,13 @@ class ParameterPanel(QScrollArea):
     `use_backplate_checkbox`) a hozzájuk tartozó (Dowel/Gap/Backplate)
     `QGroupBox` show/hide állapotát vezérli — tisztán UI-viselkedés, nem
     pipeline-logika.
+
+    A `mesh_file_selected` signal kizárólag sikeres mesh-fájl-választás
+    esetén (nem "Mégse") emittálódik, a kiválasztott útvonallal — a
+    `MainWindow` ezt köti az automatikus 3D-előnézet betöltéséhez.
     """
+
+    mesh_file_selected = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -257,7 +272,9 @@ class ParameterPanel(QScrollArea):
         layout = QFormLayout(group)
 
         file_picker, self.mesh_browse_button, self.mesh_file_path_label = (
-            _build_file_picker("Mesh fájl kiválasztása")
+            _build_file_picker(
+                "Mesh fájl kiválasztása", on_selected=self.mesh_file_selected.emit
+            )
         )
         layout.addRow("Fájl útvonal:", file_picker)
 

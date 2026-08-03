@@ -6,17 +6,21 @@ from __future__ import annotations
 import logging
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import QFileDialog, QMainWindow, QSplitter, QVBoxLayout, QWidget
 
 from slicedesigner.engines.exceptions import SliceDesignerError
-from slicedesigner.gui import config_builder, config_loader
+from slicedesigner.gui import app_settings, config_builder, config_loader
 from slicedesigner.gui.parameter_panel import ParameterPanel
 from slicedesigner.gui.preview_panel import PreviewPanel
 from slicedesigner.gui.run_panel import RunPanel
 from slicedesigner.project import persistence
 from slicedesigner.project.exceptions import PipelineConfigurationError
-from slicedesigner.project.pipeline import run_pipeline
+from slicedesigner.project.pipeline import (
+    MeshImportParams,
+    import_mesh_preview,
+    run_pipeline,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +45,7 @@ class MainWindow(QMainWindow):
         self.preview_panel = PreviewPanel(self)
         self.run_panel = RunPanel(self)
         self.run_panel.run_button.clicked.connect(self._on_run_clicked)
+        self.parameter_panel.mesh_file_selected.connect(self._on_mesh_file_selected)
         self._build_menu_bar()
 
         splitter = QSplitter(Qt.Orientation.Horizontal, self)
@@ -56,6 +61,18 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(central_widget)
         logger.debug("MainWindow felépítve.")
+
+        app_settings.load_startup_config(self.parameter_panel, self.run_panel)
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        """A jelenlegi widget-állapot mentése alkalmazás-szintű
+        alapértelmezésként, bezárás előtt.
+
+        A mentés kimenetelétől függetlenül mindig engedélyezi a bezárást
+        (`app_settings.save_current_config()` sosem dob kivételt).
+        """
+        app_settings.save_current_config(self.parameter_panel, self.run_panel)
+        super().closeEvent(event)
 
     def _build_menu_bar(self) -> None:
         file_menu = self.menuBar().addMenu("Fájl")
@@ -126,6 +143,33 @@ class MainWindow(QMainWindow):
                     f"Figyelem: {override_count} kézi felülbírálás van a "
                     "fájlban, amit a felület jelenleg nem jelenít meg."
                 )
+
+    def _on_mesh_file_selected(self, file_path: str) -> None:
+        """Automatikus 3D-előnézet betöltése egy sikeres mesh-fájl-választás után.
+
+        A paraméter-panel jelenlegi (mesh-importhoz tartozó) widget-
+        értékeiből állít elő egy `MeshImportParams`-t, és kizárólag az
+        `import_mesh_preview()`-t hívja meg — `run_pipeline()` ilyenkor
+        nem fut le, a "Futtatás" gomb állapotát ez a művelet nem érinti.
+        Ha a mezők a fájlválasztás után módosulnak, az előnézet nem
+        frissül automatikusan (csak új fájlválasztásra).
+        """
+        panel = self.parameter_panel
+        params = MeshImportParams(
+            file_path=file_path,
+            origin_alignment=panel.origin_alignment_combo.currentData(),
+            min_plausible_size_mm=panel.min_plausible_size_spin.value(),
+            max_plausible_size_mm=panel.max_plausible_size_spin.value(),
+        )
+        try:
+            mesh = import_mesh_preview(params)
+        except SliceDesignerError as error:
+            logger.exception("Hiba az előnézet betöltése során.")
+            self.run_panel.status_log.append(
+                f"Hiba az előnézet betöltése során: {error}"
+            )
+        else:
+            self.preview_panel.show_mesh(mesh)
 
     def _on_run_clicked(self) -> None:
         """A teljes pipeline futtatása a jelenlegi widget-állapotokból.

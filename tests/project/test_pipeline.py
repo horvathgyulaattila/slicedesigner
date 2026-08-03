@@ -6,7 +6,7 @@ import pytest
 import trimesh
 
 from slicedesigner.engines.backplate_engine import BackplateNormalAxis
-from slicedesigner.engines.exceptions import InvalidSliceError
+from slicedesigner.engines.exceptions import InvalidMeshError, InvalidSliceError
 from slicedesigner.engines.nesting_engine import MaterialDefinition, PartKind
 from slicedesigner.engines.numbering_engine import NumberingDirectionSign
 from slicedesigner.project import pipeline
@@ -347,3 +347,21 @@ def test_run_pipeline_mismatched_spacer_diameter_raises_before_any_engine_runs(
         run_pipeline(config)
 
     assert mesh_calls == []
+
+
+def test_import_mesh_preview_returns_mesh(tmp_path: Path) -> None:
+    stl_path = _box_stl(tmp_path)
+
+    mesh = pipeline.import_mesh_preview(MeshImportParams(file_path=stl_path))
+
+    assert mesh.is_valid
+    assert mesh.source_path == stl_path
+
+
+def test_import_mesh_preview_invalid_file_raises_invalid_mesh_error(
+    tmp_path: Path,
+) -> None:
+    missing_path = str(tmp_path / "does-not-exist.stl")
+
+    with pytest.raises(InvalidMeshError):
+        pipeline.import_mesh_preview(MeshImportParams(file_path=missing_path))

@@ -32,6 +32,17 @@ class PreviewPanel(QWidget):
     nélküli CI-környezetben) natív ablak-handle nélkül a VTK
     render-window inicializálása elszáll — ilyenkor a `QtInteractor`
     `off_screen=True` móddal jön létre, ami nem igényel natív ablakot.
+
+    Offscreen alatt az alapértelmezett `auto_update` (a `QtInteractor`
+    beépített, kb. 200ms-enként lefutó `render_timer`-je, ami a
+    `render()`-t a widget aktuális állapotától/láthatóságától
+    függetlenül, a Qt eseményhurok bármelyik feldolgozásakor újra
+    lefuttatja) is kikapcsolásra kerül — offscreen, semmit nem
+    megjelenítő környezetben nincs értelme az élő újrarajzolásnak, és ez
+    volt a natív összeomlás (access violation) forrása: a Qt-teszt-
+    keretrendszer (`pytest-qt`) minden teszt köré `app.processEvents()`
+    hívásokat illeszt, ami a still-futó `render_timer`-t egy már
+    törlés/lezárás alatt álló render-kontextusba futtatta bele.
     """
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -59,7 +70,11 @@ class PreviewPanel(QWidget):
         layout.addWidget(switch_widget)
 
         is_offscreen_platform = QGuiApplication.platformName() == "offscreen"
-        self.plotter = QtInteractor(self, off_screen=is_offscreen_platform)
+        self.plotter = QtInteractor(
+            self,
+            off_screen=is_offscreen_platform,
+            auto_update=False if is_offscreen_platform else 5.0,
+        )
         layout.addWidget(self.plotter)
         logger.debug("PreviewPanel felépítve, üres jelenettel.")
 
