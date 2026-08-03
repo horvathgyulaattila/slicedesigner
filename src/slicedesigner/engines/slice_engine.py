@@ -69,16 +69,37 @@ class Contour:
 
 
 @dataclass(frozen=True)
+class EngravingMark:
+    """Egy gravírozási jel (pl. egy azonosító-szöveg) nyitott vonal-strokejai.
+
+    A `strokes` minden eleme egy nyitott poliline (2 vagy több pont) — NEM
+    zárt hurok, ezért nem `Contour` (ami zárt kontúrt, szolid/lyuk
+    megkülönböztetést feltételez). A gravírozás sem nem szilárd anyag,
+    sem nem lyuk — felületi jelölés (NUMBERING_SPEC.md 4. szakasz).
+    """
+
+    text: str
+    strokes: tuple[tuple[tuple[float, float], ...], ...]
+    height_mm: float
+    island_index: int
+
+
+@dataclass(frozen=True)
 class Slice:
     """Egyetlen szelet a Slice Set-en belül.
 
     Lásd: SLICE_ENGINE_SPEC.md 4. szakasz.
+
+    A `numbering_marks` a Numbering Engine által elhelyezett azonosító
+    gravírozás-jeleit tartalmazza (alapértelmezetten üres — a Slice
+    Engine maga nem numeráz).
     """
 
     thickness_mm: float
     contours: tuple[Contour, ...]
     position_mm: float
     index: int
+    numbering_marks: tuple[EngravingMark, ...] = ()
 
 
 @dataclass(frozen=True)

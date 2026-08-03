@@ -17,6 +17,7 @@ from slicedesigner.engines.exceptions import InvalidBackplateError
 from slicedesigner.engines.mesh_import import Mesh
 from slicedesigner.engines.slice_engine import (
     Contour,
+    EngravingMark,
     Island,
     Slice,
     SliceAxis,
@@ -594,12 +595,18 @@ class Backplate:
     síkjában értendő — 2D pontlista, ugyanazzal a CCW/CW
     körüljárás-konvencióval, mint a Slice Engine `Contour`-jai.
 
+    A `numbering_marks` a Numbering Engine által a Backplate-hez
+    kapcsolódó szigetekhez elhelyezett azonosító gravírozás-jeleit
+    tartalmazza (alapértelmezetten üres — a Backplate Engine maga nem
+    numeráz).
+
     Lásd: BACKPLATE_SPEC.md 4. szakasz.
     """
 
     contours: tuple[Contour, ...]
     thickness_mm: float
     material_reference: str | None
+    numbering_marks: tuple[EngravingMark, ...] = ()
 
 
 def apply_backplate(

@@ -24,3 +24,7 @@ class InvalidGapError(SliceDesignerError):
 class InvalidBackplateError(SliceDesignerError):
     """A Backplate Engine bemenete érvénytelen, vagy a csap-elhelyezés nem
     végezhető el."""
+
+
+class InvalidNumberingError(SliceDesignerError):
+    """A Numbering Engine bemenete érvénytelen, vagy egy azonosító nem helyezhető el."""
