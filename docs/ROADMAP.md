@@ -27,6 +27,8 @@ A ROADMAP nem backlog, nem feladatlista és nem specifikáció. A célja, hogy b
 > **Megjegyzés (2026-08-03, folytatás 5):** A Phase 4 (Implementation) mind a nyolc, ROADMAP Phase 2-ben rögzített engine-je (Mesh Import, Slice Engine, Dowel System, Gap System, Backplate, Numbering, Nesting, DXF Export) elkészült, review-n átment, és a projektgazda jóváhagyta (89/89 automatizált teszt, `PYTHONHASHSEED=0 uv run pytest`). A munka során két, a specifikációk által Phase 4-re hagyott, keresztmetsző implementációs döntés (kontúr körüljárási irány, ADR-0007; Nesting Engine csomagolási algoritmus, ADR-0008) ADR-ben rögzítésre került. A Phase 4 ezért ✅ Approved-ra, a Phase 5 (Integration) pedig 🟡 In Progress-re került.
 >
 > **Megjegyzés (2026-08-04, folytatás 6):** A Phase 5 (Integration) eredeti öt tétele (modulok összekapcsolása, GUI, teljes workflow, projektmentés, beállítások) elkészült. Ezeken felül a GUI-t lezáró négy kiegészítő tétel (automatikus Mesh-előnézet, Dowel/Spacer/Backplate 3D-megjelenítés, szeletenkénti kiemelés) és két, élő tesztelés során feltárt és megvalósított javítás (Dowel automatikus pozíciókeresés térbeli szórása, Numbering Slice-oldali szigorúságának figyelmeztetés-alapúra enyhítése) is a fázis részeként valósult meg. A projektgazda jóváhagyta. A Phase 5 ezért ✅ Approved-ra, a Phase 6 (Release Candidate) pedig 🟡 In Progress-re került, első tételeként a DXF export Futtatásról való leválasztásával (önálló interakció, Döntési javaslat és Impact Analysis alatt).
+>
+> **Megjegyzés (2026-08-04, folytatás 7):** A Phase 6 első tétele (DXF export leválasztása a Futtatásról) a teljes munkafolyamaton átment — Döntési javaslat, Hatásvizsgálat, projektgazdai jóváhagyás, majd ADR-0009 és az ARCHITECTURE.md módosítása, ezt követően a Claude Code általi implementáció (200/200 automatizált teszt) —, és a projektgazda élő teszteléssel is megerősítette. A Phase 6 többi tétele (végső tesztelés, optimalizálás, dokumentáció, példaprojektek) még nyitott, a fázis ezért továbbra is 🟡 In Progress.
 
 ## Állapotjelölések
 
@@ -144,7 +146,7 @@ Megjegyzés: az eredeti öt tételen felül a GUI-t lezáró négy kiegészítő
 
 Feladata:
 
-* DXF export leválasztása a Futtatásról (önálló interakció) — Döntési javaslat és Impact Analysis alatt
+* ~~DXF export leválasztása a Futtatásról (önálló interakció)~~ — kész (ADR-0009)
 * végső tesztelés
 * optimalizálás
 * dokumentáció
