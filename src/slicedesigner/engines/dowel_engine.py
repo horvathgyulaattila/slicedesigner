@@ -9,6 +9,7 @@ from dataclasses import dataclass, replace
 
 import networkx as nx
 from shapely.geometry import Point
+from shapely.geometry.base import BaseGeometry
 
 from slicedesigner.engines.exceptions import InvalidDowelError
 from slicedesigner.engines.slice_engine import (
@@ -34,6 +35,18 @@ _MIN_AUTO_RUN_LENGTH_SLICES = 2
 
 # A Dowel Hole kontúrjának diszkretizálási felbontása (szegmensszám).
 _CIRCLE_SEGMENT_COUNT = 32
+
+# Az automatikus pozíciókeresés erózió-alapú illeszkedés-tesztjében
+# (`_erode_islands_by_slice()`) alkalmazott apró biztonsági ráhagyás —
+# anélkül, hogy a `polygon.buffer(-radius_mm).contains(point)` teszt
+# (matematikailag ekvivalens a `Point(x,y).buffer(radius_mm).within(polygon)`
+# korábbi teszttel) egzakt érintési (tangencia) pontokon a GEOS eltérő
+# belső eltolás-algoritmusai miatt ellentétes irányba kerekítene, mint a
+# korábbi módszer. Az érték minden gyártási/geometriai pontosság alatt
+# van (CODING_STANDARDS.md 7. szakasz, explicit lebegőpontos tolerancia
+# előírása), ezért a ténylegesen elfért Dowel-átmérőt/biztonsági
+# távolságot érdemben nem csökkenti.
+_EROSION_TANGENCY_EPSILON_MM = 1e-6
 
 
 @dataclass(frozen=True)
@@ -98,22 +111,50 @@ def _region_islands_by_slice(region_islands: list[Island]) -> dict[int, list[Isl
     return by_slice
 
 
+def _erode_islands_by_slice(
+    by_slice: dict[int, list[Island]], radius_mm: float
+) -> dict[int, list[BaseGeometry]]:
+    """Minden szigetre egyszeri Minkowski-erózió (`radius_mm`-mel) — ez a
+    terület, ahol egy `radius_mm` sugarú kör középpontja úgy helyezhető el,
+    hogy a kör teljes egészében a szigeten belül maradjon.
+
+    Az eróziós sugárból levont `_EROSION_TANGENCY_EPSILON_MM` biztosítja,
+    hogy az egzakt érintési (tangencia) pontok — ahol a kör pereme
+    pontosan egybeesik a sziget peremével — a korábbi, kör-poligon
+    építésen alapuló teszttel (`_circle_fits()`) megegyező eredményt
+    adjanak (l. `_EROSION_TANGENCY_EPSILON_MM` docstringje).
+
+    Ez teszi lehetővé, hogy `_longest_run()` a rácsos bejárás minden
+    pontjánál egy olcsó `.contains()` pont-tartalmazás tesztet végezzen a
+    korábbi, rácspontonkénti kör-poligon építés + `within()` teszt
+    helyett — a kimenet (mely pozíciók felelnek meg) nem változik,
+    kizárólag a számítás kerül régiónként egyszeri előszámításra
+    (DOWEL_SYSTEM_SPEC.md 6. szakasz 4. pont; teljesítmény-optimalizáció,
+    nem viselkedésváltozás).
+    """
+    effective_radius_mm = radius_mm - _EROSION_TANGENCY_EPSILON_MM
+    return {
+        slice_index: [island.polygon.buffer(-effective_radius_mm) for island in islands]
+        for slice_index, islands in by_slice.items()
+    }
+
+
 def _longest_run(
-    by_slice: dict[int, list[Island]],
+    eroded_by_slice: dict[int, list[BaseGeometry]],
     slice_indices_sorted: list[int],
     x_mm: float,
     y_mm: float,
-    radius_mm: float,
 ) -> tuple[int, int]:
     """A leghosszabb egymást követő szeletfutás (kezdő, záró sorszám), ahol a kör elfér.
 
     Nincs elfogadható (legalább `_MIN_AUTO_RUN_LENGTH_SLICES` hosszú) futás
     esetén (0, 0) az eredmény.
     """
+    point = Point(x_mm, y_mm)
     fits_by_index: dict[int, bool] = {
         slice_index: any(
-            _circle_fits(island, x_mm, y_mm, radius_mm)
-            for island in by_slice.get(slice_index, [])
+            eroded_polygon.contains(point)
+            for eroded_polygon in eroded_by_slice.get(slice_index, [])
         )
         for slice_index in slice_indices_sorted
     }
@@ -216,13 +257,15 @@ def _build_placement_candidates(
     max_x = max(island.polygon.bounds[2] for island in all_islands)
     max_y = max(island.polygon.bounds[3] for island in all_islands)
 
+    eroded_by_slice = _erode_islands_by_slice(by_slice, check_radius_mm)
+
     candidates: list[tuple[int, float, float, int, int]] = []
     y_mm = min_y
     while y_mm <= max_y:
         x_mm = min_x
         while x_mm <= max_x:
             start_index, end_index = _longest_run(
-                by_slice, slice_indices_sorted, x_mm, y_mm, check_radius_mm
+                eroded_by_slice, slice_indices_sorted, x_mm, y_mm
             )
             if end_index >= start_index and start_index > 0:
                 length = end_index - start_index + 1
@@ -283,6 +326,160 @@ def _select_best_candidate(
         valid_candidates,
         key=lambda c: _min_distance_to_placed(c[0], c[1], already_placed),
     )
+
+
+def _is_branching_region(by_slice: dict[int, list[Island]]) -> bool:
+    """Igaz, ha a régióban van legalább egy szelet, amelyen egynél több
+    sziget van (elágazás).
+
+    Elágazás-mentes régióban (minden szeleten legfeljebb egy sziget) a
+    szigetenkénti jelölt-szétválasztás (`_candidates_per_island()`) olcsó,
+    kizárólag a jelölt szeletsáv-tartományán alapuló szűréssel is
+    elvégezhető, poligon-teszt nélkül — nincs kétértelműség, melyik
+    szigethez tartozik egy jelölt, mert szeletenként csak egy van.
+    Elágazó régióban ehhez erózió-alapú pont-tartalmazás teszt szükséges
+    (DOWEL_SYSTEM_SPEC.md 6. szakasz 4/a. pont).
+    """
+    return any(len(islands) > 1 for islands in by_slice.values())
+
+
+def _candidates_per_island(
+    by_slice: dict[int, list[Island]],
+    slice_indices_sorted: list[int],
+    candidates: list[tuple[int, float, float, int, int]],
+    branching: bool,
+    eroded_by_slice: dict[int, list[BaseGeometry]] | None,
+) -> dict[tuple[int, int], list[tuple[int, float, float, int, int]]]:
+    """Minden `(slice_index, island_index)` szigethez a rá ténylegesen eső,
+    érvényes jelöltek listája, a `candidates` eredeti sorrendjét megőrizve
+    (DOWEL_SYSTEM_SPEC.md 6. szakasz 4/a. pont).
+
+    Elágazás-mentes régióban (`branching=False`) egy olcsó, kizárólag a
+    jelölt szeletsáv-tartományán (`start_index`/`end_index`) alapuló
+    szűrést végez. Elágazó régióban (`branching=True`, ekkor
+    `eroded_by_slice` kötelező) a pontos, erózió-alapú pont-tartalmazás
+    tesztet használja.
+    """
+    per_island: dict[tuple[int, int], list[tuple[int, float, float, int, int]]] = {
+        (slice_index, island_index): []
+        for slice_index, islands in by_slice.items()
+        for island_index in range(len(islands))
+    }
+
+    if not branching:
+        for slice_index in slice_indices_sorted:
+            per_island[(slice_index, 0)] = [
+                c for c in candidates if c[3] <= slice_index <= c[4]
+            ]
+        return per_island
+
+    assert eroded_by_slice is not None
+    for candidate in candidates:
+        _length, cand_y, cand_x, start_index, end_index = candidate
+        point = Point(cand_x, cand_y)
+        for slice_index in slice_indices_sorted:
+            if not (start_index <= slice_index <= end_index):
+                continue
+            for island_index, eroded_polygon in enumerate(
+                eroded_by_slice.get(slice_index, [])
+            ):
+                if eroded_polygon.contains(point):
+                    per_island[(slice_index, island_index)].append(candidate)
+    return per_island
+
+
+def _place_automatic_dowels(
+    region_id: int,
+    by_slice: dict[int, list[Island]],
+    slice_indices_sorted: list[int],
+    candidates: list[tuple[int, float, float, int, int]],
+    check_radius_mm: float,
+    dowel_diameter_mm: float,
+    dowel_count_per_region: int,
+    slices_by_index: dict[int, Slice],
+    placed: list[DowelPosition],
+) -> tuple[list[tuple[int, int]], list[tuple[int, int]]]:
+    """A régió automatikus Dowel-kiegészítése, két szakaszban
+    (DOWEL_SYSTEM_SPEC.md 6. szakasz 4. pont) — helyben bővíti a `placed`
+    listát.
+
+    Returns:
+        `(kiszorult, sosem_lefedhető)` — mindkettő `(slice_index,
+        island_index)` párok listája (6. szakasz 7., illetve 8. pont).
+    """
+    branching = _is_branching_region(by_slice)
+    eroded_by_slice = (
+        _erode_islands_by_slice(by_slice, check_radius_mm) if branching else None
+    )
+    per_island = _candidates_per_island(
+        by_slice, slice_indices_sorted, candidates, branching, eroded_by_slice
+    )
+
+    def _is_covered(island_key: tuple[int, int]) -> bool:
+        slice_index, island_index = island_key
+        if not branching:
+            return any(
+                d.start_slice_index <= slice_index <= d.end_slice_index for d in placed
+            )
+        assert eroded_by_slice is not None
+        eroded_polygon = eroded_by_slice[slice_index][island_index]
+        return any(
+            d.start_slice_index <= slice_index <= d.end_slice_index
+            and eroded_polygon.contains(Point(d.x_mm, d.y_mm))
+            for d in placed
+        )
+
+    never_coverable = sorted(key for key, cands in per_island.items() if not cands)
+
+    coverage_order = sorted(
+        (key for key, cands in per_island.items() if cands),
+        key=lambda key: len(per_island[key]),
+    )
+    starved: list[tuple[int, int]] = []
+    for island_key in coverage_order:
+        if _is_covered(island_key):
+            continue
+        selected = _select_best_candidate(
+            per_island[island_key], check_radius_mm, placed
+        )
+        if selected is None:
+            starved.append(island_key)
+            continue
+        x_mm, y_mm, start_index, end_index = selected
+        placed.append(
+            DowelPosition(
+                x_mm=x_mm,
+                y_mm=y_mm,
+                diameter_mm=dowel_diameter_mm,
+                length_mm=_dowel_length_mm(
+                    slices_by_index[start_index], slices_by_index[end_index]
+                ),
+                start_slice_index=start_index,
+                end_slice_index=end_index,
+                region_id=region_id,
+            )
+        )
+
+    while len(placed) < dowel_count_per_region:
+        candidate = _select_best_candidate(candidates, check_radius_mm, placed)
+        if candidate is None:
+            break
+        x_mm, y_mm, start_index, end_index = candidate
+        placed.append(
+            DowelPosition(
+                x_mm=x_mm,
+                y_mm=y_mm,
+                diameter_mm=dowel_diameter_mm,
+                length_mm=_dowel_length_mm(
+                    slices_by_index[start_index], slices_by_index[end_index]
+                ),
+                start_slice_index=start_index,
+                end_slice_index=end_index,
+                region_id=region_id,
+            )
+        )
+
+    return starved, never_coverable
 
 
 def _dowel_length_mm(start_slice: Slice, end_slice: Slice) -> float:
@@ -467,24 +664,17 @@ def apply_dowels(
             by_slice, slice_indices_sorted, check_radius_mm
         )
 
-        while len(placed) < dowel_count_per_region:
-            candidate = _select_best_candidate(candidates, check_radius_mm, placed)
-            if candidate is None:
-                break
-            x_mm, y_mm, start_index, end_index = candidate
-            placed.append(
-                DowelPosition(
-                    x_mm=x_mm,
-                    y_mm=y_mm,
-                    diameter_mm=dowel_diameter_mm,
-                    length_mm=_dowel_length_mm(
-                        slices_by_index[start_index], slices_by_index[end_index]
-                    ),
-                    start_slice_index=start_index,
-                    end_slice_index=end_index,
-                    region_id=region_id,
-                )
-            )
+        starved_islands, never_coverable_islands = _place_automatic_dowels(
+            region_id,
+            by_slice,
+            slice_indices_sorted,
+            candidates,
+            check_radius_mm,
+            dowel_diameter_mm,
+            dowel_count_per_region,
+            slices_by_index,
+            placed,
+        )
 
         if len(placed) < min_dowels_per_region:
             raise InvalidDowelError(
@@ -497,6 +687,22 @@ def apply_dowels(
                 region_id,
                 len(placed),
                 dowel_count_per_region,
+            )
+        for slice_index, island_index in starved_islands:
+            logger.warning(
+                "A(z) %s. szelet %s. szigete elvben lefedhető lett volna, de a "
+                "régió többi Dowel-jéhez való minimális távolság-követelmény "
+                "miatt jelenleg nem kapott Dowelt — próbáld manuális pozícióval "
+                "(manual_dowel_positions).",
+                slice_index,
+                island_index,
+            )
+        for slice_index, island_index in never_coverable_islands:
+            logger.warning(
+                "A(z) %s. szelet %s. szigete mérete/alakja miatt nem kaphat "
+                "Dowelt (a régió egyetlen Doweljének köre sem fér el rajta).",
+                slice_index,
+                island_index,
             )
 
         all_positions.extend(placed)

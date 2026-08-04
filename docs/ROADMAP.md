@@ -29,6 +29,8 @@ A ROADMAP nem backlog, nem feladatlista és nem specifikáció. A célja, hogy b
 > **Megjegyzés (2026-08-04, folytatás 6):** A Phase 5 (Integration) eredeti öt tétele (modulok összekapcsolása, GUI, teljes workflow, projektmentés, beállítások) elkészült. Ezeken felül a GUI-t lezáró négy kiegészítő tétel (automatikus Mesh-előnézet, Dowel/Spacer/Backplate 3D-megjelenítés, szeletenkénti kiemelés) és két, élő tesztelés során feltárt és megvalósított javítás (Dowel automatikus pozíciókeresés térbeli szórása, Numbering Slice-oldali szigorúságának figyelmeztetés-alapúra enyhítése) is a fázis részeként valósult meg. A projektgazda jóváhagyta. A Phase 5 ezért ✅ Approved-ra, a Phase 6 (Release Candidate) pedig 🟡 In Progress-re került, első tételeként a DXF export Futtatásról való leválasztásával (önálló interakció, Döntési javaslat és Impact Analysis alatt).
 >
 > **Megjegyzés (2026-08-04, folytatás 7):** A Phase 6 első tétele (DXF export leválasztása a Futtatásról) a teljes munkafolyamaton átment — Döntési javaslat, Hatásvizsgálat, projektgazdai jóváhagyás, majd ADR-0009 és az ARCHITECTURE.md módosítása, ezt követően a Claude Code általi implementáció (200/200 automatizált teszt) —, és a projektgazda élő teszteléssel is megerősítette. A Phase 6 többi tétele (végső tesztelés, optimalizálás, dokumentáció, példaprojektek) még nyitott, a fázis ezért továbbra is 🟡 In Progress.
+>
+> **Megjegyzés (2026-08-04, folytatás 8):** A Phase 6 "optimalizálás" tétele eredetileg általános teljesítmény-átvizsgálásként szerepelt; a projektgazda pontosítása alapján a tétel elsődleges és jelenleg egyetlen tartalma a Dowel automatikus pozíciókeresés teljesítményproblémájának javítása (korábban a BACKLOG.md 2. tételeként nyilvántartva, élő tesztelés során feltárt lassúság miatt). Mivel a javítás érdemben befolyásolhatja a rendszer futásidejét és viselkedését, a projektgazda döntése alapján a "végső tesztelés" tétel ez után következik a Feladata-listán, nem előtte. A BACKLOG.md 2. tétele ezzel a ROADMAP Phase 6 hatókörébe kerül és törlésre kerül a Backlogból.
 
 ## Állapotjelölések
 
@@ -147,8 +149,8 @@ Megjegyzés: az eredeti öt tételen felül a GUI-t lezáró négy kiegészítő
 Feladata:
 
 * ~~DXF export leválasztása a Futtatásról (önálló interakció)~~ — kész (ADR-0009)
+* optimalizálás — Dowel automatikus pozíciókeresés teljesítmény-javítása (l. megjegyzés lent; a korábbi BACKLOG.md 2. tétele)
 * végső tesztelés
-* optimalizálás
 * dokumentáció
 * példaprojektek
 

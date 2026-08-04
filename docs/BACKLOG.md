@@ -17,9 +17,3 @@ Ez a dokumentum azokat a jövőbeli tételeket (funkciókat, optimalizálásokat
 A Nesting Engine kimenetének (exportra kerülő vektorok) 2D megjelenítése ellenőrzés céljából, futtatás/export előtt.
 
 **Eredet / indoklás:** Új funkció, nincs jelenleg dokumentációs alapja — önálló specifikáció és jóváhagyás szükséges bevezetése előtt.
-
-### 2. Dowel automatikus pozíciókeresés — további teljesítmény-optimalizálás
-
-A jelenlegi rácsos keresés (`_PLACEMENT_GRID_STEP_MM` finomságú, teljes bejárás) bonyolultabb formáknál továbbra is lassú (a korábbi teljesítmény-javítás után is kb. 29 mp egy 200 mm-es kockán). Durvább kezdő-rács + finomítás, vagy térbeli indexelés csökkenthetné a futásidőt.
-
-**Eredet / indoklás:** Élő tesztelés során feltárt teljesítményprobléma. A megoldás megváltoztathatja, mely pozíciókat találja meg az algoritmus, ezért önálló, alapos vizsgálatot és jóváhagyást igényel — nem végezhető el mellékesen.

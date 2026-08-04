@@ -1,5 +1,7 @@
 """Tesztek a Dowel Engine-hez (DOWEL_SYSTEM_SPEC.md)."""
 
+import logging
+
 import pytest
 import trimesh
 
@@ -46,6 +48,17 @@ def _square_contour(cx: float, cy: float, half: float) -> Contour:
             (cx + half, cy - half),
             (cx + half, cy + half),
             (cx - half, cy + half),
+        )
+    )
+
+
+def _rect_contour(x_min: float, x_max: float, y_min: float, y_max: float) -> Contour:
+    return Contour(
+        points=(
+            (x_min, y_min),
+            (x_max, y_min),
+            (x_max, y_max),
+            (x_min, y_max),
         )
     )
 
@@ -304,3 +317,166 @@ def test_apply_dowels_invalid_blind_hole_cap_raises() -> None:
 
     with pytest.raises(InvalidDowelError):
         apply_dowels(slice_set, dowel_diameter_mm=4.0, blind_hole_cap_mm=100.0)
+
+
+def _make_hand_built_slice_set(
+    slices: tuple[Slice, ...], bounding_box: BoundingBox
+) -> SliceSet:
+    mesh = Mesh(
+        vertices=((0.0, 0.0, 0.0),),
+        triangles=(),
+        source_path="hand-built.stl",
+        bounding_box=bounding_box,
+        is_valid=True,
+        warnings=(),
+    )
+    return SliceSet(
+        source_mesh=mesh, gap_mm=0.0, slices=slices, slice_count=len(slices)
+    )
+
+
+def _make_branching_slice_set(
+    branch_a: tuple[float, float, float],
+    branch_b: tuple[float, float, float],
+    trunk_x_range: tuple[float, float],
+    trunk_y_range: tuple[float, float] = (-12.0, 12.0),
+    thickness_mm: float = 3.0,
+) -> SliceSet:
+    """Egy elágazó, összefüggő régió: egy "törzs" szelet (index 1), amely
+    mindkét, egymástól térben távoli "ágra" (index 2, 3) rákapcsolódik
+    (DOWEL_SYSTEM_SPEC.md 6. szakasz 4/a. pont, elágazó régió esete).
+
+    `branch_a`/`branch_b`: `(cx, cy, half)` a két ág négyzetéhez.
+    """
+    trunk = _rect_contour(trunk_x_range[0], trunk_x_range[1], *trunk_y_range)
+    branch_a_contour = _square_contour(*branch_a)
+    branch_b_contour = _square_contour(*branch_b)
+
+    slices = (
+        Slice(thickness_mm=thickness_mm, contours=(trunk,), position_mm=1.5, index=1),
+        Slice(
+            thickness_mm=thickness_mm,
+            contours=(branch_a_contour, branch_b_contour),
+            position_mm=4.5,
+            index=2,
+        ),
+        Slice(
+            thickness_mm=thickness_mm,
+            contours=(branch_a_contour, branch_b_contour),
+            position_mm=7.5,
+            index=3,
+        ),
+    )
+    bounding_box = BoundingBox(
+        min=(trunk_x_range[0], trunk_y_range[0], 0.0),
+        max=(trunk_x_range[1], trunk_y_range[1], 3 * thickness_mm),
+    )
+    return _make_hand_built_slice_set(slices, bounding_box)
+
+
+def test_apply_dowels_branching_region_covers_both_branches() -> None:
+    """DOWEL_SYSTEM_SPEC.md 6. szakasz 4/a. pont: a lefedettségi szakasz
+    minden, egyetlen Dowel-lel sem érintett szigetet lefed, a
+    `dowel_count_per_region` célszámtól függetlenül is.
+
+    Egy törzshöz kapcsolódó, egymástól 200 mm-re lévő két ág (egyenként
+    2 szeleten át, 20x20 mm alapterülettel) mindegyike önmagában is
+    lefedhető lenne — a korábbi, egyetlen célszámig töltő logika
+    (`dowel_count_per_region=1`) csak az egyiket helyezte volna el.
+    """
+    slice_set = _make_branching_slice_set(
+        branch_a=(0.0, 0.0, 10.0),
+        branch_b=(200.0, 0.0, 10.0),
+        trunk_x_range=(-15.0, 215.0),
+        trunk_y_range=(-10.0, 10.0),
+    )
+
+    _modified, positions = apply_dowels(
+        slice_set,
+        dowel_diameter_mm=4.0,
+        dowel_count_per_region=1,
+        min_dowels_per_region=1,
+    )
+
+    assert any(-10.0 <= p.x_mm <= 10.0 and -10.0 <= p.y_mm <= 10.0 for p in positions)
+    assert any(190.0 <= p.x_mm <= 210.0 and -10.0 <= p.y_mm <= 10.0 for p in positions)
+
+
+def test_apply_dowels_scarcity_first_covers_scarce_and_abundant_islands() -> None:
+    """DOWEL_SYSTEM_SPEC.md 6. szakasz 4/a. pont: a legkevesebb érvényes
+    jelölttel rendelkező sziget kerül előbb feldolgozásra — a szűkösebb
+    szigetet nem szorítja ki a bőségesebb jelölt-készlettel rendelkező
+    másik sziget.
+
+    A kisebb ág (12x12 mm) lényegesen kevesebb érvényes rácsponttal
+    rendelkezik, mint a nagyobb, mellette lévő ág (24x24 mm) — mindkettő
+    lefedését elvárjuk, `dowel_count_per_region=1` mellett is (amikor a
+    korábbi, egyetlen célszámig töltő logika csak az egyiket, jellemzően
+    a tágabb mozgásterű ágat helyezte volna el).
+    """
+    slice_set = _make_branching_slice_set(
+        branch_a=(0.0, 0.0, 6.0),
+        branch_b=(24.0, 0.0, 12.0),
+        trunk_x_range=(-10.0, 40.0),
+        trunk_y_range=(-12.0, 12.0),
+    )
+
+    _modified, positions = apply_dowels(
+        slice_set,
+        dowel_diameter_mm=4.0,
+        dowel_count_per_region=1,
+        min_dowels_per_region=1,
+    )
+
+    assert any(-6.0 <= p.x_mm <= 6.0 and -6.0 <= p.y_mm <= 6.0 for p in positions)
+    assert any(12.0 <= p.x_mm <= 36.0 and -12.0 <= p.y_mm <= 12.0 for p in positions)
+
+
+def test_apply_dowels_never_coverable_island_warns_without_raising(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """DOWEL_SYSTEM_SPEC.md 6. szakasz 8. pont: egy olyan szigetre, amelyen
+    a `check_radius_mm` sugarú kör sehol nem fér el, figyelmeztetés
+    kerül rögzítésre, de a régió (a többi szigete révén) sikeresnek
+    számít — nincs hiba.
+
+    A régió fő szigete (20x20 mm, 3 szeleten át) önmagában bőven
+    lefedhető; a 2. szeleten hozzáadott, 0,5 mm széles "sliver" sziget
+    (amely a fő szigettel érintkezve csatlakozik a régióhoz, de a
+    4 mm sugarú kör sehol nem fér el rajta) sosem kaphat Dowelt.
+    """
+    main_island = _square_contour(0.0, 0.0, 10.0)
+    sliver = _rect_contour(10.0, 10.5, -10.0, 10.0)
+    thickness_mm = 3.0
+
+    slices = (
+        Slice(
+            thickness_mm=thickness_mm, contours=(main_island,), position_mm=1.5, index=1
+        ),
+        Slice(
+            thickness_mm=thickness_mm,
+            contours=(main_island, sliver),
+            position_mm=4.5,
+            index=2,
+        ),
+        Slice(
+            thickness_mm=thickness_mm, contours=(main_island,), position_mm=7.5, index=3
+        ),
+    )
+    bounding_box = BoundingBox(min=(-10.0, -10.0, 0.0), max=(10.5, 10.0, 9.0))
+    slice_set = _make_hand_built_slice_set(slices, bounding_box)
+
+    with caplog.at_level(logging.WARNING, logger="slicedesigner.engines.dowel_engine"):
+        _modified, positions = apply_dowels(
+            slice_set,
+            dowel_diameter_mm=4.0,
+            dowel_count_per_region=1,
+            min_dowels_per_region=1,
+        )
+
+    assert len(positions) >= 1
+    assert any(
+        "2. szelet 1. szigete" in record.getMessage()
+        and "nem kaphat Dowelt" in record.getMessage()
+        for record in caplog.records
+    )

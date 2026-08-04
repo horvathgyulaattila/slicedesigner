@@ -50,7 +50,7 @@ Minden érintett Slice-hoz tartozó Dowel Hole: átmérő (= `dowel_diameter_mm`
 | `dowel_diameter_mm` | nincs (kötelező) | `> 0` | A Dowel (és a hozzá tartozó furatok) átmérője. |
 | `spacer_diameter_mm` | `0` | `≥ 0` | Csak a `min_edge_clearance_mm` alapértékének számításához; a tényleges Spacer-elhelyezés a Gap Engine feladata. Ha `use_spacers` igaz, ennek az értéknek meg kell egyeznie a Gap Engine saját `spacer_diameter_mm` paraméterével — az egyeztetés a Project felelőssége. |
 | `min_edge_clearance_mm` | `max(dowel_diameter_mm, spacer_diameter_mm) / 2` | `≥ 0` | A Dowel-pozíciónak (a rá kerülő Spacer méretét is figyelembe véve) ennyi biztonsági távolságot kell tartania a szelet külső szélétől. |
-| `dowel_count_per_region` | `3` | `≥ 1` | Az elhelyezendő Dowel-ek célszáma összefüggő 3D anyagrégiónként. |
+| `dowel_count_per_region` | `3` | `≥ 1` | Az elhelyezendő Dowel-ek célszáma összefüggő 3D anyagrégiónként — a tényleges végső szám ennél magasabb is lehet, felső korlát nélkül, ha ez szükséges ahhoz, hogy minden lefedhető sziget elérjen legalább egy Dowelt (6. szakasz 4/a. pontja). |
 | `min_dowels_per_region` | `1` | `1 ≤ x ≤ dowel_count_per_region` | A minimálisan elfogadható Dowel-szám egy régióban, ha a cél nem fér el. |
 | `blind_hole_cap_mm` | szeletvastagság 30%-a | `0 <` és `<` szeletvastagság | A vak furat lezáró oldalán megmaradó anyagvastagság. |
 | `manual_dowel_positions` | üres lista | — | Kézzel megadott, elsőbbséget élvező Dowel-pozíciók. |
@@ -60,14 +60,16 @@ Minden érintett Slice-hoz tartozó Dowel Hole: átmérő (= `dowel_diameter_mm`
 1. A szeletek geometriájának (lyuk-vs-sziget megkülönböztetéssel) egymáshoz kapcsolódó, egymást átfedő kontúrjai mentén a teljes Slice Set-en átívelő, összefüggő 3D anyagrégiók azonosítása.
 2. Minden `manual_dowel_positions` elem validálása: a megadott teljes szeletsávban a `dowel_diameter_mm + 2×min_edge_clearance_mm` átmérőjű kör teljes egészében az adott szeletek anyagán belül marad-e. Érvénytelen pozíció, vagy egymást átfedő kézi pozíciók esetén hiba (7. szakasz).
 3. Minden régióban: az érvényes kézi pozíciók hozzárendelése a régióhoz.
-4. Ha a régióban lévő kézi pozíciók száma nem éri el `dowel_count_per_region`-t, automatikus kiegészítés, a következő sorrendben:
-   a. Az első automatikusan elhelyezendő Dowel-hez: olyan (x,y) pozíció keresése, amelynél a fenti kör a lehető leghosszabb, egymást követő szeletsávon át (legalább 2 szeleten) a régión belül marad, a kézi pozíciókkal nem átfedve.
-   b. Minden további automatikusan elhelyezendő Dowel-hez: az érvényes (legalább 2 szeleten át megfelelő futású, a már elhelyezett kézi és automatikus pozíciókkal nem átfedő) jelöltek közül az, amelyik a hozzá legközelebbi, már elhelyezett Dowel-től (kézi vagy automatikus) mért távolságot maximalizálja — így a Dowelek a régió teljes kiterjedésén szétosztva helyezkednek el, nem klaszterezve egy részterületen. Azonos maximális távolság esetén a hosszabb futású jelölt élvez elsőbbséget, majd (még mindig azonosság esetén) a korábbi (6. szakasz eredeti) bejárási sorrend.
+4. Automatikus kiegészítés a következő elv szerint: minden egyes automatikusan elhelyezendő Dowel-hez a jelölt kiválasztása a régió addig elhelyezett (kézi vagy automatikus) Dowel-jeihez mért legközelebbi távolságot maximalizáló elv szerint történik (ha még nincs elhelyezett Dowel a régióban, a jelölt-lista rögzített, (-futáshossz, y, x) szerinti bejárási sorrendje dönt). Az elhelyezés két, egymást követő szakaszban zajlik:
+   a. **Lefedettségi szakasz (mindig lefut, a kézi pozíciók számától és a `dowel_count_per_region` célszámtól függetlenül):** a még egyetlen Dowel-lel sem érintett szigetek közül — a rájuk eső, érvényes (legalább 2 egymást követő szeleten át tartó, a már elhelyezett pozíciókkal nem átfedő) jelöltek száma szerint, a legkevesebbtől a legtöbb felé haladva — mindegyikhez egy Dowel elhelyezése a saját jelöltjei közül, a fenti elv szerint választva. Ha egy sziget egy korábban nála szűkösebb sziget lefedése miatt elveszíti utolsó érvényes jelöltjét, mielőtt sorra kerülne, a 7. pont szerint kezelendő. Ez a szakasz minden, indulásakor legalább egy jelölttel rendelkező szigetet lefed.
+   b. **Sűrítési szakasz (csak akkor fut, ha szükséges):** ha a régió Dowel-száma (kézi pozíciók + a. szakasz eredménye) nem éri el `dowel_count_per_region`-t, további automatikus Dowelek elhelyezése a fenti elv szerint, a jelölt-lista összes fennmaradó, érvényes jelöltje közül, `dowel_count_per_region`-ig.
 5. Ha egy régióban a kézi és automatikus pozíciók együttes száma nem éri el `dowel_count_per_region`-t, de legalább `min_dowels_per_region`-t igen → a ténylegesen elért darabszám elfogadása; figyelmeztetés rögzítése.
 6. Ha még `min_dowels_per_region` sem érhető el egy régióban → hiba (7. szakasz).
-7. Minden elhelyezett Dowel-hoz: a szakasz két végén lévő szeleten vak furat (mélység = szeletvastagság − `blind_hole_cap_mm`), minden közbenső szeleten átmenő furat.
-8. A Dowel Hole-ok tényleges kimetszése az érintett szeletek geometriájából, lyukként megjelölve.
-9. A módosított Slice Set és a Dowel-pozíció lista összeállítása és visszaadása a Project felé.
+7. Ha a 4/a. szakasz ellenére marad lefedetlen, de eredetileg lefedhető (a szakasz indulásakor legalább egy érvényes jelölttel rendelkező) sziget — mert egy nála szűkösebb, korábban lefoglalt sziget jelöltje túl közel esett hozzá —: figyelmeztetés rögzítése, a szelet sorszámára és a sziget azonosítójára hivatkozva, megkülönböztetve a 8. pont esetétől (itt a sziget elvben lefedhető lett volna, csak a többi Dowel-lel szembeni minimális távolság-követelmény miatt nem jutott neki hely).
+8. Minden szigetre, amelyre a régióban sosem létezett érvényes jelölt (azaz a `check_radius_mm` sugarú kör sehol nem fér el rajta legalább 2 egymást követő szeleten át): figyelmeztetés rögzítése, a szelet sorszámára és a sziget azonosítójára hivatkozva. Ez nem hiba — a régió a 4–6. pontok teljesülése esetén ettől függetlenül sikeresnek számít.
+9. Minden elhelyezett Dowel-hoz: a szakasz két végén lévő szeleten vak furat (mélység = szeletvastagság − `blind_hole_cap_mm`), minden közbenső szeleten átmenő furat.
+10. A Dowel Hole-ok tényleges kimetszése az érintett szeletek geometriájából, lyukként megjelölve.
+11. A módosított Slice Set és a Dowel-pozíció lista összeállítása és visszaadása a Project felé.
 
 ## 7. Hibakezelés
 
@@ -80,6 +82,7 @@ Fail-fast elven:
 * Egy manuálisan megadott pozíció nem fér el a megadott szeletsávban → **hiba**.
 * Két manuális pozíció egymást átfedi → **hiba**.
 * Egy összefüggő régió nem képes befogadni legalább `min_dowels_per_region` db Dowel-t → **hiba**.
+* A 6. szakasz 7–8. pontja szerinti esetek (elvben lefedhető, de a többi Dowel-lel szembeni távolság-követelmény miatt végül lefedetlen maradt sziget; illetve sosem lefedhető sziget) kifejezetten **nem** hibák — kizárólag figyelmeztetést váltanak ki, a régió sikeressége szempontjából a 6. szakasz 4–6. pontja az irányadó.
 
 ## 8. Kapcsolódó engine-ek és Domain Model fogalmak
 
@@ -96,5 +99,6 @@ Nincs megválaszolatlan pont.
 * A specifikáció mind a 10 szakaszt hiánytalanul tartalmazza.
 * A lyuk-vs-sziget kontúr-megkülönböztetés explicit módon rögzített.
 * A régiónkénti cél/minimum Dowel-szám logika (kézi és automatikus pozíciók együtt) egyértelműen rögzített.
+* A szűkösség szerinti (legkevesebb érvényes jelölttel rendelkező szigetek előnyben részesítése) lefedettségi sorrend és a hozzá tartozó, egymástól elkülönített figyelmeztetés-esetek (6. szakasz 4/a., 7. és 8. pontja) egyértelműen rögzítettek.
 * A vak furat logika mindkét végre és minden közbenső szeletre egyértelműen leírt.
 * A Hibakezelés fail-fast elven, egyértelműen felsorolja a blokkoló eseteket.
