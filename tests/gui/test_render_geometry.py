@@ -7,6 +7,7 @@ import math
 
 import trimesh
 
+from slicedesigner.engines.backplate_engine import Backplate, BackplateNormalAxis
 from slicedesigner.engines.dowel_engine import DowelPosition
 from slicedesigner.engines.gap_engine import Spacer
 from slicedesigner.engines.mesh_import import BoundingBox, Mesh
@@ -18,9 +19,11 @@ from slicedesigner.engines.slice_engine import (
     SliceSet,
 )
 from slicedesigner.gui.render_geometry import (
+    backplate_to_polydata,
     dowel_hole_contours_to_polydata,
     dowel_positions_to_polydata,
     mesh_to_polydata,
+    single_slice_to_polydata,
     slice_set_to_polydata,
     spacers_to_polydata,
 )
@@ -300,6 +303,62 @@ def _two_slice_slice_set(*, thickness_mm: float = 3.0) -> SliceSet:
     )
 
 
+def test_slice_set_to_polydata_exclude_none_matches_default_behavior() -> None:
+    slice_set = _two_slice_slice_set()
+
+    default = slice_set_to_polydata(slice_set)
+    explicit_none = slice_set_to_polydata(slice_set, exclude_slice_index=None)
+
+    assert default.n_points == explicit_none.n_points
+    assert default.n_cells == explicit_none.n_cells
+    assert default.bounds == explicit_none.bounds
+
+
+def test_slice_set_to_polydata_excludes_given_slice_index() -> None:
+    thickness_mm = 3.0
+    slice_set = _two_slice_slice_set(thickness_mm=thickness_mm)
+
+    full = slice_set_to_polydata(slice_set)
+    without_first = slice_set_to_polydata(slice_set, exclude_slice_index=1)
+
+    assert without_first.n_points < full.n_points
+    assert without_first.n_cells < full.n_cells
+    bounds = without_first.bounds
+    assert bounds.z_min == thickness_mm
+    assert bounds.z_max == 2 * thickness_mm
+
+
+def test_single_slice_to_polydata_matches_own_axis_band() -> None:
+    thickness_mm = 3.0
+    slice_set = _two_slice_slice_set(thickness_mm=thickness_mm)
+
+    first = single_slice_to_polydata(slice_set, slice_index=1)
+    second = single_slice_to_polydata(slice_set, slice_index=2)
+
+    assert first.n_points > 0
+    first_bounds = first.bounds
+    assert first_bounds.x_min == -10.0
+    assert first_bounds.x_max == 10.0
+    assert first_bounds.y_min == -10.0
+    assert first_bounds.y_max == 10.0
+    assert first_bounds.z_min == 0.0
+    assert first_bounds.z_max == thickness_mm
+
+    assert second.n_points > 0
+    second_bounds = second.bounds
+    assert second_bounds.z_min == thickness_mm
+    assert second_bounds.z_max == 2 * thickness_mm
+
+
+def test_single_slice_to_polydata_missing_index_returns_empty_polydata() -> None:
+    slice_set = _two_slice_slice_set()
+
+    polydata = single_slice_to_polydata(slice_set, slice_index=99)
+
+    assert polydata.n_points == 0
+    assert polydata.n_cells == 0
+
+
 def test_dowel_positions_to_polydata_empty_input_returns_empty_polydata() -> None:
     polydata = dowel_positions_to_polydata((), _two_slice_slice_set())
 
@@ -430,3 +489,100 @@ def test_spacers_to_polydata_spans_gap_above_start_slice() -> None:
     assert bounds.x_max == 3.0
     assert bounds.y_min == 0.0
     assert bounds.y_max == 4.0
+
+
+def _z_axis_square_assembly(
+    *, half: float = 10.0, thickness_mm: float = 3.0
+) -> SliceSet:
+    """Egy szolid (CCW), négyzet alaprajzú, `slice_axis=Z` szerint szeletelt
+    összeállítás — a Backplate-tesztek "assembly" oldala."""
+    slice_ = Slice(
+        thickness_mm=thickness_mm,
+        contours=(_ccw_square(cx=0.0, cy=0.0, half=half),),
+        position_mm=thickness_mm / 2,
+        index=1,
+    )
+    return SliceSet(
+        source_mesh=_empty_mesh(),
+        gap_mm=0.0,
+        slices=(slice_,),
+        slice_count=1,
+        slice_axis=SliceAxis.Z,
+    )
+
+
+def _backplate(*, thickness_mm: float = 2.0, half: float = 5.0) -> Backplate:
+    return Backplate(
+        contours=(_ccw_square(cx=0.0, cy=0.0, half=half),),
+        thickness_mm=thickness_mm,
+        material_reference=None,
+    )
+
+
+def test_backplate_to_polydata_none_returns_empty_polydata() -> None:
+    slice_set = _z_axis_square_assembly()
+
+    polydata = backplate_to_polydata(None, slice_set, BackplateNormalAxis.PLUS_X)
+
+    assert polydata.n_points == 0
+    assert polydata.n_cells == 0
+
+
+def test_backplate_to_polydata_plus_axis_matches_assembly_extreme() -> None:
+    slice_set = _z_axis_square_assembly(half=10.0)
+    backplate = _backplate(thickness_mm=2.0, half=5.0)
+
+    polydata = backplate_to_polydata(backplate, slice_set, BackplateNormalAxis.PLUS_X)
+
+    assert polydata.n_points > 0
+    bounds = polydata.bounds
+    # A belső (összeállítás felé néző) sík illeszkedik az összeállítás
+    # PLUS_X szerinti szélsőértékéhez (a négyzet alaprajz x_max=10.0) —
+    # ez a 7. szakasz legfontosabb ellenőrzése: a Backplate nem lóg el a
+    # levegőben.
+    assert bounds.x_min == 10.0
+    # ...és a vastagság kifelé (a `PLUS_X` előjele szerint, +X irányba)
+    # extrudálódik, nem az összeállítás felé.
+    assert bounds.x_max == 12.0
+    assert bounds.y_min == -5.0
+    assert bounds.y_max == 5.0
+    assert bounds.z_min == -5.0
+    assert bounds.z_max == 5.0
+
+
+def test_backplate_to_polydata_minus_axis_matches_assembly_extreme() -> None:
+    slice_set = _z_axis_square_assembly(half=10.0)
+    backplate = _backplate(thickness_mm=2.0, half=5.0)
+
+    polydata = backplate_to_polydata(backplate, slice_set, BackplateNormalAxis.MINUS_X)
+
+    bounds = polydata.bounds
+    # A belső sík itt az összeállítás MINUS_X szerinti szélsőértékéhez
+    # (x_min=-10.0) illeszkedik, a vastagság pedig -X irányba (kifelé)
+    # extrudálódik.
+    assert bounds.x_max == -10.0
+    assert bounds.x_min == -12.0
+
+
+def test_backplate_to_polydata_ignores_hole_contour() -> None:
+    slice_set = _z_axis_square_assembly(half=10.0)
+    backplate_without_hole = _backplate(thickness_mm=2.0, half=5.0)
+    backplate_with_hole = Backplate(
+        contours=(
+            _ccw_square(cx=0.0, cy=0.0, half=5.0),
+            _cw_square(cx=0.0, cy=0.0, half=1.0),
+        ),
+        thickness_mm=2.0,
+        material_reference=None,
+    )
+
+    without_hole = backplate_to_polydata(
+        backplate_without_hole, slice_set, BackplateNormalAxis.PLUS_X
+    )
+    with_hole = backplate_to_polydata(
+        backplate_with_hole, slice_set, BackplateNormalAxis.PLUS_X
+    )
+
+    assert with_hole.n_points == without_hole.n_points
+    assert with_hole.n_cells == without_hole.n_cells
+    assert with_hole.bounds == without_hole.bounds

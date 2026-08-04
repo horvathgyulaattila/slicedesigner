@@ -54,7 +54,9 @@ def build_pipeline_config(
             hiányzó mesh-fájl/kimeneti könyvtár hibát dob. `False` esetén
             (a "Mentés" útvonala) e két ellenőrzés kimarad, és a
             placeholder-szöveg is érvényes, elmenthető értékként kerül a
-            `PipelineConfig`-ba.
+            `PipelineConfig`-ba. A kimeneti könyvtár ellenőrzését ehhez a
+            `require_complete` értékhez igazítva a `build_dxf_export_params()`
+            végzi el.
 
     Raises:
         PipelineConfigurationError: `require_complete=True` mellett a
@@ -65,9 +67,6 @@ def build_pipeline_config(
     if require_complete:
         _require_selected_path(
             parameter_panel.mesh_file_path_label.text(), field_name="Mesh fájl"
-        )
-        _require_selected_path(
-            run_panel.output_directory_label.text(), field_name="Kimeneti könyvtár"
         )
 
     use_dowels = parameter_panel.use_dowels_checkbox.isChecked()
@@ -82,7 +81,9 @@ def build_pipeline_config(
         slicing=_build_slice_params(parameter_panel),
         numbering=_build_numbering_params(parameter_panel),
         nesting=_build_nesting_params(parameter_panel),
-        dxf_export=_build_dxf_export_params(run_panel),
+        dxf_export=build_dxf_export_params(
+            run_panel, require_complete=require_complete
+        ),
         dowel=_build_dowel_params(parameter_panel) if use_dowels else None,
         gap=_build_gap_params(parameter_panel) if use_spacers else None,
         backplate=(_build_backplate_params(parameter_panel) if use_backplate else None),
@@ -195,7 +196,32 @@ def _build_nesting_params(panel: ParameterPanel) -> NestingParams:
     )
 
 
-def _build_dxf_export_params(run_panel: RunPanel) -> DxfExportParams:
+def build_dxf_export_params(
+    run_panel: RunPanel, *, require_complete: bool = True
+) -> DxfExportParams:
+    """A futtatás-panel jelenlegi widget-állapotából `DxfExportParams`
+    összeállítása.
+
+    Ezt `build_pipeline_config()` is hívja (a "Futtatás" útvonal
+    részeként), és a `MainWindow` az önálló "DXF Export" gomb kattintás-
+    eseményében is (ADR-0009) — utóbbi esetben nem a teljes
+    `PipelineConfig`, csak a DXF Export paraméterek szükségesek.
+
+    Args:
+        require_complete: `True` esetén hiányzó kimeneti könyvtár esetén
+            hibát dob (a "Futtatás" és a "DXF Export" gomb útvonala).
+            `False` esetén (a "Mentés" útvonala) ez az ellenőrzés kimarad,
+            és a placeholder-szöveg is érvényes, elmenthető értékként
+            kerül a visszaadott objektumba.
+
+    Raises:
+        PipelineConfigurationError: `require_complete=True` mellett a
+            kimeneti könyvtár még nincs kiválasztva.
+    """
+    if require_complete:
+        _require_selected_path(
+            run_panel.output_directory_label.text(), field_name="Kimeneti könyvtár"
+        )
     return DxfExportParams(
         output_directory=run_panel.output_directory_label.text(),
         dxf_version=run_panel.dxf_version_combo.currentText(),

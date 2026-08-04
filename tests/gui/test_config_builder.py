@@ -12,7 +12,10 @@ from PySide6.QtWidgets import QTableWidgetItem  # noqa: E402
 from pytestqt.qtbot import QtBot  # noqa: E402
 
 from slicedesigner.engines.nesting_engine import MaterialDefinition  # noqa: E402
-from slicedesigner.gui.config_builder import build_pipeline_config  # noqa: E402
+from slicedesigner.gui.config_builder import (  # noqa: E402
+    build_dxf_export_params,
+    build_pipeline_config,
+)
 from slicedesigner.gui.parameter_panel import ParameterPanel  # noqa: E402
 from slicedesigner.gui.run_panel import RunPanel  # noqa: E402
 from slicedesigner.project.exceptions import PipelineConfigurationError  # noqa: E402
@@ -189,3 +192,43 @@ def test_require_complete_false_still_raises_on_invalid_material_cell(
 
     with pytest.raises(PipelineConfigurationError):
         build_pipeline_config(parameter_panel, run_panel, require_complete=False)
+
+
+def test_build_dxf_export_params_missing_output_directory_raises(
+    qtbot: QtBot,
+) -> None:
+    _, run_panel = _make_panels(qtbot)
+
+    with pytest.raises(PipelineConfigurationError):
+        build_dxf_export_params(run_panel)
+
+
+def test_build_dxf_export_params_require_complete_false_allows_missing_output_directory(
+    qtbot: QtBot,
+) -> None:
+    _, run_panel = _make_panels(qtbot)
+
+    params = build_dxf_export_params(run_panel, require_complete=False)
+
+    assert params.output_directory == "(nincs kiválasztva)"
+
+
+def test_build_dxf_export_params_reads_widget_values(qtbot: QtBot) -> None:
+    _, run_panel = _make_panels(qtbot)
+    run_panel.output_directory_label.setText("C:/exports")
+    run_panel.dxf_version_combo.setCurrentText("R2010")
+    run_panel.cut_layer_name_edit.setText("MYCUT")
+    run_panel.cut_layer_color_spin.setValue(2)
+    run_panel.engrave_layer_name_edit.setText("MYENGRAVE")
+    run_panel.engrave_layer_color_spin.setValue(6)
+    run_panel.output_filename_pattern_edit.setText("{material_id}")
+
+    params = build_dxf_export_params(run_panel)
+
+    assert params.output_directory == "C:/exports"
+    assert params.dxf_version == "R2010"
+    assert params.cut_layer_name == "MYCUT"
+    assert params.cut_layer_color == 2
+    assert params.engrave_layer_name == "MYENGRAVE"
+    assert params.engrave_layer_color == 6
+    assert params.output_filename_pattern == "{material_id}"

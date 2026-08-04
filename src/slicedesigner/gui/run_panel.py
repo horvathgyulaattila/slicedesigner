@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QProgressBar,
     QPushButton,
     QSpinBox,
     QTextEdit,
@@ -86,6 +87,21 @@ class RunPanel(QWidget):
 
         self.run_button = QPushButton("Futtatás")
         layout.addWidget(self.run_button)
+
+        # A legutóbbi sikeres Futtatás Nest-jein indítható DXF Export
+        # (ADR-0009) — kezdetben, és minden új Futtatás indításakor
+        # letiltva; a `MainWindow` engedélyezi sikeres Futtatás után.
+        self.export_dxf_button = QPushButton("DXF Export")
+        self.export_dxf_button.setEnabled(False)
+        layout.addWidget(self.export_dxf_button)
+
+        # Határozatlan (0/0) módú sáv — a `run_pipeline()` nem ad
+        # köztes/lépésenkénti előrehaladást, ezért csak azt jelzi, hogy a
+        # háttérszál dolgozik, nem azt, hogy hol tart.
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setRange(0, 0)
+        self.progress_bar.setVisible(False)
+        layout.addWidget(self.progress_bar)
 
         self.status_log = QTextEdit(self)
         self.status_log.setReadOnly(True)

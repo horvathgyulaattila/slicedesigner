@@ -92,7 +92,7 @@ A rétegek szigorúan egyirányban függenek: GUI → Project → Engine-ek. For
 
 **Réteg:** Domain
 
-**Felelősség:** A Nest alapján gyártásra kész Export (DXF) kimenet előállítása.
+**Felelősség:** A Nest alapján gyártásra kész Export (DXF) kimenet előállítása. A Futtatás automatikus pipeline-jának ez már nem lépése — önálló, explicit felhasználói interakcióra fut le (ADR-0009).
 
 **Domain Model kapcsolat:** Nest, Export
 
@@ -118,11 +118,12 @@ A rétegek szigorúan egyirányban függenek: GUI → Project → Engine-ek. For
 
 ## 3. Adatfolyam / munkafolyamat a rendszeren belül
 
-A feldolgozási folyamat lineáris pipeline-t követ, amelyet a Project koordinál:
+A feldolgozási folyamat lineáris pipeline-t követ, amelyet a Project koordinál. A Mesh Import-tól a Nesting Engine-ig terjedő szakasz a "Futtatás" részeként automatikusan lefut; a DXF Export Engine ezzel szemben önálló, explicit felhasználói interakcióra (a kimenet-panel "DXF Export" gombjára) fut le, kizárólag a legutóbbi sikeres Futtatás Nest-jein (ADR-0009):
 
 ```
 Mesh Import → Slice Engine → Dowel Engine → Gap Engine → Backplate Engine
-     → Numbering Engine → Nesting Engine → DXF Export Engine
+     → Numbering Engine → Nesting Engine   ⇢   DXF Export Engine
+     └──────────── automatikus (Futtatás) ────────────┘   (explicit interakció)
 ```
 
 * A **Mesh Import** állítja elő a Mesh-t, amely a **Slice Engine** bemenete.
@@ -131,8 +132,8 @@ Mesh Import → Slice Engine → Dowel Engine → Gap Engine → Backplate Engin
 * A **Gap Engine** a Dowel Engine által már meghatározott Dowel-pozíciók figyelembevételével és előnyben részesítésével állítja elő a Spacer elemeket; a Spacer-lista a Backplate Engine-t és a Numbering Engine-t megkerülve, közvetlenül a Nesting Engine bemenete.
 * A **Backplate Engine** ezután állítja elő a Backplate geometriát és a szeletek pozícióját azon.
 * A **Numbering Engine** a kész Slice Set-et és a Backplate-et egészíti ki azonosítókkal — ezért csak a Backplate Engine után futhat.
-* A **Nesting Engine** az összes elkészült alkatrészt (megjelölt Slice-ok, Backplate, valamint a Gap Engine-től közvetlenül kapott Spacer-lista) elrendezi a Material-okon.
-* A **DXF Export Engine** a végleges Nest alapján állítja elő az Export-ot.
+* A **Nesting Engine** az összes elkészült alkatrészt (megjelölt Slice-ok, Backplate, valamint a Gap Engine-től közvetlenül kapott Spacer-lista) elrendezi a Material-okon — ezzel a Futtatás automatikus szakasza lezárul.
+* A **DXF Export Engine** a végleges Nest alapján állítja elő az Export-ot, a felhasználó külön kérésére (ADR-0009).
 
 Minden nyíl adatátadást jelent, nem közvetlen függőséget — az engine-ek a Project-en keresztül, jól definiált be- és kimeneti adatszerkezeteken (a Domain Model fogalmain) keresztül kommunikálnak.
 
@@ -164,3 +165,5 @@ A build backend és a Domain réteg alapkönyvtárainak (mesh-kezelés, DXF-ír�
 A kontúr körüljárási irányának mint szolid/lyuk megkülönböztetésnek a konvenciója (CCW = szilárd anyag, CW = lyuk) az [ADR-0007](adr/0007-contour-winding-convention.md) dokumentumban került rögzítésre.
 
 A Nesting Engine csomagolási algoritmusának megválasztása (befoglaló-téglalap alapú polc-csomagolás a specifikáció "valódi alak" megfogalmazása helyett) az [ADR-0008](adr/0008-nesting-bounding-box-packing.md) dokumentumban került rögzítésre.
+
+A DXF Export leválasztása a Futtatásról (önálló, explicit felhasználói interakció a kimenet-panel "DXF Export" gombjával) az [ADR-0009](adr/0009-decoupled-dxf-export.md) dokumentumban került rögzítésre.

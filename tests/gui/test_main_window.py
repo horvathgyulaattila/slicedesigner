@@ -5,6 +5,7 @@ három összeépítési kapcsoló show/hide viselkedése működik, és a
 from __future__ import annotations
 
 import os
+import threading
 from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
@@ -79,6 +80,12 @@ def test_main_window_builds_three_areas(main_window: MainWindow) -> None:
     assert hasattr(main_window.preview_panel, "plotter")
     assert hasattr(main_window.run_panel, "run_button")
     assert hasattr(main_window.run_panel, "status_log")
+    assert hasattr(main_window.run_panel, "export_dxf_button")
+
+
+def test_export_dxf_button_initially_disabled(main_window: MainWindow) -> None:
+    assert main_window._last_nests is None
+    assert not main_window.run_panel.export_dxf_button.isEnabled()
 
 
 def test_dowel_switch_toggles_group_visibility(main_window: MainWindow) -> None:
@@ -118,16 +125,18 @@ def test_run_button_missing_mesh_shows_configuration_error(
 
 
 def test_run_button_success_updates_status_log(
-    main_window: MainWindow, monkeypatch: pytest.MonkeyPatch
+    main_window: MainWindow, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_slice_set = SimpleNamespace(slice_count=7)
     fake_dowel_positions = (object(),)
     fake_spacers = (object(),)
+    fake_nests = (object(), object())
     fake_result = SimpleNamespace(
         slice_set=fake_slice_set,
         dowel_positions=fake_dowel_positions,
         spacers=fake_spacers,
-        exports=(object(), object()),
+        backplate=None,
+        nests=fake_nests,
     )
     monkeypatch.setattr(
         "slicedesigner.gui.main_window.config_builder.build_pipeline_config",
@@ -145,19 +154,26 @@ def test_run_button_success_updates_status_log(
     )
 
     main_window.run_panel.run_button.click()
+    # A tényleges `run_pipeline()`-hívás egy háttérszálon fut; a
+    # `waitUntil` a Qt-eseményhurkot addig futtatja (nem `time.sleep()`),
+    # amíg a `_on_pipeline_succeeded()` slot (a szál végén) vissza nem
+    # engedélyezi a gombot.
+    qtbot.waitUntil(lambda: main_window.run_panel.run_button.isEnabled(), timeout=2000)
 
     status_text = main_window.run_panel.status_log.toPlainText()
     assert "sikeres" in status_text
     assert "7" in status_text
     assert "2" in status_text
     assert main_window.run_panel.run_button.isEnabled()
+    assert main_window.run_panel.export_dxf_button.isEnabled()
+    assert main_window._last_nests == fake_nests
     assert show_sliced_assembly_calls == [
-        (fake_slice_set, fake_dowel_positions, fake_spacers)
+        (fake_slice_set, fake_dowel_positions, fake_spacers, None, None)
     ]
 
 
 def test_run_button_engine_error_shows_processing_error(
-    main_window: MainWindow, monkeypatch: pytest.MonkeyPatch
+    main_window: MainWindow, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from slicedesigner.engines.exceptions import InvalidMeshError
 
@@ -174,10 +190,220 @@ def test_run_button_engine_error_shows_processing_error(
     )
 
     main_window.run_panel.run_button.click()
+    qtbot.waitUntil(lambda: main_window.run_panel.run_button.isEnabled(), timeout=2000)
 
     status_text = main_window.run_panel.status_log.toPlainText()
     assert "Hiba a feldolgozás során" in status_text
     assert main_window.run_panel.run_button.isEnabled()
+
+
+def test_run_button_and_menu_disabled_while_pipeline_running(
+    main_window: MainWindow, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A gomb és a két menü-akció a háttérszál futása *alatt* letiltva marad,
+    utána visszaáll — a mesterséges blokkolás (`threading.Event`)
+    determinisztikusan tartja nyitva ezt az ablakot `time.sleep()` nélkül."""
+    release_event = threading.Event()
+    fake_result = SimpleNamespace(
+        slice_set=SimpleNamespace(slice_count=1),
+        dowel_positions=(),
+        spacers=(),
+        backplate=None,
+        nests=(),
+    )
+
+    def _blocking_run_pipeline(config: object) -> object:
+        assert release_event.wait(timeout=2.0)
+        return fake_result
+
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.config_builder.build_pipeline_config",
+        lambda parameter_panel, run_panel: object(),
+    )
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.run_pipeline", _blocking_run_pipeline
+    )
+    monkeypatch.setattr(
+        main_window.preview_panel, "show_sliced_assembly", lambda *args: None
+    )
+
+    main_window.run_panel.run_button.click()
+
+    assert not main_window.run_panel.run_button.isEnabled()
+    assert not main_window.run_panel.export_dxf_button.isEnabled()
+    assert not main_window._save_action.isEnabled()
+    assert not main_window._open_action.isEnabled()
+    assert main_window.run_panel.progress_bar.isVisible()
+
+    release_event.set()
+    qtbot.waitUntil(lambda: main_window.run_panel.run_button.isEnabled(), timeout=2000)
+
+    assert main_window.run_panel.export_dxf_button.isEnabled()
+    assert main_window._save_action.isEnabled()
+    assert main_window._open_action.isEnabled()
+    assert not main_window.run_panel.progress_bar.isVisible()
+
+
+def test_export_dxf_clicked_without_last_nests_shows_message(
+    main_window: MainWindow,
+) -> None:
+    main_window.run_panel.export_dxf_button.setEnabled(True)
+
+    main_window.run_panel.export_dxf_button.click()
+
+    assert (
+        "Nincs friss futtatási eredmény"
+        in main_window.run_panel.status_log.toPlainText()
+    )
+
+
+def test_export_dxf_clicked_success_updates_status_log(
+    main_window: MainWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_nests = (object(), object(), object())
+    main_window._last_nests = fake_nests
+    main_window.run_panel.export_dxf_button.setEnabled(True)
+    fake_dxf_params = object()
+
+    build_calls = []
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.config_builder.build_dxf_export_params",
+        lambda run_panel: build_calls.append(run_panel) or fake_dxf_params,
+    )
+    export_calls = []
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.export_pipeline_result_to_dxf",
+        lambda nests, dxf_export: (
+            export_calls.append((nests, dxf_export)) or (object(), object(), object())
+        ),
+    )
+
+    main_window.run_panel.export_dxf_button.click()
+
+    assert build_calls == [main_window.run_panel]
+    assert export_calls == [(fake_nests, fake_dxf_params)]
+    status_text = main_window.run_panel.status_log.toPlainText()
+    assert "3 DXF fájl exportálva." in status_text
+
+
+def test_export_dxf_clicked_configuration_error_shows_message(
+    main_window: MainWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    main_window._last_nests = (object(),)
+    main_window.run_panel.export_dxf_button.setEnabled(True)
+
+    def _raise(run_panel: object) -> None:
+        raise PipelineConfigurationError("teszt-hiba")
+
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.config_builder.build_dxf_export_params",
+        _raise,
+    )
+
+    main_window.run_panel.export_dxf_button.click()
+
+    assert "Konfigurációs hiba" in main_window.run_panel.status_log.toPlainText()
+
+
+def test_export_dxf_clicked_engine_error_shows_message(
+    main_window: MainWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from slicedesigner.engines.exceptions import InvalidMeshError
+
+    main_window._last_nests = (object(),)
+    main_window.run_panel.export_dxf_button.setEnabled(True)
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.config_builder.build_dxf_export_params",
+        lambda run_panel: object(),
+    )
+
+    def _raise(nests: object, dxf_export: object) -> None:
+        raise InvalidMeshError("teszt-hiba")
+
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.export_pipeline_result_to_dxf", _raise
+    )
+
+    main_window.run_panel.export_dxf_button.click()
+
+    assert "Hiba a DXF Export során" in main_window.run_panel.status_log.toPlainText()
+
+
+def test_new_run_resets_last_nests_and_disables_export_button(
+    main_window: MainWindow, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    main_window._last_nests = (object(),)
+    main_window.run_panel.export_dxf_button.setEnabled(True)
+    fake_result = SimpleNamespace(
+        slice_set=SimpleNamespace(slice_count=1),
+        dowel_positions=(),
+        spacers=(),
+        backplate=None,
+        nests=(),
+    )
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.config_builder.build_pipeline_config",
+        lambda parameter_panel, run_panel: object(),
+    )
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.run_pipeline",
+        lambda config: fake_result,
+    )
+    monkeypatch.setattr(
+        main_window.preview_panel, "show_sliced_assembly", lambda *args: None
+    )
+
+    main_window.run_panel.run_button.click()
+
+    assert main_window._last_nests is None
+    assert not main_window.run_panel.export_dxf_button.isEnabled()
+
+    qtbot.waitUntil(lambda: main_window.run_panel.run_button.isEnabled(), timeout=2000)
+
+
+def test_close_event_rejects_close_while_pipeline_running(
+    main_window: MainWindow, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    release_event = threading.Event()
+    fake_result = SimpleNamespace(
+        slice_set=SimpleNamespace(slice_count=1),
+        dowel_positions=(),
+        spacers=(),
+        backplate=None,
+        nests=(),
+    )
+
+    def _blocking_run_pipeline(config: object) -> object:
+        assert release_event.wait(timeout=2.0)
+        return fake_result
+
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.config_builder.build_pipeline_config",
+        lambda parameter_panel, run_panel: object(),
+    )
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.run_pipeline", _blocking_run_pipeline
+    )
+    monkeypatch.setattr(
+        main_window.preview_panel, "show_sliced_assembly", lambda *args: None
+    )
+    save_calls = []
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.app_settings.save_current_config",
+        lambda parameter_panel, run_panel: save_calls.append(True),
+    )
+
+    main_window.run_panel.run_button.click()
+    assert main_window._worker is not None
+
+    main_window.close()
+
+    assert main_window.isVisible()
+    assert save_calls == []
+    assert "Futtatás folyamatban" in main_window.run_panel.status_log.toPlainText()
+
+    release_event.set()
+    qtbot.waitUntil(lambda: main_window.run_panel.run_button.isEnabled(), timeout=2000)
 
 
 def test_mesh_file_selected_shows_mesh_preview(

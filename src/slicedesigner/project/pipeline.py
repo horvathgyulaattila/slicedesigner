@@ -216,7 +216,6 @@ class PipelineResult:
     spacers: tuple[Spacer, ...]
     backplate: Backplate | None
     nests: tuple[Nest, ...]
-    exports: tuple[Export, ...]
 
 
 def _require_params(params: _T | None, *, switch_name: str, params_name: str) -> _T:
@@ -290,6 +289,41 @@ def import_mesh_preview(params: MeshImportParams) -> Mesh:
         origin_alignment=params.origin_alignment,
         min_plausible_size_mm=params.min_plausible_size_mm,
         max_plausible_size_mm=params.max_plausible_size_mm,
+    )
+
+
+def export_pipeline_result_to_dxf(
+    nests: tuple[Nest, ...], dxf_export: DxfExportParams
+) -> tuple[Export, ...]:
+    """A DXF Export engine (`export_nests_to_dxf()`) önálló hívása, a
+    Futtatástól leválasztva, explicit felhasználói kérésre (ADR-0009).
+
+    Kizárólag az `export_nests_to_dxf()` hívását végzi el, a `dxf_export`
+    mezőit ugyanúgy szétbontva, ahogy korábban `run_pipeline()` tette —
+    más engine-t nem hív, azon felül nem validál, amit maga az
+    `export_nests_to_dxf()` már elvégez.
+
+    Args:
+        nests: a Nesting Engine kimenete — a `PipelineResult.nests`, a
+            legutóbbi sikeres Futtatásból.
+        dxf_export: a DXF Export engine kívülről állítandó paraméterei.
+
+    Returns:
+        Az előállított Export-ok.
+
+    Raises:
+        SliceDesignerError: az `export_nests_to_dxf()` saját, dokumentált
+            kivétele — változatlanul továbbterjed.
+    """
+    return export_nests_to_dxf(
+        nests,
+        output_directory=dxf_export.output_directory,
+        dxf_version=dxf_export.dxf_version,
+        cut_layer_name=dxf_export.cut_layer_name,
+        cut_layer_color=dxf_export.cut_layer_color,
+        engrave_layer_name=dxf_export.engrave_layer_name,
+        engrave_layer_color=dxf_export.engrave_layer_color,
+        output_filename_pattern=dxf_export.output_filename_pattern,
     )
 
 
@@ -443,17 +477,6 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         nesting_rotation_mode=config.nesting.nesting_rotation_mode,
     )
 
-    exports = export_nests_to_dxf(
-        nests,
-        output_directory=config.dxf_export.output_directory,
-        dxf_version=config.dxf_export.dxf_version,
-        cut_layer_name=config.dxf_export.cut_layer_name,
-        cut_layer_color=config.dxf_export.cut_layer_color,
-        engrave_layer_name=config.dxf_export.engrave_layer_name,
-        engrave_layer_color=config.dxf_export.engrave_layer_color,
-        output_filename_pattern=config.dxf_export.output_filename_pattern,
-    )
-
     return PipelineResult(
         mesh=mesh,
         slice_set=slice_set,
@@ -461,5 +484,4 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         spacers=spacers,
         backplate=backplate,
         nests=nests,
-        exports=exports,
     )

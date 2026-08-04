@@ -196,17 +196,20 @@ def _overlaps_any(
     return False
 
 
-def _find_best_auto_candidate(
+def _build_placement_candidates(
     by_slice: dict[int, list[Island]],
     slice_indices_sorted: list[int],
     check_radius_mm: float,
-    already_placed: list[DowelPosition],
-) -> tuple[float, float, int, int] | None:
-    """A legjobb (leghosszabb futású) rács-jelölt keresése, amely nem fedi a már
-    elhelyezetteket."""
+) -> list[tuple[int, float, float, int, int]]:
+    """A rácsos jelölt-lista felépítése és rendezése egy régióra.
+
+    Nem függ a már elhelyezett Dowelektől — ezért régiónként egyszer
+    hívandó, nem minden egyes elhelyezendő Dowelnél újra (lásd
+    `apply_dowels()`).
+    """
     all_islands = [island for islands in by_slice.values() for island in islands]
     if not all_islands:
-        return None
+        return []
 
     min_x = min(island.polygon.bounds[0] for island in all_islands)
     min_y = min(island.polygon.bounds[1] for island in all_islands)
@@ -228,12 +231,58 @@ def _find_best_auto_candidate(
         y_mm += _PLACEMENT_GRID_STEP_MM
 
     candidates.sort(key=lambda c: (-c[0], c[1], c[2]))
+    return candidates
 
-    for _length, cand_y, cand_x, start_index, end_index in candidates:
-        if _overlaps_any(cand_x, cand_y, check_radius_mm, already_placed):
-            continue
-        return (cand_x, cand_y, start_index, end_index)
-    return None
+
+def _min_distance_to_placed(
+    x_mm: float, y_mm: float, placed: list[DowelPosition]
+) -> float:
+    """A `(x_mm, y_mm)` jelölt és a hozzá legközelebbi, már elhelyezett
+    Dowel közötti euklideszi távolság (DOWEL_SYSTEM_SPEC.md 6. szakasz
+    4/b. pont — a térbeli szórás maximalizálásához)."""
+    return min(
+        float(((x_mm - p.x_mm) ** 2 + (y_mm - p.y_mm) ** 2) ** 0.5) for p in placed
+    )
+
+
+def _select_best_candidate(
+    candidates: list[tuple[int, float, float, int, int]],
+    check_radius_mm: float,
+    already_placed: list[DowelPosition],
+) -> tuple[float, float, int, int] | None:
+    """A (rendezett, régiónként egyszer felépített) jelölt-listából a
+    legjobb, már elhelyezettekkel nem ütköző jelölt kiválasztása
+    (DOWEL_SYSTEM_SPEC.md 6. szakasz 4. pont).
+
+    Ha még nincs elhelyezett Dowel a régióban (`already_placed` üres): az
+    első nem ütköző jelölt a `candidates` rögzített (-length, y, x)
+    bejárási sorrendjében (4/a. pont).
+
+    Egyébként (4/b. pont): az összes nem ütköző jelölt közül az, amelyik
+    a hozzá legközelebbi már elhelyezett Dowel-től (kézi vagy automatikus)
+    mért távolságot maximalizálja — a Dowelek így a régió teljes
+    kiterjedésén szétosztva helyezkednek el, nem egy részterületen
+    klaszterezve. Egyenlőség esetén a `candidates` rögzített sorrendje
+    dönt (a `max()` az elsőként talált maximumot tartja meg).
+    """
+    if not already_placed:
+        for _length, cand_y, cand_x, start_index, end_index in candidates:
+            if not _overlaps_any(cand_x, cand_y, check_radius_mm, already_placed):
+                return (cand_x, cand_y, start_index, end_index)
+        return None
+
+    valid_candidates = [
+        (cand_x, cand_y, start_index, end_index)
+        for _length, cand_y, cand_x, start_index, end_index in candidates
+        if not _overlaps_any(cand_x, cand_y, check_radius_mm, already_placed)
+    ]
+    if not valid_candidates:
+        return None
+
+    return max(
+        valid_candidates,
+        key=lambda c: _min_distance_to_placed(c[0], c[1], already_placed),
+    )
 
 
 def _dowel_length_mm(start_slice: Slice, end_slice: Slice) -> float:
@@ -414,11 +463,12 @@ def apply_dowels(
 
         by_slice = _region_islands_by_slice(region_islands)
         slice_indices_sorted = sorted(by_slice.keys())
+        candidates = _build_placement_candidates(
+            by_slice, slice_indices_sorted, check_radius_mm
+        )
 
         while len(placed) < dowel_count_per_region:
-            candidate = _find_best_auto_candidate(
-                by_slice, slice_indices_sorted, check_radius_mm, placed
-            )
+            candidate = _select_best_candidate(candidates, check_radius_mm, placed)
             if candidate is None:
                 break
             x_mm, y_mm, start_index, end_index = candidate

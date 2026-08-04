@@ -146,6 +146,78 @@ def test_apply_dowels_insufficient_region_raises() -> None:
         apply_dowels(slice_set, dowel_diameter_mm=4.0)
 
 
+def test_apply_dowels_auto_placement_matches_characterized_positions() -> None:
+    """Karakterizációs regressziós teszt (bit-pontos Dowel-pozíciók).
+
+    A korábbi (teljesítmény-javítási kör alatt felvett) verzió a rács-
+    bejárás rögzített (-length, y, x) sorrendjén alapuló, kizárólag
+    futáshossz szerinti kiválasztást rögzítette — ez a három Dowelt
+    egyetlen él mentén klaszterezte ((-11,-11), (-3,-11), (5,-11), mind
+    y=-11-en). A DOWEL_SYSTEM_SPEC.md 6. szakasz 4. pontjának módosítása
+    (térbeli szórás: a 2., 3., ... automatikus Dowel a hozzá legközelebbi
+    már elhelyezett Dowel-től mért távolságot maximalizálva kerül
+    kiválasztásra) szándékosan megváltoztatja ezeket a pozíciókat — lásd
+    `test_apply_dowels_auto_placement_spreads_across_region_not_clustered()`
+    a viselkedés-változás indoklásáért. Ez az új várt érték az immár
+    amendált spec szerinti, változatlan kódon mért karakterizációs alap.
+    """
+    slice_set = _make_box_slice_set(extents=(30.0, 30.0, 15.0), slice_thickness_mm=3.0)
+
+    _modified, positions = apply_dowels(slice_set, dowel_diameter_mm=4.0)
+
+    assert [
+        (
+            p.x_mm,
+            p.y_mm,
+            p.diameter_mm,
+            p.length_mm,
+            p.start_slice_index,
+            p.end_slice_index,
+            p.region_id,
+        )
+        for p in positions
+    ] == [
+        (-11.0, -11.0, 4.0, 15.0, 1, 5, 1),
+        (11.0, 11.0, 4.0, 15.0, 1, 5, 1),
+        (11.0, -11.0, 4.0, 15.0, 1, 5, 1),
+    ]
+
+
+def test_apply_dowels_auto_placement_spreads_across_region_not_clustered() -> None:
+    """DOWEL_SYSTEM_SPEC.md 6. szakasz 4/b. pont: minden további automatikus
+    Dowel a hozzá legközelebbi, már elhelyezett Dowel-től mért távolságot
+    maximalizálva kerül kiválasztásra — a Dowelek így a régió teljes
+    kiterjedésén szétosztva helyezkednek el, nem egyetlen sarok/él mentén
+    klaszterezve (a korábbi, kizárólag futáshossz-rendezésen alapuló
+    algoritmus jellemző hibája, lásd
+    `test_apply_dowels_auto_placement_matches_characterized_positions()`).
+    """
+    slice_set = _make_box_slice_set(extents=(30.0, 30.0, 15.0), slice_thickness_mm=3.0)
+
+    _modified, positions = apply_dowels(slice_set, dowel_diameter_mm=4.0)
+
+    assert len(positions) == 3
+    xs = [p.x_mm for p in positions]
+    ys = [p.y_mm for p in positions]
+    # A korábbi, klaszterezett elrendezésben mindhárom Dowel azonos
+    # y-koordinátán ült (0 mm y-szórás) — az új elrendezésnek a
+    # rendelkezésre álló teljes tartományt (kb. 22 mm, a 30 mm-es kocka
+    # élhosszából a min_edge_clearance_mm/dowel_diameter_mm miatti
+    # beszűkítéssel) kell lefednie mindkét tengelyen.
+    assert max(xs) - min(xs) > 15.0
+    assert max(ys) - min(ys) > 15.0
+
+    pairwise_distances = [
+        ((a.x_mm - b.x_mm) ** 2 + (a.y_mm - b.y_mm) ** 2) ** 0.5
+        for i, a in enumerate(positions)
+        for b in positions[i + 1 :]
+    ]
+    # Az átfedés-mentességi minimum (2 * check_radius_mm = dowel_diameter_mm
+    # + 2 * min_edge_clearance_mm = 4 + 2*2 = 8 mm) messze alatta marad a
+    # ténylegesen elért páronkénti távolságoknak.
+    assert min(pairwise_distances) > 15.0
+
+
 def test_apply_dowels_two_disconnected_regions() -> None:
     slice_set = _make_two_column_slice_set()
 

@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-08-01
-Utolsó módosítás: 2026-08-01
+Utolsó módosítás: 2026-08-04
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](../PROJECT_CONSTITUTION.md), [ARCHITECTURE.md](../ARCHITECTURE.md), [DOMAIN_MODEL.md](../DOMAIN_MODEL.md), [SPECIFICATION_STANDARD.md](../SPECIFICATION_STANDARD.md), [ENGINEERING_PRINCIPLES.md](../ENGINEERING_PRINCIPLES.md), [ADR-0004](../adr/0004-optional-assembly-mechanisms.md), [ADR-0005](../adr/0005-dowel-before-gap-ordering.md), [SLICE_ENGINE_SPEC.md](SLICE_ENGINE_SPEC.md), [GAP_SYSTEM_SPEC.md](GAP_SYSTEM_SPEC.md)
 
 ## 1. Kontextus
@@ -60,7 +60,9 @@ Minden érintett Slice-hoz tartozó Dowel Hole: átmérő (= `dowel_diameter_mm`
 1. A szeletek geometriájának (lyuk-vs-sziget megkülönböztetéssel) egymáshoz kapcsolódó, egymást átfedő kontúrjai mentén a teljes Slice Set-en átívelő, összefüggő 3D anyagrégiók azonosítása.
 2. Minden `manual_dowel_positions` elem validálása: a megadott teljes szeletsávban a `dowel_diameter_mm + 2×min_edge_clearance_mm` átmérőjű kör teljes egészében az adott szeletek anyagán belül marad-e. Érvénytelen pozíció, vagy egymást átfedő kézi pozíciók esetén hiba (7. szakasz).
 3. Minden régióban: az érvényes kézi pozíciók hozzárendelése a régióhoz.
-4. Ha a régióban lévő kézi pozíciók száma nem éri el `dowel_count_per_region`-t, automatikus kiegészítés: olyan (x,y) pozíciók keresése, amelyeknél a fenti kör a lehető leghosszabb, egymást követő szeletsávon át (legalább 2 szeleten) a régión belül marad, a kézi pozíciókkal és egymással sem átfedve.
+4. Ha a régióban lévő kézi pozíciók száma nem éri el `dowel_count_per_region`-t, automatikus kiegészítés, a következő sorrendben:
+   a. Az első automatikusan elhelyezendő Dowel-hez: olyan (x,y) pozíció keresése, amelynél a fenti kör a lehető leghosszabb, egymást követő szeletsávon át (legalább 2 szeleten) a régión belül marad, a kézi pozíciókkal nem átfedve.
+   b. Minden további automatikusan elhelyezendő Dowel-hez: az érvényes (legalább 2 szeleten át megfelelő futású, a már elhelyezett kézi és automatikus pozíciókkal nem átfedő) jelöltek közül az, amelyik a hozzá legközelebbi, már elhelyezett Dowel-től (kézi vagy automatikus) mért távolságot maximalizálja — így a Dowelek a régió teljes kiterjedésén szétosztva helyezkednek el, nem klaszterezve egy részterületen. Azonos maximális távolság esetén a hosszabb futású jelölt élvez elsőbbséget, majd (még mindig azonosság esetén) a korábbi (6. szakasz eredeti) bejárási sorrend.
 5. Ha egy régióban a kézi és automatikus pozíciók együttes száma nem éri el `dowel_count_per_region`-t, de legalább `min_dowels_per_region`-t igen → a ténylegesen elért darabszám elfogadása; figyelmeztetés rögzítése.
 6. Ha még `min_dowels_per_region` sem érhető el egy régióban → hiba (7. szakasz).
 7. Minden elhelyezett Dowel-hoz: a szakasz két végén lévő szeleten vak furat (mélység = szeletvastagság − `blind_hole_cap_mm`), minden közbenső szeleten átmenő furat.

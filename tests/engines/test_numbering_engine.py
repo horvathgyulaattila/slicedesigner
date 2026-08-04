@@ -149,16 +149,28 @@ def test_apply_numbering_falls_back_to_min_height() -> None:
     assert mark.height_mm == pytest.approx(2.5)
 
 
-def test_apply_numbering_insufficient_space_raises() -> None:
+def test_apply_numbering_logs_warning_when_insufficient_space(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """NUMBERING_SPEC.md 6. szakasz 4. lépés (2026-08-04-i módosítás): a
+    Slice-oldali azonosító elférő hely hiánya immár ugyanúgy csak
+    figyelmeztetés, mint a Backplate-oldali analóg eset (lásd
+    `test_apply_numbering_to_backplate_logs_warning_when_insufficient_space`)
+    — korábban ez `InvalidNumberingError`-t dobott."""
     slice_set = _make_hand_slice_set_numbering([[(9.0, 10.0, 14.0, 15.0)]])
 
-    with pytest.raises(InvalidNumberingError):
-        apply_numbering(
+    with caplog.at_level(logging.WARNING):
+        result = apply_numbering(
             slice_set,
             numbering_normal_axis=BackplateNormalAxis.PLUS_X,
             numbering_direction_axis_sign=NumberingDirectionSign.POSITIVE,
             numbering_height_mm=5.0,
         )
+
+    assert len(result.slices[0].numbering_marks) == 0
+    assert any(
+        "numbering_min_height_mm" in record.getMessage() for record in caplog.records
+    )
 
 
 def test_apply_numbering_manual_position_used() -> None:

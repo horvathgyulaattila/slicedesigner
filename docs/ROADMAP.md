@@ -3,7 +3,7 @@
 Státusz: Aktív
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-07-31
-Utolsó módosítás: 2026-08-03
+Utolsó módosítás: 2026-08-04
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](PROJECT_CONSTITUTION.md), [AI_WORKFLOW.md](AI_WORKFLOW.md), [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md), [DOMAIN_MODEL.md](DOMAIN_MODEL.md)
 
 ## Cél
@@ -25,6 +25,8 @@ A ROADMAP nem backlog, nem feladatlista és nem specifikáció. A célja, hogy b
 > **Megjegyzés (2026-08-01, folytatás 4):** A Phase 3 (Architecture Freeze) kilépési feltétele teljesült — az architektúra és a nyolc specifikáció rendszerezett áttekintése megtörtént (ARCHITECTURE.md belső konzisztencia, DOMAIN_MODEL.md kereszthivatkozások, szétszórt backlog-bejegyzések rendezése, a teljes pipeline adatszerződéseinek végigfuttatása), a feltárt hiányosságok javításra kerültek, és a projektgazda jóváhagyta. A Phase 3 ezért ✅ Approved-ra, a Phase 4 (Implementation) pedig 🟡 In Progress-re került.
 >
 > **Megjegyzés (2026-08-03, folytatás 5):** A Phase 4 (Implementation) mind a nyolc, ROADMAP Phase 2-ben rögzített engine-je (Mesh Import, Slice Engine, Dowel System, Gap System, Backplate, Numbering, Nesting, DXF Export) elkészült, review-n átment, és a projektgazda jóváhagyta (89/89 automatizált teszt, `PYTHONHASHSEED=0 uv run pytest`). A munka során két, a specifikációk által Phase 4-re hagyott, keresztmetsző implementációs döntés (kontúr körüljárási irány, ADR-0007; Nesting Engine csomagolási algoritmus, ADR-0008) ADR-ben rögzítésre került. A Phase 4 ezért ✅ Approved-ra, a Phase 5 (Integration) pedig 🟡 In Progress-re került.
+>
+> **Megjegyzés (2026-08-04, folytatás 6):** A Phase 5 (Integration) eredeti öt tétele (modulok összekapcsolása, GUI, teljes workflow, projektmentés, beállítások) elkészült. Ezeken felül a GUI-t lezáró négy kiegészítő tétel (automatikus Mesh-előnézet, Dowel/Spacer/Backplate 3D-megjelenítés, szeletenkénti kiemelés) és két, élő tesztelés során feltárt és megvalósított javítás (Dowel automatikus pozíciókeresés térbeli szórása, Numbering Slice-oldali szigorúságának figyelmeztetés-alapúra enyhítése) is a fázis részeként valósult meg. A projektgazda jóváhagyta. A Phase 5 ezért ✅ Approved-ra, a Phase 6 (Release Candidate) pedig 🟡 In Progress-re került, első tételeként a DXF export Futtatásról való leválasztásával (önálló interakció, Döntési javaslat és Impact Analysis alatt).
 
 ## Állapotjelölések
 
@@ -122,7 +124,7 @@ A fejlesztés kizárólag jóváhagyott specifikáció alapján történt. Mind 
 
 ### Phase 5 – Integration
 
-Állapot: 🟡 In Progress
+Állapot: ✅ Approved
 
 Feladata:
 
@@ -132,14 +134,17 @@ Feladata:
 * projektmentés
 * beállítások
 
+Megjegyzés: az eredeti öt tételen felül a GUI-t lezáró négy kiegészítő tétel (automatikus Mesh-előnézet, Dowel/Spacer/Backplate 3D-megjelenítés, szeletenkénti kiemelés) és két, élő teszteléskor feltárt javítás (Dowel automatikus pozíciókeresés térbeli szórása, Numbering figyelmeztetés-alapú kezelése) is a fázis részeként valósult meg.
+
 ---
 
 ### Phase 6 – Release Candidate
 
-Állapot: ⬜ Not Started
+Állapot: 🟡 In Progress
 
 Feladata:
 
+* DXF export leválasztása a Futtatásról (önálló interakció) — Döntési javaslat és Impact Analysis alatt
 * végső tesztelés
 * optimalizálás
 * dokumentáció

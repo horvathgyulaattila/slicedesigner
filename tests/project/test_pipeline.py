@@ -21,6 +21,7 @@ from slicedesigner.project.pipeline import (
     NumberingParams,
     PipelineConfig,
     SliceParams,
+    export_pipeline_result_to_dxf,
     run_pipeline,
 )
 
@@ -96,10 +97,8 @@ def _placed_part_kinds(result: pipeline.PipelineResult) -> set[PartKind]:
     return {part.reference.kind for nest in result.nests for part in nest.placed_parts}
 
 
-def test_run_pipeline_all_switches_true_produces_dxf_exports(tmp_path: Path) -> None:
+def test_run_pipeline_all_switches_true_produces_nests(tmp_path: Path) -> None:
     stl_path = _box_stl(tmp_path)
-    output_dir = tmp_path / "out"
-    output_dir.mkdir()
 
     config = PipelineConfig(
         use_dowels=True,
@@ -115,7 +114,7 @@ def test_run_pipeline_all_switches_true_produces_dxf_exports(tmp_path: Path) -> 
             backplate_material_id="wood3",
             spacer_material_id="wood1",
         ),
-        dxf_export=DxfExportParams(output_directory=str(output_dir)),
+        dxf_export=DxfExportParams(output_directory=str(tmp_path)),
         dowel=DowelParams(dowel_diameter_mm=4.0, spacer_diameter_mm=3.0),
         gap=GapParams(spacer_diameter_mm=3.0),
         backplate=_backplate_params(),
@@ -129,8 +128,63 @@ def test_run_pipeline_all_switches_true_produces_dxf_exports(tmp_path: Path) -> 
     assert len(result.backplate.numbering_marks) > 0
     assert any(s.numbering_marks for s in result.slice_set.slices)
     assert len(result.nests) > 0
-    assert len(result.exports) > 0
-    for export in result.exports:
+
+
+def test_run_pipeline_does_not_write_dxf_files(tmp_path: Path) -> None:
+    """`run_pipeline()` már nem ír DXF fájlt a lemezre (ADR-0009) — a
+    korábban automatikusan előálló export explicit `export_pipeline_result_to_dxf()`
+    hívást igényel."""
+    stl_path = _box_stl(tmp_path)
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    config = PipelineConfig(
+        use_dowels=True,
+        use_spacers=False,
+        use_backplate=False,
+        mesh_import=MeshImportParams(file_path=stl_path),
+        slicing=SliceParams(slice_thickness_mm=3.0),
+        numbering=_numbering_params(),
+        nesting=NestingParams(
+            material_definitions=_materials(),
+            slice_material_id="wood3",
+            seam_marking_height_mm=2.0,
+        ),
+        dxf_export=DxfExportParams(output_directory=str(output_dir)),
+        dowel=DowelParams(dowel_diameter_mm=4.0),
+    )
+
+    run_pipeline(config)
+
+    assert list(output_dir.iterdir()) == []
+
+
+def test_export_pipeline_result_to_dxf_writes_files(tmp_path: Path) -> None:
+    stl_path = _box_stl(tmp_path)
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    config = PipelineConfig(
+        use_dowels=True,
+        use_spacers=False,
+        use_backplate=False,
+        mesh_import=MeshImportParams(file_path=stl_path),
+        slicing=SliceParams(slice_thickness_mm=3.0),
+        numbering=_numbering_params(),
+        nesting=NestingParams(
+            material_definitions=_materials(),
+            slice_material_id="wood3",
+            seam_marking_height_mm=2.0,
+        ),
+        dxf_export=DxfExportParams(output_directory=str(output_dir)),
+        dowel=DowelParams(dowel_diameter_mm=4.0),
+    )
+    result = run_pipeline(config)
+
+    exports = export_pipeline_result_to_dxf(result.nests, config.dxf_export)
+
+    assert len(exports) > 0
+    for export in exports:
         assert (output_dir / export.filename).exists()
 
 
@@ -169,7 +223,7 @@ def test_run_pipeline_only_use_dowels_skips_gap_and_backplate(
     assert _placed_part_kinds(result).isdisjoint(
         {PartKind.BACKPLATE, PartKind.SPACER_DISC}
     )
-    assert len(result.exports) > 0
+    assert len(result.nests) > 0
 
 
 def test_run_pipeline_only_use_spacers_skips_dowel_and_backplate(

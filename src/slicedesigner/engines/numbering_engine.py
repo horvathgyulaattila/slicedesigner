@@ -416,9 +416,10 @@ def apply_numbering(
         A gravírozási jelekkel kiegészített Slice Set.
 
     Raises:
-        InvalidNumberingError: érvénytelen paraméter, érvénytelen
-            `numbering_normal_axis`, vagy egy sziget azonosítója egyik
-            tájolásban sem éri el `numbering_min_height_mm`-et.
+        InvalidNumberingError: érvénytelen paraméter, vagy érvénytelen
+            `numbering_normal_axis`. (Egy sziget azonosítója számára
+            elférő hely hiánya csak figyelmeztetés, nem hiba —
+            NUMBERING_SPEC.md 6. szakasz, 4. lépés.)
     """
     resolved_min_height_mm = (
         numbering_min_height_mm
@@ -496,11 +497,15 @@ def apply_numbering(
                 params.manual_position,
             )
             if result is None:
-                raise InvalidNumberingError(
-                    f"A(z) {slice_.index}. szelet {island_index}. szigetének "
-                    f"azonosítója ({text}) egyik tájolásban sem éri el a "
-                    "numbering_min_height_mm-et."
+                logger.warning(
+                    "A(z) %s. szelet %s. szigetének azonosítója (%s) egyik "
+                    "tájolásban sem éri el a numbering_min_height_mm-et — a "
+                    "jelölés kimarad.",
+                    slice_.index,
+                    island_index,
+                    text,
                 )
+                continue
             height, upright, anchor_normal, anchor_direction = result
 
             strokes = _build_text_strokes(
