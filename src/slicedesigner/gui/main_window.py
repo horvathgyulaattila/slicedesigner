@@ -197,6 +197,8 @@ class MainWindow(QMainWindow):
             )
             logger.info(message)
             self.run_panel.status_log.append(message)
-            self.preview_panel.show_sliced_assembly(result.slice_set)
+            self.preview_panel.show_sliced_assembly(
+                result.slice_set, result.dowel_positions, result.spacers
+            )
         finally:
             self.run_panel.run_button.setEnabled(True)

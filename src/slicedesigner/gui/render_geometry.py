@@ -23,6 +23,8 @@ import numpy as np
 import pyvista as pv
 from shapely.geometry import LinearRing
 
+from slicedesigner.engines.dowel_engine import DowelPosition
+from slicedesigner.engines.gap_engine import Spacer
 from slicedesigner.engines.mesh_import import Mesh
 from slicedesigner.engines.slice_engine import Slice, SliceAxis, SliceSet
 
@@ -119,3 +121,140 @@ def slice_set_to_polydata(slice_set: SliceSet) -> pv.PolyData:
     for part in parts[1:]:
         assembly = assembly.merge(part)
     return assembly
+
+
+def _merge_parts(parts: list[pv.PolyData]) -> pv.PolyData:
+    if not parts:
+        return pv.PolyData()
+
+    assembly = parts[0]
+    for part in parts[1:]:
+        assembly = assembly.merge(part)
+    return assembly
+
+
+def _embed_point(
+    u: float, v: float, axis_value: float, slice_axis: SliceAxis
+) -> np.ndarray:
+    """Egy (u, v) kontúr-koordináta 3D world-pontba ágyazása `axis_value`
+    tengely-menti koordinátával, `_AXIS_MAPPING` szerint."""
+    axis_index, (u_index, v_index) = _AXIS_MAPPING[slice_axis]
+    point = np.zeros(3, dtype=float)
+    point[axis_index] = axis_value
+    point[u_index] = u
+    point[v_index] = v
+    return point
+
+
+def dowel_positions_to_polydata(
+    dowel_positions: tuple[DowelPosition, ...], slice_set: SliceSet
+) -> pv.PolyData:
+    """Minden `DowelPosition` egy hengerként (`pv.Cylinder`), a
+    `slice_set.slice_axis` mentén.
+
+    A henger tengely-menti kezdő/záró koordinátája a `start_slice_index`/
+    `end_slice_index` szerinti Slice külső síkjai
+    (`position_mm ∓ thickness_mm/2`) — ugyanaz a számítás, mint amit a
+    `dowel_engine.py` `_dowel_length_mm()`-je is használ, a Dowel saját
+    `length_mm` mezőjét nem trusztolva vakon. Üres bemenetre üres
+    `PolyData`-t ad.
+    """
+    if not dowel_positions:
+        return pv.PolyData()
+
+    axis_index, _ = _AXIS_MAPPING[slice_set.slice_axis]
+    slices_by_index = {s.index: s for s in slice_set.slices}
+
+    parts: list[pv.PolyData] = []
+    for dowel in dowel_positions:
+        start_slice = slices_by_index[dowel.start_slice_index]
+        end_slice = slices_by_index[dowel.end_slice_index]
+        start_outer = start_slice.position_mm - start_slice.thickness_mm / 2
+        end_outer = end_slice.position_mm + end_slice.thickness_mm / 2
+
+        center = _embed_point(
+            dowel.x_mm, dowel.y_mm, (start_outer + end_outer) / 2, slice_set.slice_axis
+        )
+        direction = np.zeros(3, dtype=float)
+        direction[axis_index] = 1.0
+
+        parts.append(
+            pv.Cylinder(
+                center=center,
+                direction=direction,
+                radius=dowel.diameter_mm / 2,
+                height=end_outer - start_outer,
+            )
+        )
+
+    return _merge_parts(parts)
+
+
+def dowel_hole_contours_to_polydata(slice_set: SliceSet) -> pv.PolyData:
+    """Minden Slice minden `hole_kind is not None` kontúrja, vonalként
+    (nem kitöltött felületként), a Slice mindkét síkján
+    (`position_mm ∓ thickness_mm/2`), zárt hurokként.
+
+    Kizárólag `lines` connectivityt használ — `faces`/`polys` nélkül,
+    hogy körvonalként, ne kitöltött korongként jelenjen meg. Üres
+    Slice Set-re, vagy ha egyetlen Slice sem tartalmaz lyuk-kontúrt, üres
+    `PolyData`-t ad.
+    """
+    parts: list[pv.PolyData] = []
+    for slice_ in slice_set.slices:
+        for contour in slice_.contours:
+            if contour.hole_kind is None:
+                continue
+            n = len(contour.points)
+            for axis_value in (
+                slice_.position_mm - slice_.thickness_mm / 2,
+                slice_.position_mm + slice_.thickness_mm / 2,
+            ):
+                coords = np.array(
+                    [
+                        _embed_point(u, v, axis_value, slice_set.slice_axis)
+                        for u, v in contour.points
+                    ]
+                )
+                lines = [n + 1, *range(n), 0]
+                parts.append(pv.PolyData(coords, lines=lines))
+
+    return _merge_parts(parts)
+
+
+def spacers_to_polydata(
+    spacers: tuple[Spacer, ...], slice_set: SliceSet
+) -> pv.PolyData:
+    """Minden `Spacer` egy vékony hengerként (`diameter_mm`,
+    `thickness_mm`), a `start_slice_index` szerinti Slice felső síkjától
+    (`position_mm + thickness_mm/2`) induló, `thickness_mm` hosszú
+    szakaszon. Üres bemenetre üres `PolyData`-t ad.
+    """
+    if not spacers:
+        return pv.PolyData()
+
+    axis_index, _ = _AXIS_MAPPING[slice_set.slice_axis]
+    slices_by_index = {s.index: s for s in slice_set.slices}
+
+    parts: list[pv.PolyData] = []
+    for spacer in spacers:
+        start_slice = slices_by_index[spacer.start_slice_index]
+        start_top = start_slice.position_mm + start_slice.thickness_mm / 2
+        end = start_top + spacer.thickness_mm
+
+        center = _embed_point(
+            spacer.x_mm, spacer.y_mm, (start_top + end) / 2, slice_set.slice_axis
+        )
+        direction = np.zeros(3, dtype=float)
+        direction[axis_index] = 1.0
+
+        parts.append(
+            pv.Cylinder(
+                center=center,
+                direction=direction,
+                radius=spacer.diameter_mm / 2,
+                height=spacer.thickness_mm,
+            )
+        )
+
+    return _merge_parts(parts)

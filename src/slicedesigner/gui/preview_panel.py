@@ -11,9 +11,17 @@ from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QHBoxLayout, QRadioButton, QVBoxLayout, QWidget
 from pyvistaqt import QtInteractor
 
+from slicedesigner.engines.dowel_engine import DowelPosition
+from slicedesigner.engines.gap_engine import Spacer
 from slicedesigner.engines.mesh_import import Mesh
 from slicedesigner.engines.slice_engine import SliceSet
-from slicedesigner.gui.render_geometry import mesh_to_polydata, slice_set_to_polydata
+from slicedesigner.gui.render_geometry import (
+    dowel_hole_contours_to_polydata,
+    dowel_positions_to_polydata,
+    mesh_to_polydata,
+    slice_set_to_polydata,
+    spacers_to_polydata,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +58,8 @@ class PreviewPanel(QWidget):
 
         self._mesh: Mesh | None = None
         self._slice_set: SliceSet | None = None
+        self._dowel_positions: tuple[DowelPosition, ...] = ()
+        self._spacers: tuple[Spacer, ...] = ()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -84,7 +94,9 @@ class PreviewPanel(QWidget):
                 self._render_mesh(self._mesh)
         else:
             if self._slice_set is not None:
-                self._render_sliced_assembly(self._slice_set)
+                self._render_sliced_assembly(
+                    self._slice_set, self._dowel_positions, self._spacers
+                )
 
     def show_mesh(self, mesh: Mesh) -> None:
         """Az eredeti Mesh megjelenítése, és eltárolása a nézet-váltóhoz."""
@@ -92,18 +104,30 @@ class PreviewPanel(QWidget):
         self._switch_widget.setVisible(True)
         self._render_mesh(mesh)
 
-    def show_sliced_assembly(self, slice_set: SliceSet) -> None:
+    def show_sliced_assembly(
+        self,
+        slice_set: SliceSet,
+        dowel_positions: tuple[DowelPosition, ...] = (),
+        spacers: tuple[Spacer, ...] = (),
+    ) -> None:
         """A szeletelt összeállítás megjelenítése, és eltárolása a
         nézet-váltóhoz.
 
         A `slice_set.source_mesh` a nézet-váltó "Eredeti Mesh" oldalához is
         eltárolásra kerül — a hívónak (`MainWindow`) nem kell külön
         `show_mesh()`-t hívnia, a `PipelineResult`-ban már elérhető Mesh
-        ehhez elegendő."""
+        ehhez elegendő.
+
+        A `dowel_positions`/`spacers` (alapértelmezetten üres) a szolid
+        extrudálás mellett Dowel-hengerekként/Spacer-korongokként, a
+        lyukas kontúrok pedig Dowel Hole-körvonalként jelennek meg — lásd
+        `render_geometry.py`."""
         self._slice_set = slice_set
         self._mesh = slice_set.source_mesh
+        self._dowel_positions = dowel_positions
+        self._spacers = spacers
         self._switch_widget.setVisible(True)
-        self._render_sliced_assembly(slice_set)
+        self._render_sliced_assembly(slice_set, dowel_positions, spacers)
 
     def _render_mesh(self, mesh: Mesh) -> None:
         self.plotter.clear()
@@ -114,7 +138,25 @@ class PreviewPanel(QWidget):
         # typing quirk, not a real argument-count error.
         self.plotter.reset_camera()  # type: ignore[call-arg]
 
-    def _render_sliced_assembly(self, slice_set: SliceSet) -> None:
+    def _render_sliced_assembly(
+        self,
+        slice_set: SliceSet,
+        dowel_positions: tuple[DowelPosition, ...] = (),
+        spacers: tuple[Spacer, ...] = (),
+    ) -> None:
         self.plotter.clear()
         self.plotter.add_mesh(slice_set_to_polydata(slice_set))
+
+        dowel_polydata = dowel_positions_to_polydata(dowel_positions, slice_set)
+        if dowel_polydata.n_points > 0:
+            self.plotter.add_mesh(dowel_polydata, color="red")
+
+        hole_polydata = dowel_hole_contours_to_polydata(slice_set)
+        if hole_polydata.n_points > 0:
+            self.plotter.add_mesh(hole_polydata, color="black")
+
+        spacer_polydata = spacers_to_polydata(spacers, slice_set)
+        if spacer_polydata.n_points > 0:
+            self.plotter.add_mesh(spacer_polydata, color="blue")
+
         self.plotter.reset_camera()  # type: ignore[call-arg]

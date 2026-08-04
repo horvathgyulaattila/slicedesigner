@@ -121,8 +121,12 @@ def test_run_button_success_updates_status_log(
     main_window: MainWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake_slice_set = SimpleNamespace(slice_count=7)
+    fake_dowel_positions = (object(),)
+    fake_spacers = (object(),)
     fake_result = SimpleNamespace(
         slice_set=fake_slice_set,
+        dowel_positions=fake_dowel_positions,
+        spacers=fake_spacers,
         exports=(object(), object()),
     )
     monkeypatch.setattr(
@@ -137,7 +141,7 @@ def test_run_button_success_updates_status_log(
     monkeypatch.setattr(
         main_window.preview_panel,
         "show_sliced_assembly",
-        show_sliced_assembly_calls.append,
+        lambda *args: show_sliced_assembly_calls.append(args),
     )
 
     main_window.run_panel.run_button.click()
@@ -147,7 +151,9 @@ def test_run_button_success_updates_status_log(
     assert "7" in status_text
     assert "2" in status_text
     assert main_window.run_panel.run_button.isEnabled()
-    assert show_sliced_assembly_calls == [fake_slice_set]
+    assert show_sliced_assembly_calls == [
+        (fake_slice_set, fake_dowel_positions, fake_spacers)
+    ]
 
 
 def test_run_button_engine_error_shows_processing_error(
