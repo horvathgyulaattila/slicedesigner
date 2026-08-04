@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-07-30
-Utolsó módosítás: 2026-08-03
+Utolsó módosítás: 2026-08-04
 Kapcsolódó dokumentumok: [docs/PROJECT_CONSTITUTION.md](docs/PROJECT_CONSTITUTION.md), [docs/ROADMAP.md](docs/ROADMAP.md), [docs/PROJECT_VISION.md](docs/PROJECT_VISION.md), [docs/ENGINEERING_PRINCIPLES.md](docs/ENGINEERING_PRINCIPLES.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md), [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md), [docs/AI_WORKFLOW.md](docs/AI_WORKFLOW.md), [docs/PROMPT_STANDARD.md](docs/PROMPT_STANDARD.md), [docs/DOMAIN_MODEL.md](docs/DOMAIN_MODEL.md), [docs/SPECIFICATION_STANDARD.md](docs/SPECIFICATION_STANDARD.md)
 
 ## Cél
@@ -12,7 +12,7 @@ A Slice Designer egy desktop alkalmazás, amely 3D modellekből (első körben S
 
 ## Jelenlegi állapot
 
-A projekt a Phase 4 (Implementation) lezárásánál tart: mind a nyolc domain engine (Mesh Import, Slice Engine, Dowel System, Gap System, Backplate, Numbering, Nesting, DXF Export) elkészült, és automatizált teszttel (89 teszt) le van fedve. A következő fázis (Phase 5, Integration) a modulok `Project`-en keresztüli összekapcsolása és a GUI.
+A projekt a Phase 5 (Integration) lezárásánál tart, a Phase 6 (Release Candidate) folyamatban van: mind a nyolc domain engine, a Project-réteg (pipeline-vezérlés, mentés/betöltés) és a teljes PySide6 GUI elkészült, automatizált teszttel lefedve. A Phase 6 első tétele a DXF export leválasztása a Futtatásról (ADR-0009), utána végső tesztelés, optimalizálás, dokumentáció és példaprojektek következnek.
 
 ## Hogyan érdemes olvasni a dokumentációt
 
@@ -30,7 +30,7 @@ Javasolt sorrend első olvasásra:
 10. `docs/DOMAIN_MODEL.md` – a projekt közös fogalomrendszere
 11. `docs/SPECIFICATION_STANDARD.md` – sablon a funkcionális specifikációkhoz
 
-A `docs/adr/` mappa a projekt architekturális döntéseit (ADR-0001–ADR-0008), a `docs/specifications/` pedig a nyolc engine részletes, jóváhagyott specifikációját tartalmazza.
+A `docs/adr/` mappa a projekt architekturális döntéseit (ADR-0001–ADR-0009), a `docs/specifications/` pedig a nyolc engine részletes, jóváhagyott specifikációját tartalmazza.
 
 ## Filozófia
 

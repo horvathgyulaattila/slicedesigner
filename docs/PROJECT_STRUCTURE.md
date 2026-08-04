@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos:
 Létrehozva: 2026-07-30
-Utolsó módosítás: 2026-08-01
+Utolsó módosítás: 2026-08-04
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](PROJECT_CONSTITUTION.md), [ARCHITECTURE.md](ARCHITECTURE.md), [README.md](../README.md)
 
 ## Cél
@@ -46,8 +46,8 @@ A ROADMAP Phase 2 (Functional Specifications) alatt készülő, egy-egy engine-h
 A `src/slicedesigner/` a telepíthető Python csomag gyökere (src-layout — elkerüli a véletlen helyi importot teszteléskor). Almappái az Architecture három rétegét tükrözik:
 
 * **`engines/`** — a 8 domain engine, egy modul / engine: `mesh_import.py`, `slice_engine.py`, `gap_engine.py`, `dowel_engine.py`, `backplate_engine.py`, `numbering_engine.py`, `nesting_engine.py`, `dxf_export_engine.py`.
-* **`project/`** — a koordinációs réteg: a Project állapota, pipeline-vezérlés, mentés/betöltés.
-* **`gui/`** — a PySide-alapú prezentációs réteg. Belső felbontása (ablakok, widgetek) a Phase 5 (Integration) megkezdésekor kerül kidolgozásra — itt csak a csomag helyét rögzítjük.
+* **`project/`** — a koordinációs réteg: `pipeline.py` (Project állapota, pipeline-vezérlés), `persistence.py` (mentés/betöltés).
+* **`gui/`** — a PySide6-alapú prezentációs réteg: `main_window.py` (fő ablak), `parameter_panel.py`, `run_panel.py`, `preview_panel.py` (3D előnézet), `render_geometry.py` (megjelenítési geometria-segédfüggvények), `config_builder.py`/`config_loader.py` (widget ↔ `PipelineConfig` leképezés), `app_settings.py` (alkalmazás-szintű alapértelmezések).
 
 ## 6. `tests/` – tesztek
 
