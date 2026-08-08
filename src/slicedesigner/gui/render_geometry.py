@@ -22,7 +22,11 @@ Ugyanígy a `_NORMAL_AXIS_WORLD`/`_WORLD_AXIS_INDEX` (a Backplate
 rendeléséhez) a `backplate_engine.py` `_NORMAL_AXIS_WORLD`/
 `_WORLD_AXIS_INDEX`-mintáját követő, **önálló, duplikált**
 leképezés — csak olvasásra ellenőrizve, nem importálva, ugyanazon
-indoklással, mint `_is_ccw()`.
+indoklással, mint `_is_ccw()`. Ugyanide tartozik az `_AXIS_MAPPING`
+(a `slice_engine.py` `_SLICE_AXIS_CONTOUR_ORDER`-jének duplikátuma) és
+az `_backplate_third_axis_sign()`/`_cyclic_parity()` pár (a
+`backplate_engine.py` azonos nevű függvényeinek duplikátuma) — mindkettő
+csak olvasásra ellenőrizve, nem importálva, ugyanazon indoklással.
 """
 
 from __future__ import annotations
@@ -39,15 +43,13 @@ from slicedesigner.engines.slice_engine import Slice, SliceAxis, SliceSet
 
 # A kontúr 2D (u, v) koordinátáinak world-tengelyekhez rendelése
 # `slice_axis` szerint: (extrudálási tengely indexe, (u-tengely indexe,
-# v-tengely indexe)). Ugyanaz a ciklikus leképezés, mint amit a
-# Backplate/Numbering Engine használ a kontúr-koordináták valós
-# tengelyekhez rendelésére (lásd `backplate_engine.py`/
-# `numbering_engine.py` `_SLICE_AXIS_CONTOUR_ORDER`, csak olvasásra
-# ellenőrizve, nem importálva).
+# v-tengely indexe)). A `slice_engine.py::_SLICE_AXIS_CONTOUR_ORDER`-rel
+# (ADR-0010) KÖTELEZŐEN szinkronban tartandó, önálló duplikátum — csak
+# olvasásra ellenőrizve, nem importálva (lásd a modul docstringjét).
 _AXIS_MAPPING: dict[SliceAxis, tuple[int, tuple[int, int]]] = {
-    SliceAxis.Z: (2, (0, 1)),
-    SliceAxis.X: (0, (1, 2)),
-    SliceAxis.Y: (1, (2, 0)),
+    SliceAxis.Z: (2, (1, 0)),
+    SliceAxis.X: (0, (2, 1)),
+    SliceAxis.Y: (1, (0, 2)),
 }
 
 # A `backplate_normal_axis` világtengelyhez/előjelhez rendelése — a
@@ -65,6 +67,30 @@ _NORMAL_AXIS_WORLD: dict[BackplateNormalAxis, tuple[str, float]] = {
 # Világtengely-név → numpy-tengelyindex — a `backplate_engine.py`
 # `_WORLD_AXIS_INDEX`-jének duplikátuma.
 _WORLD_AXIS_INDEX: dict[str, int] = {"X": 0, "Y": 1, "Z": 2}
+
+_AXIS_CYCLE: tuple[str, str, str] = ("X", "Y", "Z")
+
+
+def _cyclic_parity(first: str, second: str) -> float:
+    """+1.0, ha (first, second) az X→Y→Z→X kanonikus ciklikus sorrendet
+    követi, -1.0 ellenkező esetben — a `backplate_engine.py`
+    `_cyclic_parity()`-jének duplikátuma (lásd a modul docstringjét).
+    """
+    index = _AXIS_CYCLE.index(first)
+    return 1.0 if _AXIS_CYCLE[(index + 1) % 3] == second else -1.0
+
+
+def _backplate_third_axis_sign(
+    slice_axis: SliceAxis, backplate_normal_axis: BackplateNormalAxis
+) -> float:
+    """A `backplate_engine.py` `_backplate_third_axis_sign()`-jének
+    duplikátuma (lásd a modul docstringjét, ADR-0010) — a Backplate
+    saját síkjának harmadik-tengely koordinátáját world-koordinátába
+    visszaágyazáskor ugyanezzel az előjellel kell (vissza)szorozni,
+    amivel a `backplate_engine.py` építette.
+    """
+    normal_world_axis, sign = _NORMAL_AXIS_WORLD[backplate_normal_axis]
+    return -sign * _cyclic_parity(slice_axis.value, normal_world_axis)
 
 
 def _is_ccw(points: tuple[tuple[float, float], ...]) -> bool:
@@ -338,6 +364,9 @@ def backplate_to_polydata(
     )
     third_index = _WORLD_AXIS_INDEX[third_world_axis]
     slice_axis_index, _ = _AXIS_MAPPING[slice_set.slice_axis]
+    third_axis_sign = _backplate_third_axis_sign(
+        slice_set.slice_axis, backplate_normal_axis
+    )
 
     inner_plane_mm = backplate.common_plane_mm
 
@@ -350,7 +379,7 @@ def backplate_to_polydata(
         coords = np.zeros((n, 3), dtype=float)
         coords[:, normal_index] = inner_plane_mm
         for row, (u, v) in zip(coords, contour.points, strict=True):
-            row[third_index] = u
+            row[third_index] = u * third_axis_sign
             row[slice_axis_index] = v
 
         footprint = pv.PolyData(coords, faces=[n, *range(n)])

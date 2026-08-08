@@ -12,9 +12,16 @@ from shapely.geometry import Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 
-from slicedesigner.engines.backplate_engine import Backplate, BackplateNormalAxis, Tab
+from slicedesigner.engines.backplate_engine import (
+    _NORMAL_AXIS_WORLD,
+    Backplate,
+    BackplateNormalAxis,
+    Tab,
+    _backplate_third_axis_sign,
+)
 from slicedesigner.engines.exceptions import InvalidNumberingError
 from slicedesigner.engines.slice_engine import (
+    _SLICE_AXIS_CONTOUR_ORDER,
     EngravingMark,
     Slice,
     SliceAxis,
@@ -118,22 +125,6 @@ def _text_width_mm(text: str, height_mm: float) -> float:
     char_width = _CHAR_WIDTH_RATIO * height_mm
     spacing = _CHAR_SPACING_RATIO * height_mm
     return len(text) * char_width + (len(text) - 1) * spacing
-
-
-_NORMAL_AXIS_WORLD: dict[BackplateNormalAxis, tuple[str, float]] = {
-    BackplateNormalAxis.PLUS_X: ("X", 1.0),
-    BackplateNormalAxis.MINUS_X: ("X", -1.0),
-    BackplateNormalAxis.PLUS_Y: ("Y", 1.0),
-    BackplateNormalAxis.MINUS_Y: ("Y", -1.0),
-    BackplateNormalAxis.PLUS_Z: ("Z", 1.0),
-    BackplateNormalAxis.MINUS_Z: ("Z", -1.0),
-}
-
-_SLICE_AXIS_CONTOUR_ORDER: dict[SliceAxis, tuple[str, str]] = {
-    SliceAxis.Z: ("X", "Y"),
-    SliceAxis.X: ("Y", "Z"),
-    SliceAxis.Y: ("Z", "X"),
-}
 
 
 def _resolve_numbering_axes(
@@ -734,10 +725,15 @@ def _backplate_polygon(backplate: Backplate) -> BaseGeometry:
 
 
 def _glyph_point_rect(
-    gx: float, gy: float, upright: bool, anchor_x: float, anchor_y: float
+    gx: float,
+    gy: float,
+    upright: bool,
+    anchor_x: float,
+    anchor_y: float,
+    height_mm: float,
 ) -> tuple[float, float]:
     if upright:
-        return (anchor_x + gx, anchor_y - gy)
+        return (anchor_x + gx, anchor_y - height_mm + gy)
     return (anchor_x + gy, anchor_y - gx)
 
 
@@ -752,7 +748,9 @@ def _build_text_strokes_rect(
     for char in text:
         for glyph_stroke in _char_strokes(char, height_mm):
             local_stroke = tuple(
-                _glyph_point_rect(cursor + gx, gy, upright, anchor_x, anchor_y)
+                _glyph_point_rect(
+                    cursor + gx, gy, upright, anchor_x, anchor_y, height_mm
+                )
                 for gx, gy in glyph_stroke
             )
             all_strokes.append(local_stroke)
@@ -801,6 +799,7 @@ def _resolve_backplate_numbering(
 def apply_numbering_to_backplate(
     slice_set: SliceSet,
     backplate: Backplate,
+    backplate_normal_axis: BackplateNormalAxis,
     tabs: tuple[Tab, ...],
     numbering_height_mm: float,
     numbering_min_height_mm: float | None = None,
@@ -819,6 +818,9 @@ def apply_numbering_to_backplate(
     Args:
         slice_set: a Numbering Engine (1. kör) kimenete.
         backplate: a Backplate Engine kimenete.
+        backplate_normal_axis: a Backplate felé néző irány — ugyanaz az
+            érték, amivel a Backplate Engine létrehozta a
+            `backplate`/`tabs` paramétereket.
         tabs: a Backplate Engine `place_backplate_tabs()` csap-pozíciói.
         numbering_height_mm: az azonosító célzott magassága.
         numbering_min_height_mm: a minimálisan elfogadható magasság. Ha
@@ -862,6 +864,10 @@ def apply_numbering_to_backplate(
 
     backplate_geometry = _backplate_polygon(backplate)
 
+    third_axis_sign = _backplate_third_axis_sign(
+        slice_set.slice_axis, backplate_normal_axis
+    )
+
     marks: list[EngravingMark] = []
     for slice_ in slice_set.slices:
         for mark in slice_.numbering_marks:
@@ -873,7 +879,11 @@ def apply_numbering_to_backplate(
             if not island_tabs:
                 continue
 
-            third_axis_max = max(t.third_axis_end_mm for t in island_tabs)
+            third_axis_max = max(
+                endpoint * third_axis_sign
+                for t in island_tabs
+                for endpoint in (t.third_axis_start_mm, t.third_axis_end_mm)
+            )
             slice_axis_max = slice_.position_mm + slice_.thickness_mm / 2
 
             anchor_x = third_axis_max + resolved_margin_mm

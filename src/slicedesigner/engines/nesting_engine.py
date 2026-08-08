@@ -128,11 +128,16 @@ def _text_width_mm(text: str, height_mm: float) -> float:
 
 
 def _glyph_point_rect(
-    gx: float, gy: float, upright: bool, anchor_x: float, anchor_y: float
+    gx: float,
+    gy: float,
+    upright: bool,
+    anchor_x: float,
+    anchor_y: float,
+    width_mm: float,
 ) -> tuple[float, float]:
     if upright:
         return (anchor_x - gx, anchor_y - gy)
-    return (anchor_x - gy, anchor_y - gx)
+    return (anchor_x - gy, anchor_y + gx - width_mm)
 
 
 def _build_text_strokes_rect(
@@ -140,12 +145,15 @@ def _build_text_strokes_rect(
 ) -> tuple[tuple[tuple[float, float], ...], ...]:
     char_width = _CHAR_WIDTH_RATIO * height_mm
     spacing = _CHAR_SPACING_RATIO * height_mm
+    width_mm = _text_width_mm(text, height_mm)
     all_strokes: list[tuple[tuple[float, float], ...]] = []
     cursor = 0.0
     for char in text:
         for glyph_stroke in _char_strokes(char, height_mm):
             local_stroke = tuple(
-                _glyph_point_rect(cursor + gx, gy, upright, anchor_x, anchor_y)
+                _glyph_point_rect(
+                    cursor + gx, gy, upright, anchor_x, anchor_y, width_mm
+                )
                 for gx, gy in glyph_stroke
             )
             all_strokes.append(local_stroke)

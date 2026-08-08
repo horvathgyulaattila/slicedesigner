@@ -11,6 +11,7 @@ from slicedesigner.engines.nesting_engine import (
     MaterialDefinition,
     NestingRotationMode,
     PartKind,
+    _build_text_strokes_rect,
     create_nests,
     prepare_nesting_parts,
 )
@@ -353,6 +354,14 @@ def test_create_nests_uses_multiple_sheets_when_needed() -> None:
 
 
 def test_create_nests_orthogonal_rotation_minimizes_height() -> None:
+    # A _TO_2D_ROTATION szándékos tükrözése miatt a Z-tengelyű szeletek
+    # kontúr-sorrendje (Y, X)-re változott (ld. ADR-0010) — az itt
+    # szeletelt doboz (X=10, Y=40) kontúrjának 0. koordinátája immár Y
+    # (40 mm), az 1. X (10 mm), azaz a nyers kontúr már eleve a
+    # (szélesebb, alacsonyabb) tájolásban áll — az ORTHOGONAL mód emiatt
+    # NEM forgat (0°), mert a forgatás nélküli magasság (10 mm) már
+    # minimális; korábban (X, Y) sorrenddel a 90°-os forgatás volt
+    # szükséges ugyanehhez az eredményhez.
     numbered = _numbered_box(extents=(10.0, 40.0, 15.0), slice_thickness_mm=3.0)
     materials = (
         MaterialDefinition(
@@ -372,7 +381,7 @@ def test_create_nests_orthogonal_rotation_minimizes_height() -> None:
     )
 
     for placed in nests[0].placed_parts:
-        assert placed.rotation_deg == pytest.approx(90.0)
+        assert placed.rotation_deg == pytest.approx(0.0)
 
 
 def test_create_nests_none_rotation_mode_never_rotates() -> None:
@@ -423,3 +432,49 @@ def test_create_nests_produces_seam_records_for_split_parts() -> None:
     for seam in nests[0].seams:
         assert len(seam.seam_lines) == 2  # 3 darabhoz 2 vágás
         assert len(seam.sub_identifiers) == 3
+
+
+def test_build_text_strokes_rect_seven_not_mirrored_both_orientations() -> None:
+    """Regressziós teszt a toldási/seam al-azonosítók `_glyph_point_rect()`/
+    `_build_text_strokes_rect()`-jére (ADR-0010, prompt 8. szakasz),
+    mindkét `upright` értékre — a "7" karakter (aszimmetrikus: teljes
+    szélességű felső vízszintes vonal + a *nagyobb* gx-oldalon futó
+    függőleges szár) tényleges stroke-koordinátái alapján.
+
+    Az `upright=True` ág változatlan (már eddig is determináns +1,
+    helyes) — ez csak alapvonal-ellenőrzés. A hibás `upright=False`
+    ág `(anchor_x - gy, anchor_y - gx)` volt (determináns -1, tükrözve);
+    a javított `(anchor_x - gy, anchor_y + gx - width_mm)` (determináns
+    +1) a "7" szárát a felső vonal VÉGpontjához kapcsolva, tükrözés
+    nélkül (tiszta 90°-os elforgatásnak megfelelően) helyezi el."""
+    anchor_x, anchor_y, height_mm = 0.0, 0.0, 10.0
+
+    # upright=True — nem változott, csak alapvonal-ellenőrzés.
+    upright_strokes = _build_text_strokes_rect(
+        "7", height_mm, True, anchor_x, anchor_y
+    )
+    top_stroke, stem_upper_stroke, stem_lower_stroke = upright_strokes
+    assert top_stroke[0] == pytest.approx((0.0, -10.0))
+    assert top_stroke[1] == pytest.approx((-6.0, -10.0))
+    assert stem_upper_stroke[0] == pytest.approx((-6.0, -10.0))
+    assert stem_upper_stroke[1] == pytest.approx((-6.0, -5.0))
+    assert stem_lower_stroke[0] == pytest.approx((-6.0, -5.0))
+    assert stem_lower_stroke[1] == pytest.approx((-6.0, 0.0))
+
+    # upright=False — a javított, nem tükrözött leképezés.
+    rotated_strokes = _build_text_strokes_rect(
+        "7", height_mm, False, anchor_x, anchor_y
+    )
+    top_stroke, stem_upper_stroke, stem_lower_stroke = rotated_strokes
+
+    # A felső vízszintes glyph-vonal (90°-os elforgatás után függőleges
+    # szakasz) a szár VÉGpontjához (`top_stroke[1]`) kapcsolódik, ami
+    # egyben a szár kezdőpontja is — folytonos, nem eltört/tükrözött
+    # betűalak.
+    assert top_stroke[1] == pytest.approx(stem_upper_stroke[0])
+    assert top_stroke[0] == pytest.approx((-10.0, -6.0))
+    assert top_stroke[1] == pytest.approx((-10.0, 0.0))
+    assert stem_upper_stroke[0] == pytest.approx((-10.0, 0.0))
+    assert stem_upper_stroke[1] == pytest.approx((-5.0, 0.0))
+    assert stem_lower_stroke[0] == pytest.approx((-5.0, 0.0))
+    assert stem_lower_stroke[1] == pytest.approx((0.0, 0.0))

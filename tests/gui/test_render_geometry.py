@@ -5,20 +5,29 @@ from __future__ import annotations
 
 import math
 
+import pytest
 import trimesh
 
 from slicedesigner.engines.backplate_engine import Backplate, BackplateNormalAxis
+from slicedesigner.engines.backplate_engine import (
+    _backplate_third_axis_sign as _engine_backplate_third_axis_sign,
+)
 from slicedesigner.engines.dowel_engine import DowelPosition
 from slicedesigner.engines.gap_engine import Spacer
 from slicedesigner.engines.mesh_import import BoundingBox, Mesh
 from slicedesigner.engines.slice_engine import (
+    _SLICE_AXIS_CONTOUR_ORDER,
     Contour,
     HoleKind,
     Slice,
     SliceAxis,
     SliceSet,
+    create_slice_set,
 )
 from slicedesigner.gui.render_geometry import (
+    _AXIS_MAPPING,
+    _WORLD_AXIS_INDEX,
+    _backplate_third_axis_sign as _gui_backplate_third_axis_sign,
     backplate_to_polydata,
     dowel_hole_contours_to_polydata,
     dowel_positions_to_polydata,
@@ -63,6 +72,17 @@ def _ccw_square(cx: float, cy: float, half: float) -> Contour:
             (cx + half, cy - half),
             (cx + half, cy + half),
             (cx - half, cy + half),
+        )
+    )
+
+
+def _ccw_rect(u_min: float, u_max: float, v_min: float, v_max: float) -> Contour:
+    return Contour(
+        points=(
+            (u_min, v_min),
+            (u_max, v_min),
+            (u_max, v_max),
+            (u_min, v_max),
         )
     )
 
@@ -378,10 +398,15 @@ def test_dowel_positions_to_polydata_uses_slice_outer_planes_not_length_mm() -> 
     bounds = polydata.bounds
     assert bounds.z_min == 0.0
     assert bounds.z_max == 2 * thickness_mm
-    assert bounds.x_min == 3.0
-    assert bounds.x_max == 7.0
-    assert bounds.y_min == 5.0
-    assert bounds.y_max == 9.0
+    # ADR-0010 utáni `_AXIS_MAPPING` javítás: `slice_axis=Z`-re a kontúr
+    # (u, v) = (Y, X), nem (X, Y) — a `DowelPosition.x_mm`/`y_mm` a Slice
+    # kontúrjaival azonos (u, v) térben él (`dowel_engine.py` a
+    # `Contour.points`-ból épített `island.polygon`-on dolgozik), ezért
+    # `x_mm` a world Y-ba, `y_mm` a world X-be ágyazódik be.
+    assert bounds.x_min == 5.0
+    assert bounds.x_max == 9.0
+    assert bounds.y_min == 3.0
+    assert bounds.y_max == 7.0
 
 
 def test_dowel_hole_contours_to_polydata_empty_slice_set_returns_empty_polydata() -> (
@@ -485,10 +510,15 @@ def test_spacers_to_polydata_spans_gap_above_start_slice() -> None:
     bounds = polydata.bounds
     assert bounds.z_min == thickness_mm
     assert bounds.z_max == thickness_mm + 2.0
-    assert bounds.x_min == -1.0
-    assert bounds.x_max == 3.0
-    assert bounds.y_min == 0.0
-    assert bounds.y_max == 4.0
+    # ADR-0010 utáni `_AXIS_MAPPING` javítás: `slice_axis=Z`-re a kontúr
+    # (u, v) = (Y, X), nem (X, Y) — a `Spacer.x_mm`/`y_mm` a Slice
+    # kontúrjaival azonos (u, v) térben él, ezért `x_mm` a world Y-ba,
+    # `y_mm` a world X-be ágyazódik be (l. a Dowel-teszt azonos okú
+    # frissítését fentebb).
+    assert bounds.x_min == 0.0
+    assert bounds.x_max == 4.0
+    assert bounds.y_min == -1.0
+    assert bounds.y_max == 3.0
 
 
 def _z_axis_square_assembly(
@@ -592,3 +622,117 @@ def test_backplate_to_polydata_ignores_hole_contour() -> None:
     assert with_hole.n_points == without_hole.n_points
     assert with_hole.n_cells == without_hole.n_cells
     assert with_hole.bounds == without_hole.bounds
+
+
+def test_axis_mapping_matches_slice_engine_contour_order() -> None:
+    """`_AXIS_MAPPING` (a `render_geometry.py` önálló, GUI-oldali
+    duplikátuma) minden `SliceAxis`-ra pontosan a
+    `slice_engine.py::_SLICE_AXIS_CONTOUR_ORDER` (ADR-0010 utáni)
+    világtengely-neveinek megfelelő indexeket kell, hogy adja — ez a
+    regresszió gyökér-okának (a két, egymástól függetlenül karbantartott
+    tábla szétcsúszása) közvetlen, automatizált zárása."""
+    for axis in SliceAxis:
+        _axis_index, (u_index, v_index) = _AXIS_MAPPING[axis]
+        u_name, v_name = _SLICE_AXIS_CONTOUR_ORDER[axis]
+        assert u_index == _WORLD_AXIS_INDEX[u_name]
+        assert v_index == _WORLD_AXIS_INDEX[v_name]
+
+
+def test_slice_set_to_polydata_matches_mesh_axes_after_create_slice_set() -> None:
+    """A projektgazda jelentette regresszió reprodukciója és lezárása:
+    egy valódi, aszimmetrikus (X != Y != Z méretű) téglatest Meshből,
+    ténylegesen meghívott `create_slice_set()`-tel (nem kézzel épített
+    fixture-rel, hogy a valódi `_TO_2D_ROTATION` érvényesüljön) épített
+    SliceSet `slice_set_to_polydata()` kimenete ugyanazon a tengelyen,
+    egymással átfedésben helyezkedjen el, mint az eredeti Mesh
+    `mesh_to_polydata()` kimenete — nem X/Y tengelyt felcserélve.
+
+    A Mesh a Z tengely mentén [0, 9] tartományba van tolva (a `box()`
+    alapból X/Y/Z mindhárom tengelyen középre igazít), hogy a Slice
+    Engine szándékos, 0-bázisú újrapozicionálása (külön, e hibától
+    független, dokumentált viselkedés) ne okozzon hamis eltérést a
+    szeletelési tengelyen — a teszt kizárólag a kontúr (u, v) →
+    world-tengely leképezés helyességét vizsgálja."""
+    box = trimesh.creation.box(extents=(30.0, 10.0, 9.0))
+    box.apply_translation((0.0, 0.0, 4.5))
+    mesh = _mesh_from_trimesh(box)
+
+    slice_set = create_slice_set(
+        mesh, slice_thickness_mm=3.0, slice_axis=SliceAxis.Z, gap_mm=0.0
+    )
+
+    mesh_bounds = mesh_to_polydata(mesh).bounds
+    assembly_bounds = slice_set_to_polydata(slice_set).bounds
+
+    assert assembly_bounds.x_min == pytest.approx(mesh_bounds.x_min, abs=1e-6)
+    assert assembly_bounds.x_max == pytest.approx(mesh_bounds.x_max, abs=1e-6)
+    assert assembly_bounds.y_min == pytest.approx(mesh_bounds.y_min, abs=1e-6)
+    assert assembly_bounds.y_max == pytest.approx(mesh_bounds.y_max, abs=1e-6)
+    assert assembly_bounds.z_min == pytest.approx(mesh_bounds.z_min, abs=1e-6)
+    assert assembly_bounds.z_max == pytest.approx(mesh_bounds.z_max, abs=1e-6)
+
+
+def test_backplate_to_polydata_third_axis_sign_mirrors_with_normal_sign() -> None:
+    """`backplate_to_polydata()`-nak a `_backplate_third_axis_sign()`-t
+    kell alkalmaznia: egy aszimmetrikus (nem a v-tengelyre szimmetrikus)
+    Backplate-kontúr esetén az ellentétes előjelű normal-tengelyek
+    (`PLUS_X`/`MINUS_X`) a harmadik (itt: Y) tengelyen egymáshoz képest
+    tükrözött, nem azonos pozícióban helyezik el a Backplate-et — a
+    korábbi, előjel nélküli leképezés ezt a tükrözést figyelmen kívül
+    hagyta."""
+    slice_set = _z_axis_square_assembly(half=10.0)
+    # Aszimmetrikus (u_min=2, u_max=6, azaz nem szimmetrikus u=0-ra)
+    # téglalap-kontúr — csak így különböztethető meg az előjeles és az
+    # előjel nélküli leképezés eredménye.
+    plus_backplate = Backplate(
+        contours=(_ccw_rect(u_min=2.0, u_max=6.0, v_min=-3.0, v_max=3.0),),
+        thickness_mm=2.0,
+        common_plane_mm=10.0,
+        material_reference=None,
+    )
+    minus_backplate = Backplate(
+        contours=(_ccw_rect(u_min=2.0, u_max=6.0, v_min=-3.0, v_max=3.0),),
+        thickness_mm=2.0,
+        common_plane_mm=-10.0,
+        material_reference=None,
+    )
+
+    plus_x = backplate_to_polydata(plus_backplate, slice_set, BackplateNormalAxis.PLUS_X)
+    minus_x = backplate_to_polydata(
+        minus_backplate, slice_set, BackplateNormalAxis.MINUS_X
+    )
+
+    plus_bounds = plus_x.bounds
+    minus_bounds = minus_x.bounds
+    # `_backplate_third_axis_sign()` globális előjel-megfordítása (ADR-0010
+    # 2. utókövetés, 2026-08-08-i élő tesztelés) miatt PLUS_X most a
+    # negatív, MINUS_X a pozitív Y-oldalra helyezi a kontúrt — a lényeg
+    # (a két eset egymás tükörképe) a megfordítás előtt/után is igaz.
+    assert plus_bounds.y_min == pytest.approx(-6.0)
+    assert plus_bounds.y_max == pytest.approx(-2.0)
+    assert minus_bounds.y_min == pytest.approx(2.0)
+    assert minus_bounds.y_max == pytest.approx(6.0)
+
+
+def test_gui_backplate_third_axis_sign_matches_engine_for_all_valid_combinations() -> (
+    None
+):
+    """A `render_geometry.py` GUI-oldali `_backplate_third_axis_sign()`
+    duplikátumának minden érvényes `(slice_axis, backplate_normal_axis)`
+    kombinációra (a `slice_axis`-szal megegyező tengelyű normal kivételével
+    — az érvénytelen) pontosan ugyanazt kell adnia, mint a
+    `backplate_engine.py` kanonikus forrásának — ez zárja le annak
+    kockázatát, hogy a két, egymástól függetlenül karbantartott
+    duplikátum a globális előjel-megfordítás után szétcsússzon."""
+    for slice_axis in SliceAxis:
+        for backplate_normal_axis in BackplateNormalAxis:
+            normal_world_axis = backplate_normal_axis.value.lstrip("+-")
+            if normal_world_axis == slice_axis.value:
+                continue  # érvénytelen kombináció, ld. InvalidBackplateError
+
+            engine_sign = _engine_backplate_third_axis_sign(
+                slice_axis, backplate_normal_axis
+            )
+            gui_sign = _gui_backplate_third_axis_sign(slice_axis, backplate_normal_axis)
+
+            assert gui_sign == pytest.approx(engine_sign)

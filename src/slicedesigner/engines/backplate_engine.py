@@ -16,6 +16,7 @@ from shapely.ops import unary_union
 
 from slicedesigner.engines.exceptions import InvalidBackplateError
 from slicedesigner.engines.slice_engine import (
+    _SLICE_AXIS_CONTOUR_ORDER,
     Contour,
     EngravingMark,
     Island,
@@ -55,16 +56,47 @@ _NORMAL_AXIS_WORLD: dict[BackplateNormalAxis, tuple[str, float]] = {
 # duplikál (l. `render_geometry.py` modul-docstringje).
 _WORLD_AXIS_INDEX: dict[str, int] = {"X": 0, "Y": 1, "Z": 2}
 
-# A Slice Engine kontúr-koordinátáinak világtengely-sorrendje. Mindhárom
-# eset (Z, X, Y) garantált — a Slice Engine explicit, kézzel
-# megkonstruált vetítési mátrixokat használ (`_TO_2D_ROTATION`,
-# slice_engine.py) a `trimesh` automatikus, X/Y tengelyre korábban
-# hibásnak bizonyult belső konvenciója helyett.
-_SLICE_AXIS_CONTOUR_ORDER: dict[SliceAxis, tuple[str, str]] = {
-    SliceAxis.Z: ("X", "Y"),
-    SliceAxis.X: ("Y", "Z"),
-    SliceAxis.Y: ("Z", "X"),
-}
+_AXIS_CYCLE: tuple[str, str, str] = ("X", "Y", "Z")
+
+
+def _cyclic_parity(first: str, second: str) -> float:
+    """+1.0, ha (first, second) az X→Y→Z→X kanonikus ciklikus sorrendet
+    követi, -1.0 ellenkező esetben (first != second, mindkettő X/Y/Z
+    valamelyike).
+    """
+    index = _AXIS_CYCLE.index(first)
+    return 1.0 if _AXIS_CYCLE[(index + 1) % 3] == second else -1.0
+
+
+def _backplate_third_axis_sign(
+    slice_axis: SliceAxis, backplate_normal_axis: BackplateNormalAxis
+) -> float:
+    """Az előjel, amellyel a Backplate saját (harmadik tengely, slice_axis)
+    síkjának harmadik-tengely koordinátáját (nyers world-érték) szorozni
+    kell, hogy a beágyazás — a `backplate_normal_axis` felől, a
+    normálvektorral szemben állva nézve — mindig tükrözés nélküli,
+    helyesen álló képet adjon.
+
+    Levezetés (ADR-0010, javítva a projektgazda 2026-08-08-i élő
+    tesztelése alapján): a nézőpont-kamera "jobbra" iránya
+    `slice_axis (mint "fel") × backplate_normal_axis (előjeles n̂)`
+    keresztszorzat; ha ez egybeesik a harmadik tengely pozitív
+    irányával, nincs szükség tükrözésre (+1), ellenkező esetben igen
+    (-1). Az eredeti levezetés (ADR-0010) a nézőpont oldalát fordítva
+    feltételezte — ezt egy konkrét, élőben tesztelt kombináció
+    (`slice_axis=X`, `backplate_normal_axis=MINUS_Z`) cáfolta. Mivel a
+    nézőpont oldalának megfordítása minden `(slice_axis,
+    backplate_normal_axis)` kombinációra egységesen ható művelet, a
+    javítás a teljes visszatérési érték előjelének megfordítása —
+    nem kombinációnkénti hangolás. Ugyanezt az előjelet kell alkalmazni
+    mindenhol, ahol a Backplate saját síkjának harmadik koordinátája
+    később felhasználásra kerül: a sziluett (`_build_backplate_
+    shape_from_mesh`), a hozzá tartozó fészek-kivágás
+    (`apply_backplate`), és a Numbering Engine
+    `apply_numbering_to_backplate()`-je.
+    """
+    normal_world_axis, sign = _NORMAL_AXIS_WORLD[backplate_normal_axis]
+    return -sign * _cyclic_parity(slice_axis.value, normal_world_axis)
 
 
 def _resolve_backplate_axes(
@@ -472,6 +504,7 @@ def _build_backplate_shape_from_mesh(
         iter({"X", "Y", "Z"} - {normal_world_axis, slice_axis.value})
     )
     third_world_index = _WORLD_AXIS_INDEX[third_world_axis]
+    third_axis_sign = _backplate_third_axis_sign(slice_axis, backplate_normal_axis)
 
     mesh_bounds = trimesh_mesh.bounds
     extents = [0.0, 0.0, 0.0]
@@ -499,7 +532,10 @@ def _build_backplate_shape_from_mesh(
     projected: list[Polygon] = []
     for triangle in triangles:
         points_2d = [
-            (vertex[third_world_index], vertex[slice_world_index] - axis_min)
+            (
+                vertex[third_world_index] * third_axis_sign,
+                vertex[slice_world_index] - axis_min,
+            )
             for vertex in triangle
         ]
         polygon = Polygon(points_2d)
@@ -802,9 +838,13 @@ def apply_backplate(
 
     slices_by_index = {s.index: s for s in modified_slice_set.slices}
 
+    third_axis_sign = _backplate_third_axis_sign(
+        modified_slice_set.slice_axis, backplate_normal_axis
+    )
     for tab in tabs:
         slice_ = slices_by_index[tab.slice_index]
-        third_start, third_end = tab.third_axis_start_mm, tab.third_axis_end_mm
+        third_start = tab.third_axis_start_mm * third_axis_sign
+        third_end = tab.third_axis_end_mm * third_axis_sign
         slice_start = slice_.position_mm - slice_.thickness_mm / 2
         slice_end = slice_.position_mm + slice_.thickness_mm / 2
         nest_rectangle = Polygon(

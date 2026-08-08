@@ -13,6 +13,7 @@ from slicedesigner.engines.backplate_engine import (
     ManualTabPosition,
     NonBackplateIsland,
     SliceTabOverride,
+    _backplate_third_axis_sign,  # a globális előjel-megfordítás regressziós zárásához
     _build_backplate_shape_from_mesh,  # a tűrés-sáv önálló ellenőrzéséhez, l. lent
     apply_backplate,
     place_backplate_tabs,
@@ -55,12 +56,17 @@ def _make_box_slice_set(
 
 
 def _rect_contour(x_min: float, x_max: float, y_min: float, y_max: float) -> Contour:
+    """Egy (x_min, x_max, y_min, y_max) világ-X/Y tartományú téglalap
+    kontúrpontjai, a Slice Engine `_SLICE_AXIS_CONTOUR_ORDER[SliceAxis.Z]
+    == ("Y", "X")` konvenciójával összhangban (ld. ADR-0010) — a kontúr
+    0. koordinátája világ-Y, az 1. világ-X, ezért a pontok (y, x)
+    sorrendben épülnek, NEM (x, y) sorrendben."""
     return Contour(
         points=(
-            (x_min, y_min),
-            (x_max, y_min),
-            (x_max, y_max),
-            (x_min, y_max),
+            (y_min, x_min),
+            (y_max, x_min),
+            (y_max, x_max),
+            (y_min, x_max),
         )
     )
 
@@ -116,6 +122,21 @@ def _make_hand_slice_set(
     )
 
 
+def test_backplate_third_axis_sign_minus_z_slice_axis_x_regression() -> None:
+    """A projektgazda 2026-08-08-i élő tesztelése ((`slice_axis=X`,
+    `backplate_normal_axis=MINUS_Z`) konkrét kombináció) egy, a
+    `_backplate_third_axis_sign()`-ban rögzített, hibás nézőpont-
+    feltevést tárt fel: a korábbi képlet erre a kombinációra tévesen
+    `+1.0`-t (nincs tükrözés) adott, holott a Backplate DXF-kontúrja
+    ténylegesen tükrözött volt. A javítás (a teljes visszatérési érték
+    előjelének globális megfordítása) után ennek a konkrét
+    kombinációnak `-1.0`-t kell adnia — ez annak közvetlen, automatizált
+    regressziós lezárása."""
+    assert _backplate_third_axis_sign(
+        SliceAxis.X, BackplateNormalAxis.MINUS_Z
+    ) == pytest.approx(-1.0)
+
+
 def test_place_backplate_tabs_simple_box() -> None:
     slice_set = _make_box_slice_set(extents=(20.0, 30.0, 15.0), slice_thickness_mm=3.0)
 
@@ -133,7 +154,10 @@ def test_place_backplate_tabs_simple_box() -> None:
 
     for slice_ in modified.slices:
         island = reconstruct_islands(slice_)[0]
-        assert max(p[0] for p in island.solid.points) == pytest.approx(13.0)
+        # slice_axis=Z esetén a kontúr = (Y, X) (ld. ADR-0010,
+        # _SLICE_AXIS_CONTOUR_ORDER) — a csap a normal (X) tengelyen
+        # nyújtja a szigetet, ami a kontúr 1. koordinátája.
+        assert max(p[1] for p in island.solid.points) == pytest.approx(13.0)
 
 
 def test_place_backplate_tabs_matching_axis_raises() -> None:
@@ -260,7 +284,10 @@ def test_place_backplate_tabs_one_segment_too_short_others_unaffected(
 
     other_slice = next(s for s in modified.slices if s.index != 3)
     island = reconstruct_islands(other_slice)[0]
-    assert max(p[0] for p in island.solid.points) == pytest.approx(13.0)
+    # slice_axis=Z esetén a kontúr = (Y, X) (ld. ADR-0010,
+    # _SLICE_AXIS_CONTOUR_ORDER) — a csap a normal (X) tengelyen nyújtja
+    # a szigetet, ami a kontúr 1. koordinátája.
+    assert max(p[1] for p in island.solid.points) == pytest.approx(13.0)
 
 
 def test_place_backplate_tabs_common_plane_violation_raises() -> None:
@@ -353,7 +380,9 @@ def test_place_backplate_tabs_recessed_island_gets_longer_tab() -> None:
     assert len(tabs) == 2
     for slice_ in modified.slices:
         solid_points = reconstruct_islands(slice_)[0].solid.points
-        assert max(p[0] for p in solid_points) == pytest.approx(13.0, abs=1e-6)
+        # A hand-built fixture kontúrja is (Y, X) sorrendű (ld.
+        # `_rect_contour`) — a normal (X) tengely az 1. koordináta.
+        assert max(p[1] for p in solid_points) == pytest.approx(13.0, abs=1e-6)
 
 
 def test_place_backplate_tabs_manual_position_used() -> None:
@@ -398,6 +427,56 @@ def test_place_backplate_tabs_non_backplate_island_excluded() -> None:
     excluded_slice = next(s for s in modified.slices if s.index == 3)
     original_slice = next(s for s in slice_set.slices if s.index == 3)
     assert excluded_slice.contours == original_slice.contours
+
+
+def test_apply_backplate_normal_axis_sign_mirrors_shape() -> None:
+    """ADR-0010 / prompt 7. szakasz 4. pont: a `backplate_normal_axis`
+    ELŐJELE ténylegesen felhasználásra kerül a Backplate sziluettjének
+    felépítésénél — ugyanarra a (a harmadik tengelyen, itt Y, ASZIMMETRIKUS)
+    `slice_set`-re a `PLUS_X` és `MINUS_X` a harmadik tengelyen (Y)
+    egymás tükörképét adó (nem azonos) sziluettet eredményez.
+
+    A javítás előtt `_build_backplate_shape_from_mesh()` a
+    `backplate_normal_axis` előjelét explicit módon eldobta (`_sign` —
+    nem használt változó), ezért `PLUS_X` és `MINUS_X` azonos vetítést
+    adott — ezt a regressziót ellenőrzi ez a teszt."""
+    slice_set = _make_hand_slice_set(
+        [(-10.0, 10.0, -15.0, 5.0), (-10.0, 10.0, -15.0, 5.0)]
+    )
+
+    _modified_plus, backplate_plus = apply_backplate(
+        slice_set,
+        backplate_normal_axis=BackplateNormalAxis.PLUS_X,
+        backplate_thickness_mm=3.0,
+        tab_length_mm=5.0,
+    )
+    _modified_minus, backplate_minus = apply_backplate(
+        slice_set,
+        backplate_normal_axis=BackplateNormalAxis.MINUS_X,
+        backplate_thickness_mm=3.0,
+        tab_length_mm=5.0,
+    )
+
+    plus_points = sorted(
+        (round(p[0], 6), round(p[1], 6))
+        for c in backplate_plus.contours
+        for p in c.points
+    )
+    minus_points = sorted(
+        (round(p[0], 6), round(p[1], 6))
+        for c in backplate_minus.contours
+        for p in c.points
+    )
+    minus_points_mirrored = sorted((round(-x, 6), y) for x, y in minus_points)
+
+    assert plus_points != []
+    assert minus_points != []
+    # NEM azonos — a hiba előtt PLUS_X és MINUS_X ugyanazt a (nem
+    # tükrözött) vetítést adta volna.
+    assert plus_points != minus_points
+    # A harmadik tengelyen (itt: a kontúr 0. koordinátája, világ-Y)
+    # negálva viszont pontosan egymás tükörképei.
+    assert plus_points == minus_points_mirrored
 
 
 def test_apply_backplate_simple_box() -> None:

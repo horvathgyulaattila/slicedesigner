@@ -8,7 +8,11 @@ from shapely.geometry import Polygon
 
 from slicedesigner.engines.exceptions import InvalidSliceError
 from slicedesigner.engines.mesh_import import BoundingBox, Mesh
-from slicedesigner.engines.slice_engine import SliceAxis, create_slice_set
+from slicedesigner.engines.slice_engine import (
+    _TO_2D_ROTATION,
+    SliceAxis,
+    create_slice_set,
+)
 
 
 def _mesh_from_trimesh(tm: trimesh.Trimesh, source_path: str = "test.stl") -> Mesh:
@@ -261,3 +265,67 @@ def test_create_slice_set_y_axis_contour_not_mirrored() -> None:
     assert slice_set.slice_count == 1
     contour = slice_set.slices[0].contours[0]
     _assert_l_shape_contour_not_mirrored(contour.points)
+
+
+def _mat3_determinant(matrix: list[list[float]]) -> float:
+    """A 4x4 `_TO_2D_ROTATION` mátrix world (X, Y, Z) lineáris részének
+    (a jobb-alsó eltolás-oszlop/sor nélküli 3x3 al-mátrixnak) determinánsa.
+
+    Ez — nem egy tetszőlegesen (pl. oszlop-index szerint növekvő
+    sorrendben) kiválasztott 2x2 al-mátrix — az egyetlen bázis-
+    (oszlopsorrend-) FÜGGETLEN mód annak eldöntésére, hogy a mátrix
+    lineáris része tiszta forgatás (det +1) vagy egy tükrözést is
+    tartalmaz (det -1): egy 2x2 al-mátrix előjele attól függ, melyik
+    oszlopot hagyjuk ki (a Laplace-kifejtés előjeltényezője miatt), ezért
+    önmagában NEM megbízható "csak forgatás vs. tükrözés" jelzésként.
+    """
+    (a, b, c), (d, e, f), (g, h, i) = (row[:3] for row in matrix[:3])
+    return a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
+
+
+@pytest.mark.parametrize("axis", [SliceAxis.X, SliceAxis.Y, SliceAxis.Z])
+def test_to_2d_rotation_is_a_deliberate_mirror(axis: SliceAxis) -> None:
+    """ADR-0010: `_TO_2D_ROTATION[axis]` szándékosan pontosan egy tükrözést
+    (determináns -1) tartalmaz — a mátrix world (X, Y, Z) lineáris
+    része improper (tükrözést is tartalmazó), nem tiszta forgatás (ami
+    determináns +1 lenne) — ez volt a DXF-exportban ismételten jelentett
+    tükröződés gyökéroka."""
+    matrix = _TO_2D_ROTATION[axis]
+    assert _mat3_determinant(matrix) == pytest.approx(-1.0)
+
+
+@pytest.mark.parametrize("axis", [SliceAxis.X, SliceAxis.Y, SliceAxis.Z])
+def test_to_2d_rotation_output_rows_are_swapped_relative_to_rotation_only(
+    axis: SliceAxis,
+) -> None:
+    """ADR-0010: az új `_TO_2D_ROTATION[axis]` a korábbi, tisztán forgatás
+    (determináns +1) mátrix első két sorának felcserélésével készül —
+    ez a konkrét, dokumentált konstrukció (nem csak a végeredmény
+    determinánsa) közvetlenül is ellenőrizhető."""
+    rotation_only_matrix: dict[SliceAxis, list[list[float]]] = {
+        SliceAxis.Z: [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+        SliceAxis.X: [
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+        SliceAxis.Y: [
+            [0.0, 0.0, 1.0, 0.0],
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+    }
+    old = rotation_only_matrix[axis]
+    assert _mat3_determinant(old) == pytest.approx(1.0)
+
+    new = _TO_2D_ROTATION[axis]
+    assert new[0] == old[1]
+    assert new[1] == old[0]
+    assert new[2] == old[2]

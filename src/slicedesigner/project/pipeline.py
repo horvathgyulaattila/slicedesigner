@@ -447,6 +447,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         backplate = apply_numbering_to_backplate(
             slice_set,
             backplate,
+            backplate_params.backplate_normal_axis,
             backplate_tabs,
             numbering_height_mm=config.numbering.numbering_height_mm,
             numbering_min_height_mm=config.numbering.numbering_min_height_mm,

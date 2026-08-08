@@ -37,39 +37,59 @@ _AXIS_NORMAL: dict[SliceAxis, tuple[float, float, float]] = {
     SliceAxis.Z: (0.0, 0.0, 1.0),
 }
 
-# Explicit, kézzel megkonstruált 2D-vetítési (forgatás, NEM tükrözés)
-# mátrixok tengelyenként, a `trimesh.Path3D.to_2D(to_2D=...)` számára —
-# ahelyett, hogy a `trimesh` normálvektorból automatikusan számított,
-# nem dokumentált, és X/Y tengelyre empirikusan bizonyítottan helytelen
-# előjelű/sorrendű belső konvenciójára hagyatkoznánk. Minden mátrix
-# tisztán a világtengelyek egy ciklikus permutációja (determináns +1,
-# valódi forgatás), fordulás nélküli eltolással — így a kontúr két
-# koordinátája mindig a `slice_axis`-tól eltérő két világtengelyt adja
-# vissza, pozitív előjellel, lent jelölt sorrendben. Ugyanaz a konvenció,
-# amit a Backplate/Numbering Engine és a GUI render_geometry.py már
-# eddig is feltételezett (`_SLICE_AXIS_CONTOUR_ORDER`/`_AXIS_MAPPING`).
+# Explicit, kézzel megkonstruált 2D-vetítési mátrixok tengelyenként, a
+# `trimesh.Path3D.to_2D(to_2D=...)` számára.
+#
+# TÖRTÉNETI MEGJEGYZÉS (2026-08-08-i audit, ld. ADR-0010): ez a mátrix-
+# készlet korábban SZÁNDÉKOSAN tisztán forgatás volt (determináns +1,
+# tükrözés nélkül) — ez volt a DXF-exportban jelentkező, ismételten
+# jelentett tükröződés valódi, addig fel nem ismert gyökéroka. Az audit
+# bizonyította (mátrix-elemzéssel ÉS egy, a projektgazda saját, élőben
+# validált, korábbi CAM-workaround-jával való összevetéssel), hogy a
+# helyes vetítéshez PONTOSAN EGY tükrözés szükséges, egységesen mind a
+# három tengelyválasztásra — ellenkező esetben a kontúr a fizikai
+# modellhez képest tükrözve jelenik meg. A mátrixok ezért most
+# determináns -1-gyel, szándékos tükrözéssel készülnek: az előző
+# (forgatás-only) verzióhoz képest az első két sor fel van cserélve.
+# A konkrét tükrözési tengely megválasztása bizonyítottan közömbös
+# (egy forgatás erejéig egyenértékű bármely másik választással), mivel
+# a Nesting Engine szabadon forgatja az alkatrészeket lap-elrendezéskor,
+# és a betű-rajzolás (`numbering_engine.py::_glyph_to_local`) igazoltan
+# független attól, melyik konkrét tengely melyik szerepet kapja.
 _TO_2D_ROTATION: dict[SliceAxis, list[list[float]]] = {
-    # kontúr = (+X, +Y)
+    # kontúr = (+Y, +X)
     SliceAxis.Z: [
-        [1.0, 0.0, 0.0, 0.0],
         [0.0, 1.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0, 0.0],
         [0.0, 0.0, 1.0, 0.0],
         [0.0, 0.0, 0.0, 1.0],
     ],
-    # kontúr = (+Y, +Z)
+    # kontúr = (+Z, +Y)
     SliceAxis.X: [
-        [0.0, 1.0, 0.0, 0.0],
         [0.0, 0.0, 1.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
         [1.0, 0.0, 0.0, 0.0],
         [0.0, 0.0, 0.0, 1.0],
     ],
-    # kontúr = (+Z, +X)
+    # kontúr = (+X, +Z)
     SliceAxis.Y: [
-        [0.0, 0.0, 1.0, 0.0],
         [1.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
         [0.0, 1.0, 0.0, 0.0],
         [0.0, 0.0, 0.0, 1.0],
     ],
+}
+
+# A Slice Engine kontúr-koordinátáinak világtengely-sorrendje — a fenti
+# `_TO_2D_ROTATION`-nal KÖTELEZŐEN szinkronban tartandó egyetlen forrás.
+# A Backplate és Numbering Engine ezt importálja (nem duplikálja) — ld.
+# ADR-0010: a korábbi, egymástól függetlenül kézzel karbantartott
+# másolatok (mindkét engine-ben `_SLICE_AXIS_CONTOUR_ORDER` néven) az
+# audit során talált hibaosztály egyik oka voltak.
+_SLICE_AXIS_CONTOUR_ORDER: dict[SliceAxis, tuple[str, str]] = {
+    SliceAxis.Z: ("Y", "X"),
+    SliceAxis.X: ("Z", "Y"),
+    SliceAxis.Y: ("X", "Z"),
 }
 
 

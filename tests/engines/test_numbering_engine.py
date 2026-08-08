@@ -331,7 +331,11 @@ def test_apply_numbering_to_backplate_marks_connected_islands() -> None:
     numbered_slice_set, backplate, tabs = _make_numbered_backplate_fixture(2.0)
 
     result_backplate = apply_numbering_to_backplate(
-        numbered_slice_set, backplate, tabs, numbering_height_mm=2.0
+        numbered_slice_set,
+        backplate,
+        BackplateNormalAxis.PLUS_X,
+        tabs,
+        numbering_height_mm=2.0,
     )
 
     assert len(result_backplate.numbering_marks) == 4
@@ -346,7 +350,11 @@ def test_apply_numbering_to_backplate_logs_warning_when_insufficient_space(
 
     with caplog.at_level(logging.WARNING):
         result_backplate = apply_numbering_to_backplate(
-            numbered_slice_set, backplate, tabs, numbering_height_mm=50.0
+            numbered_slice_set,
+            backplate,
+            BackplateNormalAxis.PLUS_X,
+            tabs,
+            numbering_height_mm=50.0,
         )
 
     assert len(result_backplate.numbering_marks) == 0
@@ -360,7 +368,11 @@ def test_apply_numbering_to_backplate_invalid_height_raises() -> None:
 
     with pytest.raises(InvalidNumberingError):
         apply_numbering_to_backplate(
-            numbered_slice_set, backplate, tabs, numbering_height_mm=0.0
+            numbered_slice_set,
+            backplate,
+            BackplateNormalAxis.PLUS_X,
+            tabs,
+            numbering_height_mm=0.0,
         )
 
 
@@ -371,6 +383,7 @@ def test_apply_numbering_to_backplate_invalid_min_height_raises() -> None:
         apply_numbering_to_backplate(
             numbered_slice_set,
             backplate,
+            BackplateNormalAxis.PLUS_X,
             tabs,
             numbering_height_mm=2.0,
             numbering_min_height_mm=5.0,
@@ -384,6 +397,7 @@ def test_apply_numbering_to_backplate_negative_margin_raises() -> None:
         apply_numbering_to_backplate(
             numbered_slice_set,
             backplate,
+            BackplateNormalAxis.PLUS_X,
             tabs,
             numbering_height_mm=2.0,
             numbering_margin_mm=-1.0,
@@ -551,8 +565,10 @@ def test_search_best_anchor_quick_path_finds_inward_corner_without_full_scan(
 
 def test_build_text_strokes_not_mirrored_for_normal_index_zero() -> None:
     """Regressziós teszt az új `_glyph_to_local()`-ra — élő eset:
-    `slice_axis=X`, `numbering_normal_axis=+Y`, ami `normal_index=0`-t
-    eredményez.
+    `slice_axis=X`, `numbering_normal_axis=+Z`, ami `normal_index=0`-t
+    eredményez (ld. ADR-0010: a `_SLICE_AXIS_CONTOUR_ORDER[SliceAxis.X]`
+    a tükrözés bevezetése miatt `("Z", "Y")`-ra változott — korábban ezt
+    a kombinációt `numbering_normal_axis=+Y` adta).
 
     Az új leképezésnél a betű ALAKJA (a `(gx, gy)` -> `(offset0,
     offset1)` eltolás) szándékosan FÜGGETLEN a `normal_index`/
@@ -573,7 +589,7 @@ def test_build_text_strokes_not_mirrored_for_normal_index_zero() -> None:
     oldalra kell esnie — egy tükrözött leképezésnél a kisebbik oldalra
     esne."""
     normal_index, normal_sign, direction_index = _resolve_numbering_axes(
-        SliceAxis.X, BackplateNormalAxis.PLUS_Y
+        SliceAxis.X, BackplateNormalAxis.PLUS_Z
     )
     assert normal_index == 0
     assert direction_index == 1
@@ -653,6 +669,55 @@ def test_build_text_strokes_f_stands_upright_and_unmirrored() -> None:
     # Nem fejjel lefelé: a felső vonal (a) magasabban van (nagyobb 1.
     # koordináta), mint a középső (g) — nem megfordítva.
     assert top_stroke[0][1] > middle_stroke[0][1]
+
+
+def test_build_text_strokes_rect_seven_not_mirrored_on_backplate() -> None:
+    """Regressziós teszt a Backplate-oldali `_glyph_point_rect()`/
+    `_build_text_strokes_rect()`-re (ADR-0010, prompt 8. szakasz): a "7"
+    karakter (aszimmetrikus: teljes szélességű felső vízszintes vonal +
+    a *nagyobb* gx-oldalon futó függőleges szár, ld. `_CHARACTER_SEGMENTS`)
+    tényleges stroke-koordinátái alapján helyesen áll — nem tükrözött.
+
+    A hibás (`upright=True`) ág `(anchor_x + gx, anchor_y - gy)` volt —
+    ez a magasság (gy) tengelyén tükrözött, mert a glyph-tér `gy=height`
+    (a karakter TETEJE) az `anchor_y - height`-hoz (a horgonypont ALATT,
+    a `_fits_on_backplate()` téglalap-kontraktusa szerint a szövegdoboz
+    ALJÁN) képeződött le, `gy=0` (a karakter ALJA) pedig `anchor_y`-hoz
+    (a doboz TETEJÉN) — fejjel lefelé. A javított leképezés
+    (`anchor_x + gx, anchor_y - height_mm + gy`) ezt megfordítja: a
+    karakter teteje a doboz tetejénél (`anchor_y`), az alja a doboz
+    alján (`anchor_y - height_mm`) van."""
+    anchor_x, anchor_y, height_mm = 10.0, 10.0, 10.0
+    strokes = numbering_engine_module._build_text_strokes_rect(
+        "7", height_mm, True, anchor_x, anchor_y
+    )
+
+    # "7" szegmensei ("abc"): "a" a felső vízszintes vonal (gx: 0 ->
+    # 0.6*height), "b"/"c" együtt a jobb oldali (nagyobb gx) függőleges
+    # szár (gx = 0.6*height, gy: height -> 0).
+    top_stroke, stem_upper_stroke, stem_lower_stroke = strokes
+
+    # A felső vízszintes vonal a doboz TETEJÉN van (0. koord = anchor_y),
+    # nem az alján — ez a lényegi, korábban tükrözött viselkedés.
+    assert top_stroke[0] == pytest.approx((anchor_x, anchor_y))
+    assert top_stroke[1] == pytest.approx((anchor_x + 0.6 * height_mm, anchor_y))
+
+    # A szár a vízszintes vonal nagyobbik (jobb oldali) végpontjától
+    # indul, és a doboz ALJÁIG (anchor_y - height_mm) fut LEFELÉ — nem
+    # felfelé, a doboz fölé.
+    stem_x = anchor_x + 0.6 * height_mm
+    assert stem_upper_stroke[0] == pytest.approx((stem_x, anchor_y))
+    assert stem_upper_stroke[1] == pytest.approx((stem_x, anchor_y - height_mm / 2))
+    assert stem_lower_stroke[0] == pytest.approx((stem_x, anchor_y - height_mm / 2))
+    assert stem_lower_stroke[1] == pytest.approx((stem_x, anchor_y - height_mm))
+
+    # Minden pont a `_fits_on_backplate()` téglalap-kontraktusa szerinti
+    # dobozon belül van: x in [anchor_x, anchor_x+w], y in
+    # [anchor_y-h, anchor_y] — nem azon kívül, ami tükrözésnél előfordulna.
+    all_points = [p for stroke in strokes for p in stroke]
+    assert all(
+        anchor_y - height_mm - 1e-9 <= p[1] <= anchor_y + 1e-9 for p in all_points
+    )
 
 
 def test_apply_numbering_manual_position_does_not_search(
