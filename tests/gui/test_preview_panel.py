@@ -135,6 +135,7 @@ def _backplate() -> Backplate:
     return Backplate(
         contours=(_square_contour(cx=0.0, cy=0.0, half=5.0),),
         thickness_mm=2.0,
+        common_plane_mm=0.0,
         material_reference=None,
     )
 
@@ -297,7 +298,18 @@ def test_no_highlight_layers_are_fully_opaque_with_base_colors(
     )
 
     grouped = _group_calls_by_color(calls)
-    assert grouped.keys() == {"lightgray", "dimgray", "red", "black", "blue", "green"}
+    assert grouped.keys() == {
+        "lightgray",
+        "dimgray",
+        "red",
+        "black",
+        "blue",
+        "green",
+        "orangered",
+        "mediumseagreen",
+        "royalblue",
+        "gainsboro",
+    }
 
     # A test réteg sosem kap `show_edges`/`edge_color`-t — a valódi
     # kontúrélek külön "dimgray" rétegként érkeznek
@@ -319,6 +331,32 @@ def test_no_highlight_layers_are_fully_opaque_with_base_colors(
     # A Dowel Hole-körvonalak sosem kapnak `opacity`-átadást — mindig
     # teljesen átlátszatlanok.
     assert "opacity" not in grouped["black"][0]
+
+
+def test_origin_gizmo_layers_added_when_showing_mesh(
+    preview_panel: PreviewPanel, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Az origó-jelölő (tengelynyilak + halvány XY-sík) az "Eredeti Mesh"
+    nézetben (`show_mesh()`) is megjelenik."""
+    calls = _record_add_mesh_calls(preview_panel, monkeypatch)
+
+    preview_panel.show_mesh(_empty_mesh())
+
+    grouped = _group_calls_by_color(calls)
+    assert {"orangered", "mediumseagreen", "royalblue", "gainsboro"} <= grouped.keys()
+
+
+def test_origin_gizmo_layers_added_when_showing_sliced_assembly(
+    preview_panel: PreviewPanel, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Az origó-jelölő a "Szeletelt összeállítás" nézetben
+    (`show_sliced_assembly()`) is megjelenik."""
+    calls = _record_add_mesh_calls(preview_panel, monkeypatch)
+
+    preview_panel.show_sliced_assembly(_slice_set(5))
+
+    grouped = _group_calls_by_color(calls)
+    assert {"orangered", "mediumseagreen", "royalblue", "gainsboro"} <= grouped.keys()
 
 
 def test_highlight_dims_other_layers_keeps_highlight_and_holes_opaque(
@@ -345,6 +383,10 @@ def test_highlight_dims_other_layers_keeps_highlight_and_holes_opaque(
         "black",
         "blue",
         "green",
+        "orangered",
+        "mediumseagreen",
+        "royalblue",
+        "gainsboro",
     }
 
     base_kwargs = grouped["lightgray"][0]

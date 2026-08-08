@@ -421,7 +421,7 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
         # Slice Set-en újra meghívásra kerül; determinisztikus engine-ek
         # mellett (CODING_STANDARDS.md 7. szakasz) ez ugyanazt a Tab-listát
         # adja, mint amit apply_backplate() belsőleg már felhasznált.
-        _, backplate_tabs = place_backplate_tabs(
+        _, backplate_tabs, _common_plane_mm, _backplate_shape = place_backplate_tabs(
             pre_backplate_slice_set,
             backplate_normal_axis=backplate_params.backplate_normal_axis,
             backplate_thickness_mm=backplate_params.backplate_thickness_mm,

@@ -511,10 +511,13 @@ def _z_axis_square_assembly(
     )
 
 
-def _backplate(*, thickness_mm: float = 2.0, half: float = 5.0) -> Backplate:
+def _backplate(
+    *, thickness_mm: float = 2.0, half: float = 5.0, common_plane_mm: float = 0.0
+) -> Backplate:
     return Backplate(
         contours=(_ccw_square(cx=0.0, cy=0.0, half=half),),
         thickness_mm=thickness_mm,
+        common_plane_mm=common_plane_mm,
         material_reference=None,
     )
 
@@ -530,7 +533,7 @@ def test_backplate_to_polydata_none_returns_empty_polydata() -> None:
 
 def test_backplate_to_polydata_plus_axis_matches_assembly_extreme() -> None:
     slice_set = _z_axis_square_assembly(half=10.0)
-    backplate = _backplate(thickness_mm=2.0, half=5.0)
+    backplate = _backplate(thickness_mm=2.0, half=5.0, common_plane_mm=10.0)
 
     polydata = backplate_to_polydata(backplate, slice_set, BackplateNormalAxis.PLUS_X)
 
@@ -552,7 +555,7 @@ def test_backplate_to_polydata_plus_axis_matches_assembly_extreme() -> None:
 
 def test_backplate_to_polydata_minus_axis_matches_assembly_extreme() -> None:
     slice_set = _z_axis_square_assembly(half=10.0)
-    backplate = _backplate(thickness_mm=2.0, half=5.0)
+    backplate = _backplate(thickness_mm=2.0, half=5.0, common_plane_mm=-10.0)
 
     polydata = backplate_to_polydata(backplate, slice_set, BackplateNormalAxis.MINUS_X)
 
@@ -566,13 +569,16 @@ def test_backplate_to_polydata_minus_axis_matches_assembly_extreme() -> None:
 
 def test_backplate_to_polydata_ignores_hole_contour() -> None:
     slice_set = _z_axis_square_assembly(half=10.0)
-    backplate_without_hole = _backplate(thickness_mm=2.0, half=5.0)
+    backplate_without_hole = _backplate(
+        thickness_mm=2.0, half=5.0, common_plane_mm=10.0
+    )
     backplate_with_hole = Backplate(
         contours=(
             _ccw_square(cx=0.0, cy=0.0, half=5.0),
             _cw_square(cx=0.0, cy=0.0, half=1.0),
         ),
         thickness_mm=2.0,
+        common_plane_mm=10.0,
         material_reference=None,
     )
 

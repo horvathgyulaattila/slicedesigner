@@ -1,20 +1,20 @@
 """Backplate Engine (1. kör) — érintkező szakasz azonosítás és csap-elhelyezés.
 
 Lásd: docs/specifications/BACKPLATE_SPEC.md (6. szakasz, 1-8. lépés).
-A sziluett-számítás és a fészek-kivágás (9-11. lépés) külön menetben készül.
+A margó-eltolás és a fészek-kivágás (11-12. lépés) külön menetben készül.
 """
 
 import logging
 from dataclasses import dataclass, replace
 from enum import Enum
 
+import trimesh
 from shapely.geometry import Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.geometry.polygon import orient
 from shapely.ops import unary_union
 
 from slicedesigner.engines.exceptions import InvalidBackplateError
-from slicedesigner.engines.mesh_import import Mesh
 from slicedesigner.engines.slice_engine import (
     Contour,
     EngravingMark,
@@ -22,6 +22,7 @@ from slicedesigner.engines.slice_engine import (
     Slice,
     SliceAxis,
     SliceSet,
+    _compute_uniform_scale_factor,
     reconstruct_islands,
 )
 
@@ -48,9 +49,17 @@ _NORMAL_AXIS_WORLD: dict[BackplateNormalAxis, tuple[str, float]] = {
     BackplateNormalAxis.MINUS_Z: ("Z", -1.0),
 }
 
-# A Slice Engine kontúr-koordinátáinak feltételezett világtengely-sorrendje.
-# A slice_axis=Z eset ellenőrzött és tesztelt. A slice_axis=X/Y esetek
-# ciklikus (jobbkéz-szabály-szerű) feltevésen alapulnak, NEM ellenőrzöttek.
+# Világtengely-név → numpy-tengelyindex — a `_build_backplate_shape_from_mesh()`
+# nyers Mesh-vertexeinek (world X/Y/Z oszlopainak) indexeléséhez. Ugyanaz a
+# leképezés, mint amit a `render_geometry.py`/`numbering_engine.py` innen
+# duplikál (l. `render_geometry.py` modul-docstringje).
+_WORLD_AXIS_INDEX: dict[str, int] = {"X": 0, "Y": 1, "Z": 2}
+
+# A Slice Engine kontúr-koordinátáinak világtengely-sorrendje. Mindhárom
+# eset (Z, X, Y) garantált — a Slice Engine explicit, kézzel
+# megkonstruált vetítési mátrixokat használ (`_TO_2D_ROTATION`,
+# slice_engine.py) a `trimesh` automatikus, X/Y tengelyre korábban
+# hibásnak bizonyult belső konvenciója helyett.
 _SLICE_AXIS_CONTOUR_ORDER: dict[SliceAxis, tuple[str, str]] = {
     SliceAxis.Z: ("X", "Y"),
     SliceAxis.X: ("Y", "Z"),
@@ -233,6 +242,31 @@ def _find_contact_segments(
     return segments
 
 
+def _chain_cluster_by_extreme(
+    entries: list[tuple[tuple[int, int], int, _ContactSegment]],
+    tolerance_mm: float,
+) -> list[list[tuple[tuple[int, int], int, _ContactSegment]]]:
+    """A `(sziget-kulcs, szakasz-index, szakasz)` hármasok lánc-alapú
+    csoportosítása a szakaszok `local_extreme_mm` értéke szerint —
+    BACKPLATE_SPEC.md 6. szakasz 3. pont.
+
+    A növekvő sorrendbe rendezett értékek egymást követő elemei egy
+    csoportba kerülnek, ha köztük legfeljebb `tolerance_mm` az eltérés.
+    A `szakasz-index` az adott sziget saját szakasz-listáján belüli
+    pozíció — egy szigetnek elvben több érintkező szakasza is lehet
+    (alávágott geometria), ezért a csoportosítás szakasz-, nem
+    sziget-szinten történik.
+    """
+    ordered = sorted(entries, key=lambda e: e[2].local_extreme_mm)
+    clusters: list[list[tuple[tuple[int, int], int, _ContactSegment]]] = [[ordered[0]]]
+    for previous, item in zip(ordered, ordered[1:]):
+        if item[2].local_extreme_mm - previous[2].local_extreme_mm <= tolerance_mm:
+            clusters[-1].append(item)
+        else:
+            clusters.append([item])
+    return clusters
+
+
 def _merge_overlapping_spans(
     spans: list[tuple[float, float]],
 ) -> list[tuple[float, float]]:
@@ -392,6 +426,93 @@ def _apply_tab_geometry(
     return replace(slice_set, slices=tuple(new_slices))
 
 
+def _build_backplate_shape_from_mesh(
+    slice_set: SliceSet,
+    common_plane_world_mm: float,
+    backplate_normal_axis: BackplateNormalAxis,
+    backplate_plane_tolerance_mm: float,
+) -> BaseGeometry:
+    """A Backplate alakjának felépítése a modell tényleges geometriájából
+    (BACKPLATE_SPEC.md 6. szakasz 10. pont): a Slice Engine-nel megegyező
+    módon skálázott Mesh és a közös sík körüli, `backplate_plane_tolerance_mm`
+    vastagságú "szeletlemez" térbeli (Boole-) metszete, a (harmadik
+    tengely, szelet-tengely) síkra vetítve.
+
+    A tűrés-sáv (nem egy nulla-vastagságú síkmetszet) szükséges, mert a
+    modell tényleges felülete a közös sík magasságában nem feltétlenül
+    tökéletesen sík — egy egzakt metszet ezt a gyakorlatilag hasznos
+    érintkezési területet elvágólag figyelmen kívül hagyná.
+    """
+    mesh = slice_set.source_mesh
+    slice_axis = slice_set.slice_axis
+    slice_world_index = _WORLD_AXIS_INDEX[slice_axis.value]
+    axis_size = (
+        mesh.bounding_box.max[slice_world_index]
+        - mesh.bounding_box.min[slice_world_index]
+    )
+    slice_thickness_mm = slice_set.slices[0].thickness_mm
+
+    scale_factor = _compute_uniform_scale_factor(
+        axis_size, slice_set.slice_count, slice_thickness_mm, slice_set.gap_mm
+    )
+
+    trimesh_mesh = trimesh.Trimesh(vertices=mesh.vertices, faces=mesh.triangles)
+    scale_matrix = [
+        [scale_factor, 0.0, 0.0, 0.0],
+        [0.0, scale_factor, 0.0, 0.0],
+        [0.0, 0.0, scale_factor, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+    trimesh_mesh.apply_transform(scale_matrix)
+    axis_min = float(trimesh_mesh.bounds[0][slice_world_index])
+
+    normal_world_axis, _sign = _NORMAL_AXIS_WORLD[backplate_normal_axis]
+    normal_world_index = _WORLD_AXIS_INDEX[normal_world_axis]
+    third_world_axis = next(
+        iter({"X", "Y", "Z"} - {normal_world_axis, slice_axis.value})
+    )
+    third_world_index = _WORLD_AXIS_INDEX[third_world_axis]
+
+    mesh_bounds = trimesh_mesh.bounds
+    extents = [0.0, 0.0, 0.0]
+    center = [0.0, 0.0, 0.0]
+    for i in range(3):
+        if i == normal_world_index:
+            extents[i] = 2 * backplate_plane_tolerance_mm
+            center[i] = common_plane_world_mm
+        else:
+            extents[i] = 2 * (mesh_bounds[1][i] - mesh_bounds[0][i])
+            center[i] = (mesh_bounds[0][i] + mesh_bounds[1][i]) / 2
+    translation_matrix = [
+        [1.0, 0.0, 0.0, center[0]],
+        [0.0, 1.0, 0.0, center[1]],
+        [0.0, 0.0, 1.0, center[2]],
+        [0.0, 0.0, 0.0, 1.0],
+    ]
+    slab = trimesh.creation.box(extents=extents, transform=translation_matrix)
+
+    intersection = trimesh_mesh.intersection(slab)
+    if intersection is None or len(intersection.vertices) == 0:
+        return Polygon()
+
+    triangles = intersection.vertices[intersection.faces]
+    projected: list[Polygon] = []
+    for triangle in triangles:
+        points_2d = [
+            (vertex[third_world_index], vertex[slice_world_index] - axis_min)
+            for vertex in triangle
+        ]
+        polygon = Polygon(points_2d)
+        if not polygon.is_valid:
+            polygon = polygon.buffer(0)
+        if not polygon.is_empty:
+            projected.append(polygon)
+
+    if not projected:
+        return Polygon()
+    return unary_union(projected)
+
+
 def place_backplate_tabs(
     slice_set: SliceSet,
     backplate_normal_axis: BackplateNormalAxis,
@@ -402,7 +523,7 @@ def place_backplate_tabs(
     tab_edge_margin_mm: float | None = None,
     slice_tab_overrides: tuple[SliceTabOverride, ...] = (),
     non_backplate_islands: tuple[NonBackplateIsland, ...] = (),
-) -> tuple[SliceSet, tuple[Tab, ...]]:
+) -> tuple[SliceSet, tuple[Tab, ...], float, BaseGeometry]:
     """Érintkező szakaszok azonosítása és csapok elhelyezése.
 
     Lásd: BACKPLATE_SPEC.md 6. szakasz, 1-8. lépés.
@@ -422,14 +543,20 @@ def place_backplate_tabs(
         non_backplate_islands: a Backplate-kapcsolódásból kizárt szigetek.
 
     Returns:
-        A csapokkal kiegészített Slice Set, és az elhelyezett csapok listája.
+        A csapokkal kiegészített Slice Set, az elhelyezett csapok listája,
+        a validált közös Backplate-sík world-koordinátája
+        (`backplate_normal_axis` mentén), és a Backplate nyers (margó
+        előtti) alakja, a modell tényleges geometriájából, térbeli
+        Boole-metszettel felépítve (`_build_backplate_shape_from_mesh()`,
+        BACKPLATE_SPEC.md 6. szakasz 10. pont).
 
     Raises:
         InvalidBackplateError: érvénytelen paraméter, érvénytelen
             `backplate_normal_axis`, egy sziget nem ér el egy közös
-            Backplate-síkot (tűréshatáron belül), egy érintkező szakaszon
-            `usable_length` nem pozitív, vagy egy kézi csap-pozíció nem
-            fér el.
+            Backplate-síkot (tűréshatáron belül), vagy egy kézi csap-pozíció
+            nem fér el. Egy érintkező szakaszon nem pozitív `usable_length`
+            nem hiba — figyelmeztetés kerül naplózásra, és a szakasz csap
+            nélkül marad.
     """
     resolved_tab_edge_margin_mm = (
         tab_edge_margin_mm if tab_edge_margin_mm is not None else tab_length_mm
@@ -478,19 +605,48 @@ def place_backplate_tabs(
             per_island_segments[key] = segments
             islands_by_key[key] = island
 
-    all_local_extremes = [
-        segment.local_extreme_mm
-        for segments in per_island_segments.values()
-        for segment in segments
+    all_entries: list[tuple[tuple[int, int], int, _ContactSegment]] = [
+        (key, segment_index, segment)
+        for key, segments in per_island_segments.items()
+        for segment_index, segment in enumerate(segments)
     ]
-    common_plane_mm = max(all_local_extremes)
-    for extreme in all_local_extremes:
-        if common_plane_mm - extreme > backplate_plane_tolerance_mm:
-            raise InvalidBackplateError(
-                "Egy sziget érintkező szakasza nem esik egy közös Backplate-síkba "
-                f"(eltérés: {common_plane_mm - extreme:.4f} mm > "
-                f"{backplate_plane_tolerance_mm} mm)."
+    clusters = _chain_cluster_by_extreme(all_entries, backplate_plane_tolerance_mm)
+    dominant = max(clusters, key=len)
+    if len(dominant) <= len(all_entries) / 2:
+        raise InvalidBackplateError(
+            "Nem található egyértelmű közös Backplate-sík: a legnagyobb "
+            f"csoport ({len(dominant)} szakasz) nem éri el az összes "
+            f"érintkező szakasz ({len(all_entries)}) szigorú többségét."
+        )
+    common_plane_mm = max(segment.local_extreme_mm for _key, _idx, segment in dominant)
+    common_plane_world_mm = common_plane_mm * sign
+    backplate_shape = _build_backplate_shape_from_mesh(
+        slice_set,
+        common_plane_world_mm,
+        backplate_normal_axis,
+        backplate_plane_tolerance_mm,
+    )
+
+    dominant_membership = {(key, idx) for key, idx, _segment in dominant}
+    filtered_per_island_segments: dict[tuple[int, int], list[_ContactSegment]] = {}
+    for key, segments in per_island_segments.items():
+        kept = [
+            segment
+            for segment_index, segment in enumerate(segments)
+            if (key, segment_index) in dominant_membership
+        ]
+        if kept:
+            filtered_per_island_segments[key] = kept
+        else:
+            slice_index, island_index = key
+            logger.warning(
+                "A(z) %s. szelet %s. szigete nem esik a Backplate domináns "
+                "közös síkjába — a Backplate-kapcsolódásból automatikusan "
+                "kizárva.",
+                slice_index,
+                island_index,
             )
+    per_island_segments = filtered_per_island_segments
 
     base_params = _TabParams(
         tab_length_mm=tab_length_mm,
@@ -512,11 +668,18 @@ def place_backplate_tabs(
             segment_length = segment.third_axis_max_mm - segment.third_axis_min_mm
             usable_length = segment_length - 2 * params.tab_edge_margin_mm
             if usable_length <= 0:
-                raise InvalidBackplateError(
-                    f"A(z) {slice_index}. szelet {island_index}. szigetének egy "
-                    f"érintkező szakaszán a usable_length nem pozitív "
-                    f"({usable_length:.4f} mm)."
+                logger.warning(
+                    "A(z) %s. szelet %s. szigetének egy érintkező szakaszán "
+                    "(hossz: %.4f mm) nem fér el csap a %.4f mm-es margóval "
+                    "(hiányzó hely: %.4f mm) — ezen a szakaszon nem kerül "
+                    "csap elhelyezésre.",
+                    slice_index,
+                    island_index,
+                    segment_length,
+                    params.tab_edge_margin_mm,
+                    -usable_length,
                 )
+                continue
 
             segment_start = segment.third_axis_min_mm + params.tab_edge_margin_mm
             tab_spans = _resolve_tab_spans(
@@ -548,43 +711,7 @@ def place_backplate_tabs(
         slice_set, islands_by_key, tab_rectangles_by_key
     )
 
-    return modified_slice_set, tuple(all_tabs)
-
-
-_WORLD_AXIS_INDEX: dict[str, int] = {"X": 0, "Y": 1, "Z": 2}
-
-
-def _resolve_silhouette_axes(
-    slice_axis: SliceAxis, backplate_normal_axis: BackplateNormalAxis
-) -> tuple[int, int]:
-    """(harmadik tengely világindexe, slice_axis világindexe) — a Backplate
-    saját síkja."""
-    world_normal, _ = _NORMAL_AXIS_WORLD[backplate_normal_axis]
-    all_axes = {"X", "Y", "Z"}
-    third_axis = next(iter(all_axes - {world_normal, slice_axis.value}))
-    return _WORLD_AXIS_INDEX[third_axis], _WORLD_AXIS_INDEX[slice_axis.value]
-
-
-def _compute_silhouette(
-    mesh: Mesh, third_world_index: int, slice_world_index: int
-) -> BaseGeometry:
-    """A Mesh sziluettje a Backplate saját (harmadik tengely, slice_axis) síkjában.
-
-    A specifikáció "a teljes Slice Set sziluettje" megfogalmazását az
-    eredeti (szeletelés előtti) 3D Mesh-ből, a háromszögek vetített
-    uniójaként számítjuk — lásd a Kontextus szakaszt az indoklásért és a
-    dokumentált korlátozásért (Dowel Hole-ok nem befolyásolják).
-    """
-    triangle_polygons = []
-    for triangle in mesh.triangles:
-        points_2d = [
-            (mesh.vertices[i][third_world_index], mesh.vertices[i][slice_world_index])
-            for i in triangle
-        ]
-        polygon = Polygon(points_2d)
-        if polygon.area > 0:
-            triangle_polygons.append(polygon)
-    return unary_union(triangle_polygons)
+    return modified_slice_set, tuple(all_tabs), common_plane_world_mm, backplate_shape
 
 
 @dataclass(frozen=True)
@@ -594,6 +721,12 @@ class Backplate:
     A `contours` a Backplate saját (harmadik tengely, `slice_axis`)
     síkjában értendő — 2D pontlista, ugyanazzal a CCW/CW
     körüljárás-konvencióval, mint a Slice Engine `Contour`-jai.
+
+    A `common_plane_mm` a domináns közös Backplate-sík (BACKPLATE_SPEC.md
+    6. szakasz 3–5. pont) tényleges world-koordinátája
+    `backplate_normal_axis` mentén — a Backplate belső (az összeállítás
+    felé néző) síkjának pozíciója. Ezt tárolja explicit módon, hogy a
+    fogyasztóknak (pl. a 3D előnézetnek) ne kelljen közelíteniük.
 
     A `numbering_marks` a Numbering Engine által a Backplate-hez
     kapcsolódó szigetekhez elhelyezett azonosító gravírozás-jeleit
@@ -605,6 +738,7 @@ class Backplate:
 
     contours: tuple[Contour, ...]
     thickness_mm: float
+    common_plane_mm: float
     material_reference: str | None
     numbering_marks: tuple[EngravingMark, ...] = ()
 
@@ -624,10 +758,10 @@ def apply_backplate(
 ) -> tuple[SliceSet, Backplate]:
     """A Backplate Engine teljes folyamata (BACKPLATE_SPEC.md 6. szakasz, 1-12. lépés).
 
-    Az érintkező szakaszok azonosítását és a csap-elhelyezést
-    (`place_backplate_tabs()`) belsőleg meghívja, majd előállítja a
-    Backplate sziluettjét, alkalmazza a margót, és kivágja a
-    csapoknak megfelelő fészkeket.
+    Az érintkező szakaszok azonosítását, a csap-elhelyezést, és a
+    Backplate nyers (margó előtti) alakjának felépítését
+    (`place_backplate_tabs()`) belsőleg meghívja, majd alkalmazza a
+    margót, és kivágja a csapoknak megfelelő fészkeket.
 
     Args:
         slice_set: a pipeline addig lefutott lépéseinek kimenete.
@@ -636,7 +770,7 @@ def apply_backplate(
         tab_length_mm: a csap alapértelmezett hossza.
         backplate_plane_tolerance_mm: a szigetek érintkező szakaszainak
             megengedett síkeltérése.
-        backplate_margin_mm: a sziluett-kontúr eltolása (pozitív: kifelé,
+        backplate_margin_mm: a Backplate-kontúr eltolása (pozitív: kifelé,
             negatív: befelé).
         tab_spacing_mm: célzott csap-köz.
         tab_edge_margin_mm: a csap kezdete az érintkező szakasz végétől.
@@ -650,35 +784,29 @@ def apply_backplate(
     Raises:
         InvalidBackplateError: lásd `place_backplate_tabs()`.
     """
-    modified_slice_set, tabs = place_backplate_tabs(
-        slice_set,
-        backplate_normal_axis=backplate_normal_axis,
-        backplate_thickness_mm=backplate_thickness_mm,
-        tab_length_mm=tab_length_mm,
-        backplate_plane_tolerance_mm=backplate_plane_tolerance_mm,
-        tab_spacing_mm=tab_spacing_mm,
-        tab_edge_margin_mm=tab_edge_margin_mm,
-        slice_tab_overrides=slice_tab_overrides,
-        non_backplate_islands=non_backplate_islands,
+    modified_slice_set, tabs, common_plane_world_mm, backplate_shape = (
+        place_backplate_tabs(
+            slice_set,
+            backplate_normal_axis=backplate_normal_axis,
+            backplate_thickness_mm=backplate_thickness_mm,
+            tab_length_mm=tab_length_mm,
+            backplate_plane_tolerance_mm=backplate_plane_tolerance_mm,
+            tab_spacing_mm=tab_spacing_mm,
+            tab_edge_margin_mm=tab_edge_margin_mm,
+            slice_tab_overrides=slice_tab_overrides,
+            non_backplate_islands=non_backplate_islands,
+        )
     )
 
-    third_world_index, slice_world_index = _resolve_silhouette_axes(
-        slice_set.slice_axis, backplate_normal_axis
-    )
+    backplate_shape_with_margin = backplate_shape.buffer(backplate_margin_mm)
 
-    silhouette = _compute_silhouette(
-        slice_set.source_mesh, third_world_index, slice_world_index
-    )
-    silhouette_with_margin = silhouette.buffer(backplate_margin_mm)
-
-    axis_min = slice_set.source_mesh.bounding_box.min[slice_world_index]
     slices_by_index = {s.index: s for s in modified_slice_set.slices}
 
     for tab in tabs:
         slice_ = slices_by_index[tab.slice_index]
         third_start, third_end = tab.third_axis_start_mm, tab.third_axis_end_mm
-        slice_start = axis_min + slice_.position_mm - slice_.thickness_mm / 2
-        slice_end = axis_min + slice_.position_mm + slice_.thickness_mm / 2
+        slice_start = slice_.position_mm - slice_.thickness_mm / 2
+        slice_end = slice_.position_mm + slice_.thickness_mm / 2
         nest_rectangle = Polygon(
             [
                 (third_start, slice_start),
@@ -687,13 +815,16 @@ def apply_backplate(
                 (third_start, slice_end),
             ]
         )
-        silhouette_with_margin = silhouette_with_margin.difference(nest_rectangle)
+        backplate_shape_with_margin = backplate_shape_with_margin.difference(
+            nest_rectangle
+        )
 
-    backplate_contours = _polygon_to_contours(silhouette_with_margin)
+    backplate_contours = _polygon_to_contours(backplate_shape_with_margin)
 
     backplate = Backplate(
         contours=backplate_contours,
         thickness_mm=backplate_thickness_mm,
+        common_plane_mm=common_plane_world_mm,
         material_reference=material_reference,
     )
 

@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-07-30
-Utolsó módosítás: 2026-08-04
+Utolsó módosítás: 2026-08-08
 Kapcsolódó dokumentumok: [docs/PROJECT_CONSTITUTION.md](docs/PROJECT_CONSTITUTION.md), [docs/ROADMAP.md](docs/ROADMAP.md), [docs/PROJECT_VISION.md](docs/PROJECT_VISION.md), [docs/ENGINEERING_PRINCIPLES.md](docs/ENGINEERING_PRINCIPLES.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md), [docs/CODING_STANDARDS.md](docs/CODING_STANDARDS.md), [docs/AI_WORKFLOW.md](docs/AI_WORKFLOW.md), [docs/PROMPT_STANDARD.md](docs/PROMPT_STANDARD.md), [docs/DOMAIN_MODEL.md](docs/DOMAIN_MODEL.md), [docs/SPECIFICATION_STANDARD.md](docs/SPECIFICATION_STANDARD.md)
 
 ## Cél
@@ -12,7 +12,7 @@ A Slice Designer egy desktop alkalmazás, amely 3D modellekből (első körben S
 
 ## Jelenlegi állapot
 
-A projekt a Phase 5 (Integration) lezárásánál tart, a Phase 6 (Release Candidate) folyamatban van: mind a nyolc domain engine, a Project-réteg (pipeline-vezérlés, mentés/betöltés) és a teljes PySide6 GUI elkészült, automatizált teszttel lefedve. A Phase 6 első tétele a DXF export leválasztása a Futtatásról (ADR-0009), utána végső tesztelés, optimalizálás, dokumentáció és példaprojektek következnek.
+A projekt a Phase 5 (Integration) lezárásánál tart, a Phase 6 (Release Candidate) folyamatban van: mind a nyolc domain engine, a Project-réteg (pipeline-vezérlés, mentés/betöltés) és a teljes PySide6 GUI elkészült, automatizált teszttel lefedve. A Phase 6-ból a DXF export leválasztása a Futtatásról (ADR-0009) és a Dowel automatikus pozíciókeresés teljesítmény-javítása lezárult. A "végső tesztelés" tétel (valódi felhasználói modelleken, elsősorban "Wobbly Toad" és "face-in-the-brick-wall" STL végzett élő teszteléssel) jelentős részben szintén lezárult — részletek a `docs/ROADMAP.md` Phase 6 szakaszában —, egy nyitott tétellel: a Backplate-feliratok karakter-szintű tükröződésének javítása (`numbering_engine.py::_glyph_point_rect()`) megtervezve és ellenőrizve, de még nincs végrehajtva. Ezután dokumentáció és példaprojektek következnek.
 
 ## Hogyan érdemes olvasni a dokumentációt
 

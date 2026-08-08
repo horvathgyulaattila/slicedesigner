@@ -311,41 +311,6 @@ def spacers_to_polydata(
     return _merge_parts(parts)
 
 
-def _backplate_inner_plane_mm(
-    slice_set: SliceSet, normal_world_index: int, sign: float
-) -> float:
-    """A Backplate belső (az összeállítás felé néző) síkjának world-
-    koordinátája, `normal_world_index` világtengely mentén.
-
-    A `Backplate` objektum ezt nem tárolja explicit (az engine belsejében
-    számolódik, lásd a prompt "Fontos, nyitott bizonytalanság" szakaszát)
-    — ezért közelítésként a már meglévő, szolid (CCW) Slice-kontúr-
-    pontok (ugyanazok, amiket `slice_set_to_polydata()` is használ)
-    `normal_world_index` tengely menti szélsőértékét vesszük:
-    `sign > 0` (`PLUS_*`) esetén a maximumot, egyébként (`MINUS_*`) a
-    minimumot. Ez nem bit-pontosan az engine belső "közös érintkezési
-    sík" számítása, de a `backplate_plane_tolerance_mm` (alapértelmezetten
-    0.1 mm) miatt vizuálisan megkülönböztethetetlen attól.
-    """
-    axis_index, (u_index, v_index) = _AXIS_MAPPING[slice_set.slice_axis]
-    if normal_world_index == u_index:
-        coord_pos = 0
-    elif normal_world_index == v_index:
-        coord_pos = 1
-    else:
-        raise ValueError("A backplate_normal_axis nem eshet egybe a slice_axis-szal.")
-
-    values = [
-        point[coord_pos]
-        for slice_ in slice_set.slices
-        for points in _solid_contours(slice_)
-        for point in points
-    ]
-    if not values:
-        return 0.0
-    return max(values) if sign > 0 else min(values)
-
-
 def backplate_to_polydata(
     backplate: Backplate | None,
     slice_set: SliceSet,
@@ -359,9 +324,9 @@ def backplate_to_polydata(
     síkjában él (`engines/backplate_engine.py` `Backplate` docstring) —
     ezt a 2D `(u, v)` pontpárt `u` → harmadik tengely, `v` → `slice_axis`
     szerint ágyazzuk world-koordinátákba. A belső (összeállítás felé
-    néző) sík world-koordinátáját `_backplate_inner_plane_mm()`
-    közelíti. `backplate=None` esetén (a `use_backplate` kapcsoló ki
-    volt kapcsolva) üres `PolyData`-t ad.
+    néző) sík world-koordinátáját közvetlenül a `Backplate.common_plane_mm`
+    adja. `backplate=None` esetén (a `use_backplate` kapcsoló ki volt
+    kapcsolva) üres `PolyData`-t ad.
     """
     if backplate is None:
         return pv.PolyData()
@@ -374,7 +339,7 @@ def backplate_to_polydata(
     third_index = _WORLD_AXIS_INDEX[third_world_axis]
     slice_axis_index, _ = _AXIS_MAPPING[slice_set.slice_axis]
 
-    inner_plane_mm = _backplate_inner_plane_mm(slice_set, normal_index, sign)
+    inner_plane_mm = backplate.common_plane_mm
 
     parts: list[pv.PolyData] = []
     for contour in backplate.contours:

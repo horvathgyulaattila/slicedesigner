@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-08-01
-Utolsó módosítás: 2026-08-01
+Utolsó módosítás: 2026-08-06
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](../PROJECT_CONSTITUTION.md), [ARCHITECTURE.md](../ARCHITECTURE.md), [DOMAIN_MODEL.md](../DOMAIN_MODEL.md), [SPECIFICATION_STANDARD.md](../SPECIFICATION_STANDARD.md), [ENGINEERING_PRINCIPLES.md](../ENGINEERING_PRINCIPLES.md), [ADR-0003](../adr/0003-gap-aware-slicing.md), [ADR-0004](../adr/0004-optional-assembly-mechanisms.md), [ADR-0005](../adr/0005-dowel-before-gap-ordering.md), [SLICE_ENGINE_SPEC.md](SLICE_ENGINE_SPEC.md)
 
 ## 1. Kontextus
@@ -38,7 +38,7 @@ Minden Spacer:
 | átmérő | = `spacer_diameter_mm` | mm |
 | vastagság | = az adott Gap mérete (`gap_mm`) | mm |
 | pozíció | koordináta a metszet-régión belül | mm |
-| tartozó Gap / régió azonosító | hivatkozás | — |
+| tartozó Gap / régió azonosító | hivatkozás — a régió-azonosító minden Gap-en belül 1-től újraindul (nem a teljes Slice Set-en át folyamatos sorszám) | — |
 
 ## 5. Paraméterek
 
@@ -46,7 +46,7 @@ Minden Spacer:
 |---|---|---|---|
 | `spacer_diameter_mm` | nincs (kötelező) | `> 0` | A henger alakú Spacer átmérője. Ha `use_dowels` igaz, ennek az értéknek meg kell egyeznie a Dowel Engine saját `spacer_diameter_mm` paraméterével — az egyeztetés a Project felelőssége. |
 | `spacer_count_per_gap` | `3` | `≥ 1` | Az elhelyezendő Spacer-ek célszáma metszet-régiónként. |
-| `min_spacers_per_region` | `1` | `1 ≤ x ≤ spacer_count_per_gap` | A minimálisan elfogadható Spacer-szám egy metszet-régióban, ha a cél (`spacer_count_per_gap`) nem fér el. |
+| `min_spacers_per_region` | `1` | `0 ≤ x ≤ spacer_count_per_gap` | A minimálisan elfogadható Spacer-szám egy metszet-régióban, ha a cél (`spacer_count_per_gap`) nem fér el. `0` explicit megengedi, hogy egy régióban egyáltalán ne legyen Spacer (pl. egy apró, Dowel-lel önmagában megfelelően megtámasztott kapcsolódási pontnál) — ez tudatos, projektgazdai beállítást igényel, nem az alapértelmezett (`1`) viselkedés. |
 
 ## 6. Viselkedés
 
@@ -66,8 +66,9 @@ Minden Spacer:
 Fail-fast elven:
 
 * Érvénytelen (`≤ 0`) `spacer_diameter_mm` → **hiba**.
-* Érvénytelen (`< 1`) `spacer_count_per_gap` vagy `min_spacers_per_region`, vagy `min_spacers_per_region > spacer_count_per_gap` → **hiba**.
-* Egy metszet-régió nem képes befogadni legalább `min_spacers_per_region` db Spacert (a Dowel-alapú és önálló pozíciókat együtt számítva, ideértve a nulla átfedésű esetet is) → **hiba**.
+* Érvénytelen (`< 1`) `spacer_count_per_gap` → **hiba**.
+* Érvénytelen (`< 0`) `min_spacers_per_region`, vagy `min_spacers_per_region > spacer_count_per_gap` → **hiba**.
+* Egy metszet-régió nem képes befogadni legalább `min_spacers_per_region` db Spacert (a Dowel-alapú és önálló pozíciókat együtt számítva, ideértve a nulla átfedésű esetet is) → **hiba**. `min_spacers_per_region = 0` esetén ez a feltétel sosem teljesül (a régió mindig elfogadott, akár nulla Spacerrel is) — ilyenkor a 6. szakasz 5. pontja szerinti figyelmeztetés rögzítése akkor is megtörténik, ha a ténylegesen elhelyezett Spacer-szám nulla.
 
 ## 8. Kapcsolódó engine-ek és Domain Model fogalmak
 
@@ -85,4 +86,6 @@ Nincs megválaszolatlan pont.
 * A Bemenet egyértelműen jelzi, hogy a Slice Set forrása a Dowel Engine (nem a Slice Engine közvetlenül).
 * A Spacer-elhelyezés bizonyíthatóan előnyben részesíti a Dowel-pozíciókat, és csak a hiányzó darabszámig generál önálló pozíciót (ADR-0005).
 * A régiónkénti minimum/cél Spacer-szám logika (Dowel-alapú és önálló pozíciók együttesen) egyértelműen rögzített.
+* A `min_spacers_per_region` `0` értékének explicit megengedettsége és jelentése egyértelműen rögzített.
+* A régió-azonosító Gap-enkénti újraindítása egyértelműen rögzített.
 * A Hibakezelés fail-fast elven, egyértelműen felsorolja a blokkoló eseteket.

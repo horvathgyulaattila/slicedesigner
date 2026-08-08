@@ -37,6 +37,41 @@ _AXIS_NORMAL: dict[SliceAxis, tuple[float, float, float]] = {
     SliceAxis.Z: (0.0, 0.0, 1.0),
 }
 
+# Explicit, kézzel megkonstruált 2D-vetítési (forgatás, NEM tükrözés)
+# mátrixok tengelyenként, a `trimesh.Path3D.to_2D(to_2D=...)` számára —
+# ahelyett, hogy a `trimesh` normálvektorból automatikusan számított,
+# nem dokumentált, és X/Y tengelyre empirikusan bizonyítottan helytelen
+# előjelű/sorrendű belső konvenciójára hagyatkoznánk. Minden mátrix
+# tisztán a világtengelyek egy ciklikus permutációja (determináns +1,
+# valódi forgatás), fordulás nélküli eltolással — így a kontúr két
+# koordinátája mindig a `slice_axis`-tól eltérő két világtengelyt adja
+# vissza, pozitív előjellel, lent jelölt sorrendben. Ugyanaz a konvenció,
+# amit a Backplate/Numbering Engine és a GUI render_geometry.py már
+# eddig is feltételezett (`_SLICE_AXIS_CONTOUR_ORDER`/`_AXIS_MAPPING`).
+_TO_2D_ROTATION: dict[SliceAxis, list[list[float]]] = {
+    # kontúr = (+X, +Y)
+    SliceAxis.Z: [
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ],
+    # kontúr = (+Y, +Z)
+    SliceAxis.X: [
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ],
+    # kontúr = (+Z, +X)
+    SliceAxis.Y: [
+        [0.0, 0.0, 1.0, 0.0],
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ],
+}
+
 
 class HoleKind(Enum):
     """Egy CW (lyuk-) kontúr eredetének/típusának megkülönböztetése.
@@ -123,6 +158,24 @@ class SliceSet:
     slice_axis: SliceAxis = SliceAxis.Z
 
 
+def _compute_uniform_scale_factor(
+    axis_size: float, slice_count: int, slice_thickness_mm: float, gap_mm: float
+) -> float:
+    """A Mesh egységes skálázási tényezője, amivel a `slice_count` db,
+    `slice_thickness_mm` vastag szelet (`gap_mm` réssel köztük) pontosan
+    kiadja a szeletelési tengely menti céloméretet.
+
+    Megosztott logika a Slice Engine (`create_slice_set`) és a Backplate
+    Engine (a Backplate-alak Boole-metszetéhez szükséges, azonos módon
+    skálázott Mesh előállításához) között — egyetlen forrásból, elkerülve
+    a korábban már egyszer hibát okozó (`render_geometry.py`/
+    `numbering_engine.py` önálló, elavult közelítései miatti)
+    duplikációt.
+    """
+    target_size = slice_count * slice_thickness_mm + (slice_count - 1) * gap_mm
+    return target_size / axis_size
+
+
 def create_slice_set(
     mesh: Mesh,
     slice_thickness_mm: float,
@@ -183,7 +236,9 @@ def create_slice_set(
             f"max_scale_tolerance értékét ({max_scale_tolerance})."
         )
 
-    scale_factor = target_size / axis_size
+    scale_factor = _compute_uniform_scale_factor(
+        axis_size, slice_count, slice_thickness_mm, gap_mm
+    )
     trimesh_mesh = trimesh.Trimesh(vertices=mesh.vertices, faces=mesh.triangles)
     if abs(scale_factor - 1.0) > _SCALE_IDENTITY_EPSILON:
         scale_matrix = [
@@ -204,8 +259,6 @@ def create_slice_set(
     bounds = trimesh_mesh.bounds
     axis_min = float(bounds[0][axis_index])
 
-    plane_origin = [0.0, 0.0, 0.0]
-    plane_origin[axis_index] = axis_min
     plane_normal = _AXIS_NORMAL[slice_axis]
 
     positions = [
@@ -213,21 +266,20 @@ def create_slice_set(
         for i in range(slice_count)
     ]
 
-    sections = trimesh_mesh.section_multiplane(
-        plane_origin=plane_origin,
-        plane_normal=plane_normal,
-        heights=positions,
-    )
-
     slices: list[Slice] = []
-    for i, (position, path2d) in enumerate(
-        zip(positions, sections, strict=True), start=1
-    ):
-        if path2d is None:
+    for i, position in enumerate(positions, start=1):
+        plane_origin = [0.0, 0.0, 0.0]
+        plane_origin[axis_index] = axis_min + position
+
+        path3d = trimesh_mesh.section(
+            plane_origin=plane_origin, plane_normal=plane_normal
+        )
+        if path3d is None:
             raise InvalidSliceError(
                 f"A(z) {i}. szeletnél ({position:.4f} mm pozíció) a metszősík "
                 "üres keresztmetszetet eredményezett."
             )
+        path2d, _to_3d = path3d.to_2D(to_2D=_TO_2D_ROTATION[slice_axis])
         if not path2d.is_closed:
             raise InvalidSliceError(
                 f"A(z) {i}. szeletnél ({position:.4f} mm pozíció) a metszősík "

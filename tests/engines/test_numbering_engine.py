@@ -4,7 +4,9 @@ import logging
 
 import pytest
 import trimesh
+from shapely.geometry import Polygon
 
+from slicedesigner.engines import numbering_engine as numbering_engine_module
 from slicedesigner.engines.backplate_engine import (
     BackplateNormalAxis,
     apply_backplate,
@@ -15,6 +17,9 @@ from slicedesigner.engines.mesh_import import BoundingBox, Mesh
 from slicedesigner.engines.numbering_engine import (
     NumberingDirectionSign,
     SliceNumberingOverride,
+    _build_text_strokes,
+    _resolve_numbering_axes,
+    _search_best_anchor,
     apply_numbering,
     apply_numbering_to_backplate,
 )
@@ -95,6 +100,45 @@ def _make_hand_slice_set_numbering(
         gap_mm=0.0,
         slices=tuple(slices),
         slice_count=len(slices_rects),
+    )
+
+
+def _make_hand_slice_set_polygon_islands(
+    slices_islands: list[list[tuple[tuple[float, float], ...]]],
+    thickness_mm: float = 3.0,
+) -> SliceSet:
+    """`_make_hand_slice_set_numbering` általánosítása: tetszőleges (nem
+    csak téglalap alakú) szigetkontúrok, közvetlenül pontlistaként
+    megadva (CCW = szolid határ)."""
+    slices = [
+        Slice(
+            thickness_mm=thickness_mm,
+            contours=tuple(Contour(points=pts) for pts in islands),
+            position_mm=(i - 0.5) * thickness_mm,
+            index=i,
+        )
+        for i, islands in enumerate(slices_islands, start=1)
+    ]
+    all_x = [p[0] for islands in slices_islands for pts in islands for p in pts]
+    all_y = [p[1] for islands in slices_islands for pts in islands for p in pts]
+    bounding_box = BoundingBox(
+        min=(min(all_x), min(all_y), 0.0),
+        max=(max(all_x), max(all_y), len(slices_islands) * thickness_mm),
+    )
+    mesh = Mesh(
+        vertices=((0.0, 0.0, 0.0),),
+        triangles=(),
+        source_path="hand-built.stl",
+        bounding_box=bounding_box,
+        is_valid=True,
+        warnings=(),
+    )
+    return SliceSet(
+        source_mesh=mesh,
+        slice_axis=SliceAxis.Z,
+        gap_mm=0.0,
+        slices=tuple(slices),
+        slice_count=len(slices_islands),
     )
 
 
@@ -188,7 +232,12 @@ def test_apply_numbering_manual_position_used() -> None:
     mark = result.slices[0].numbering_marks[0]
     all_points = [p for stroke in mark.strokes for p in stroke]
     xs = [p[0] for p in all_points]
-    assert max(xs) == pytest.approx(0.0, abs=1e-6)
+    # Az új `_glyph_to_local()` a betű alakját a horgonyponttól KIFELÉ
+    # (nem befelé) tolja el (l. a függvény docstringjét): a "1" karakter
+    # egyetlen, gx=0.6*height_mm=3.0-nál futó függőleges száron áll, így
+    # minden pontja anchor_x (0.0) + 3.0 = 3.0-nál van — nem az anchor
+    # pontján (0.0), mint a korábbi, befelé-növekvő leképezésnél.
+    assert max(xs) == pytest.approx(3.0, abs=1e-6)
 
 
 def test_apply_numbering_invalid_height_raises() -> None:
@@ -249,11 +298,13 @@ def _make_numbered_backplate_fixture(
         extents=(20.0, 30.0, 15.0), slice_thickness_mm=3.0, gap_mm=1.0
     )
 
-    slice_set_with_tabs, tabs = place_backplate_tabs(
-        slice_set,
-        backplate_normal_axis=BackplateNormalAxis.PLUS_X,
-        backplate_thickness_mm=3.0,
-        tab_length_mm=5.0,
+    slice_set_with_tabs, tabs, _common_plane_mm, _backplate_shape = (
+        place_backplate_tabs(
+            slice_set,
+            backplate_normal_axis=BackplateNormalAxis.PLUS_X,
+            backplate_thickness_mm=3.0,
+            tab_length_mm=5.0,
+        )
     )
     _slice_set_dup, backplate = apply_backplate(
         slice_set,
@@ -337,3 +388,295 @@ def test_apply_numbering_to_backplate_negative_margin_raises() -> None:
             numbering_height_mm=2.0,
             numbering_margin_mm=-1.0,
         )
+
+
+def test_apply_numbering_places_mark_on_notched_island() -> None:
+    """ "L" alakú sziget: a befoglaló téglalap "hátulsó-alsó" sarka (a
+    kimetszett saroknégyzet miatt) a sziget anyagán kívülre esik.
+    Korábban ez azt jelentette, hogy az azonosító a szigetről teljesen
+    kimaradt, annak ellenére, hogy a szigeten bőven lenne hely máshol
+    (NUMBERING_SPEC.md 6. szakasz, 2-4. pont — keresés-alapú
+    pozícionálás)."""
+    l_shape = (
+        (0.0, 0.0),
+        (20.0, 0.0),
+        (20.0, 15.0),
+        (15.0, 15.0),
+        (15.0, 20.0),
+        (0.0, 20.0),
+    )
+    slice_set = _make_hand_slice_set_polygon_islands([[l_shape]])
+
+    result = apply_numbering(
+        slice_set,
+        numbering_normal_axis=BackplateNormalAxis.PLUS_X,
+        numbering_direction_axis_sign=NumberingDirectionSign.POSITIVE,
+        numbering_height_mm=5.0,
+    )
+
+    marks = result.slices[0].numbering_marks
+    assert len(marks) == 1
+    assert marks[0].height_mm == pytest.approx(5.0)
+    assert len(marks[0].strokes) > 0
+
+
+def test_search_best_anchor_finds_closest_valid_position() -> None:
+    """A `_search_best_anchor` a célponthoz legközelebbi, ténylegesen
+    elférő pozíciót adja vissza, nem egy tetszőleges/távoli helyet.
+
+    Az új `_glyph_to_local()` a betű (illetve a footprint-téglalap)
+    lenyomatát a horgonyponttól mindkét tengelyen KIFELÉ (a nagyobb
+    koordináták felé) tolja el (`upright=True` esetén: `anchor + (gx,
+    gy)`) — l. a `_glyph_to_local` docstringjét. Emiatt a footprint
+    `[anchor_normal, anchor_normal + width_mm] x [anchor_direction,
+    anchor_direction + height_mm]` (itt `width_mm = 0.6 * 5.0 = 3.0`,
+    `height_mm = 5.0`). Az "L" alakú sziget befoglaló tartománya
+    [0, 20] mindkét tengelyen, kivéve a [15, 20] x [15, 20] kimetszett
+    sarkot — így a footprint csak akkor fér el, ha egyszerre:
+    `anchor_normal <= 17` és `anchor_direction <= 15` (a [0,20]
+    tartományon belül marad), ÉS (`anchor_normal <= 12` VAGY
+    `anchor_direction <= 10`) (elkerüli a kimetszett sarkot).
+
+    A célponthoz (`target_normal = target_direction = 18.75`)
+    legközelebbi, ezt kielégítő rácspont (1.0 mm-es lépésekkel)
+    `(anchor_normal, anchor_direction) = (12.0, 15.0)` — ez az
+    `anchor_normal <= 12` ágat választja (a 17-es korlátot kihasználó
+    ág, `anchor_direction <= 10`, ennél távolabb esne a célponttól)."""
+    l_shape_polygon = Polygon(
+        [
+            (0.0, 0.0),
+            (20.0, 0.0),
+            (20.0, 15.0),
+            (15.0, 15.0),
+            (15.0, 20.0),
+            (0.0, 20.0),
+        ]
+    )
+    # text="1", height_mm=5.0 -> width_mm = 0.6 * 5.0 = 3.0
+    target_normal = 20.0 - 1.25
+    target_direction = 20.0 - 1.25
+
+    result = _search_best_anchor(
+        "1",
+        5.0,
+        True,
+        target_normal,
+        target_direction,
+        0,
+        1.0,
+        1,
+        1.0,
+        l_shape_polygon,
+        0.0,
+        20.0,
+        0.0,
+        20.0,
+    )
+
+    assert result is not None
+    anchor_normal, anchor_direction = result
+    assert anchor_normal == pytest.approx(12.0)
+    assert anchor_direction == pytest.approx(15.0)
+
+    # A talált pozíció a kimetszett sarok elkerülése miatt kényszerűen
+    # távol esik a célponttól (l. a docstringet) — ez a "kifelé
+    # növekvő" leképezés elfogadott, teljesítménybeli (nem
+    # helyességi) következménye, nem a keresés hibája: a tényleges
+    # távolság pontosan a fenti (12.0, 15.0) horgonyból adódik.
+    distance = (
+        (anchor_normal - target_normal) ** 2
+        + (anchor_direction - target_direction) ** 2
+    ) ** 0.5
+    assert distance == pytest.approx(7.721722605740251)
+
+
+def test_search_best_anchor_quick_path_finds_inward_corner_without_full_scan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A gyors út a szöveg-téglalap mind a négy lehetséges sarok-
+    illesztését kipróbálja, mielőtt a teljes rácsos keresésre esne —
+    így akkor is O(1) hívással talál megoldást, ha a célpont a
+    lenyomat "befelé eső" (nem a "kifelé eső") sarkát reprezentálja.
+
+    A sziget itt PONTOSAN a szöveg-lenyomat méretével egyezik (3.0 x
+    5.0 mm — text="1", height_mm=5.0), az origóban:
+    (0,0)-(3,0)-(3,5)-(0,5). A célpont a lenyomat "kifelé eső" sarka
+    (target_normal=3.0, target_direction=5.0): a lenyomatot közvetlenül
+    a célpontra próbálva [3,6] x [5,10]-re esne, teljesen a sziget
+    anyagán KÍVÜL. A négy sarok-illesztési jelölt közül csak az,
+    amelyik a célpontot a lenyomat jobb-felső sarkával illeszti (azaz
+    a lenyomatot a "befelé eső" (0,0)-(3,5) téglalapra helyezi),
+    esik a sziget anyagán belülre — ezt a gyors útnak a teljes,
+    [-100, 100] tartományú rácsos bejárás (több ezer `_fits()` hívás)
+    nélkül kell megtalálnia."""
+    island_polygon = Polygon([(0.0, 0.0), (3.0, 0.0), (3.0, 5.0), (0.0, 5.0)])
+
+    call_count = 0
+    original_fits = numbering_engine_module._fits
+
+    def _counting_fits(*args: object, **kwargs: object) -> bool:
+        nonlocal call_count
+        call_count += 1
+        return bool(original_fits(*args, **kwargs))
+
+    monkeypatch.setattr(numbering_engine_module, "_fits", _counting_fits)
+
+    result = _search_best_anchor(
+        "1",
+        5.0,
+        True,
+        3.0,
+        5.0,
+        0,
+        1.0,
+        1,
+        1.0,
+        island_polygon,
+        -100.0,
+        100.0,
+        -100.0,
+        100.0,
+    )
+
+    assert result is not None
+    anchor_normal, anchor_direction = result
+    assert anchor_normal == pytest.approx(0.0)
+    assert anchor_direction == pytest.approx(0.0)
+
+    # A négy gyors jelölt mindegyike pontosan egy `_fits()` hívást
+    # jelent — ha ennél sokkal több hívás történt, az azt jelentené,
+    # hogy a teljes, [-100, 100] tartományú rácsos bejárás is lefutott.
+    assert call_count <= 4
+
+
+def test_build_text_strokes_not_mirrored_for_normal_index_zero() -> None:
+    """Regressziós teszt az új `_glyph_to_local()`-ra — élő eset:
+    `slice_axis=X`, `numbering_normal_axis=+Y`, ami `normal_index=0`-t
+    eredményez.
+
+    Az új leképezésnél a betű ALAKJA (a `(gx, gy)` -> `(offset0,
+    offset1)` eltolás) szándékosan FÜGGETLEN a `normal_index`/
+    `direction_index` hozzárendeléstől: `upright=True` esetén mindig
+    `offset0 = gx`, `offset1 = gy` — tehát a `direction_index` szerinti
+    koordináta immár NEM feltétlenül hordozza a gx-eredetű (vízszintes)
+    kiterjedést (ez itt `direction_index=1`, ami csak gy-t hordoz —
+    l. lejjebb). A tükrözés-ellenőrzést ezért a 0. (nem a
+    `direction_index` szerinti) koordinátán végezzük, amely
+    `upright=True`-nál mindig a gx-eredetű kiterjedést hordozza,
+    a `normal_index`/`direction_index` hozzárendelésétől függetlenül.
+
+    A "7" karakter aszimmetrikus: egy teljes szélességű vízszintes
+    felső vonalból (glyph-tér gx: 0 -> `0.6*height_mm`) és egy, a
+    *nagyobb* gx-oldalon (gx = `0.6*height_mm`) végigfutó függőleges
+    szárból áll. Helyes (nem tükrözött) leképezésnél a szárnak a 0.
+    koordinátán a vízszintes vonal *nagyobbik* végpontjával azonos
+    oldalra kell esnie — egy tükrözött leképezésnél a kisebbik oldalra
+    esne."""
+    normal_index, normal_sign, direction_index = _resolve_numbering_axes(
+        SliceAxis.X, BackplateNormalAxis.PLUS_Y
+    )
+    assert normal_index == 0
+    assert direction_index == 1
+
+    strokes = _build_text_strokes(
+        "7",
+        10.0,
+        True,
+        50.0,
+        50.0,
+        normal_index,
+        normal_sign,
+        direction_index,
+        1.0,
+    )
+
+    # "7" szegmensei ("abc"): "a" a felső vízszintes vonal (gx: 0 ->
+    # 0.6*height), "b"/"c" együtt a jobb oldali függőleges szár
+    # (gx = 0.6*height, gy: height -> 0).
+    top_stroke, stem_upper_stroke, stem_lower_stroke = strokes
+    top_start_x = top_stroke[0][0]
+    top_end_x = top_stroke[1][0]
+    stem_x = stem_upper_stroke[0][0]
+
+    # A szár a vízszintes vonal *nagyobbik* végpontjával azonos
+    # oldalon van — nem a kisebbiken (ami tükrözést jelentene).
+    assert stem_x == pytest.approx(max(top_start_x, top_end_x))
+    assert stem_x != pytest.approx(min(top_start_x, top_end_x))
+
+    # A szár mindkét fél-szegmense (b, c) ugyanazon a 0. koordinátán
+    # fut (függőleges vonal) — ez csak a geometria integritását
+    # igazolja.
+    assert stem_upper_stroke[1][0] == pytest.approx(stem_x)
+    assert stem_lower_stroke[0][0] == pytest.approx(stem_x)
+    assert stem_lower_stroke[1][0] == pytest.approx(stem_x)
+
+
+def test_build_text_strokes_f_stands_upright_and_unmirrored() -> None:
+    """Regressziós teszt az új `_glyph_to_local()`-ra (a prompt 7.
+    szakasza szerinti elfogadási kritérium): az "F" karakter a
+    tényleges stroke-koordinátái alapján helyesen áll — nem tükrözött
+    ÉS nem fejjel lefelé.
+
+    Az "F" ("aefg" szegmensek) egy teljes magasságú, BAL oldali
+    (gx=0) függőleges szárból (f: felső fél, e: alsó fél) és két,
+    a szártól JOBBRA kinyúló vízszintes vonalból áll: "a" a tetején
+    (gy=height), "g" középen (gy=height/2).
+
+    `upright=True` esetén `offset0=gx`, `offset1=gy` (l. a
+    `_glyph_to_local` docstringjét) — ez a betű alakját a
+    horgonyponttól (10.0, 10.0) függetlenül, mindig ugyanígy rögzíti,
+    normal/direction-index-hozzárendeléstől függetlenül."""
+    strokes = _build_text_strokes(
+        "F",
+        10.0,
+        True,
+        10.0,
+        10.0,
+        0,
+        1.0,
+        1,
+        1.0,
+    )
+    top_stroke, e_stroke, f_stroke, middle_stroke = strokes
+
+    # Nem tükrözött: a függőleges szár (f, e) a horgonypont SAJÁT
+    # oldalán (0. koordináta = 10.0, a gx=0-nak megfelelően) marad —
+    # nem tolódik el a szemközti oldalra —, és a vízszintes vonalak
+    # ettől JOBBRA (nagyobb 0. koordináta felé) nyúlnak ki.
+    assert f_stroke[0][0] == pytest.approx(10.0)
+    assert f_stroke[1][0] == pytest.approx(10.0)
+    assert e_stroke[0][0] == pytest.approx(10.0)
+    assert e_stroke[1][0] == pytest.approx(10.0)
+    assert top_stroke[1][0] > f_stroke[0][0]
+    assert middle_stroke[1][0] > f_stroke[0][0]
+
+    # Nem fejjel lefelé: a felső vonal (a) magasabban van (nagyobb 1.
+    # koordináta), mint a középső (g) — nem megfordítva.
+    assert top_stroke[0][1] > middle_stroke[0][1]
+
+
+def test_apply_numbering_manual_position_does_not_search(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Kézi `manual_position` felülbírálás esetén nincs automatikus
+    keresés: ha a megadott ponton egyik tájolásban/méretben sem fér el
+    az azonosító, a jelölés kimarad figyelmeztetéssel — annak
+    ellenére, hogy a szigeten (mint azt
+    `test_apply_numbering_manual_position_used` ugyanezen a
+    fixture-ön demonstrálja) bőven lenne hely máshol."""
+    slice_set = _make_box_slice_set(extents=(20.0, 30.0, 15.0), slice_thickness_mm=3.0)
+    override = SliceNumberingOverride(slice_index=1, manual_position=(1000.0, 1000.0))
+
+    with caplog.at_level(logging.WARNING):
+        result = apply_numbering(
+            slice_set,
+            numbering_normal_axis=BackplateNormalAxis.PLUS_X,
+            numbering_direction_axis_sign=NumberingDirectionSign.POSITIVE,
+            numbering_height_mm=5.0,
+            slice_numbering_overrides=(override,),
+        )
+
+    assert len(result.slices[0].numbering_marks) == 0
+    assert any(
+        "numbering_min_height_mm" in record.getMessage() for record in caplog.records
+    )

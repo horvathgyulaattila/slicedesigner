@@ -4,10 +4,11 @@ import logging
 
 import pytest
 import trimesh
+from shapely.geometry import Polygon
 
 from slicedesigner.engines.exceptions import InvalidSliceError
 from slicedesigner.engines.mesh_import import BoundingBox, Mesh
-from slicedesigner.engines.slice_engine import create_slice_set
+from slicedesigner.engines.slice_engine import SliceAxis, create_slice_set
 
 
 def _mesh_from_trimesh(tm: trimesh.Trimesh, source_path: str = "test.stl") -> Mesh:
@@ -154,3 +155,109 @@ def test_create_slice_set_insufficient_slice_count_raises() -> None:
 
     with pytest.raises(InvalidSliceError):
         create_slice_set(mesh, slice_thickness_mm=10.0)
+
+
+# Aszimmetrikus "L" alakú keresztmetszet: egy 20x20-as négyzetből a
+# (15,15)-(20,20) saroknégyzet hiányzik. A hiányzó sarok a pozitív
+# tartomány (nagy x, nagy y) felé esik — ha a kontúr tükröződne, a hiány
+# a negatív (vagy más) sarokban jelenne meg, ami az alábbi tesztekben
+# konkrétan ellenőrzött.
+_L_SHAPE: tuple[tuple[float, float], ...] = (
+    (0.0, 0.0),
+    (20.0, 0.0),
+    (20.0, 15.0),
+    (15.0, 15.0),
+    (15.0, 20.0),
+    (0.0, 20.0),
+)
+
+
+def _extrude_l_shape(height: float) -> trimesh.Trimesh:
+    """Az `_L_SHAPE` CCW sokszög +Z menti extrudálása watertight háromszög-hálóvá.
+
+    Kézzel épített (nem `trimesh.creation.extrude_polygon`, mert az egy
+    külső triangulációs motort igényelne, ami a teszt-környezetben nem
+    elérhető).
+    """
+    n = len(_L_SHAPE)
+    bottom = [(x, y, 0.0) for x, y in _L_SHAPE]
+    top = [(x, y, height) for x, y in _L_SHAPE]
+    vertices = bottom + top
+    faces: list[tuple[int, int, int]] = []
+    for i in range(1, n - 1):
+        faces.append((0, i + 1, i))
+    for i in range(1, n - 1):
+        faces.append((n, n + i, n + i + 1))
+    for i in range(n):
+        j = (i + 1) % n
+        faces.append((i, j, n + j))
+        faces.append((i, n + j, n + i))
+    return trimesh.Trimesh(vertices=vertices, faces=faces)
+
+
+def _assert_l_shape_contour_not_mirrored(
+    points: tuple[tuple[float, float], ...],
+) -> None:
+    """A kontúr valóban az `_L_SHAPE`-nek megfelelő, pozitív, nem tükrözött
+    elhelyezkedésű-e."""
+    polygon = Polygon(points)
+    min_x, min_y, max_x, max_y = polygon.bounds
+    assert min_x == pytest.approx(0.0, abs=1e-6)
+    assert min_y == pytest.approx(0.0, abs=1e-6)
+    assert max_x == pytest.approx(20.0)
+    assert max_y == pytest.approx(20.0)
+
+    # A hiányzó sarok (15,15)-(20,20) belseje: nem szabad, hogy anyag legyen.
+    assert not polygon.contains(Polygon([(16, 16), (19, 16), (19, 19), (16, 19)]))
+    # A megmaradt "L" szárak belseje: legyen anyag.
+    assert polygon.contains(Polygon([(1, 1), (2, 1), (2, 2), (1, 2)]))
+    assert polygon.contains(Polygon([(18, 1), (19, 1), (19, 2), (18, 2)]))
+    assert polygon.contains(Polygon([(1, 18), (2, 18), (2, 19), (1, 19)]))
+
+
+def test_create_slice_set_x_axis_contour_not_mirrored() -> None:
+    """X tengelyű szeletelésnél a kontúr két koordinátája világ +Y, +Z —
+    nem tükrözött (l. a Slice Engine `_TO_2D_ROTATION` javítását)."""
+    # Ciklikus permutáció (forgatás): world_x = local_z, world_y = local_x,
+    # world_z = local_y — így az extrudálási tengely (local z) world X
+    # lesz, a keresztmetszet (local x, local y) pedig world (Y, Z).
+    extruded = _extrude_l_shape(height=10.0)
+    extruded.apply_transform(
+        [
+            [0.0, 0.0, 1.0, 0.0],
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+    )
+    mesh = _mesh_from_trimesh(extruded)
+
+    slice_set = create_slice_set(mesh, slice_thickness_mm=10.0, slice_axis=SliceAxis.X)
+
+    assert slice_set.slice_count == 1
+    contour = slice_set.slices[0].contours[0]
+    _assert_l_shape_contour_not_mirrored(contour.points)
+
+
+def test_create_slice_set_y_axis_contour_not_mirrored() -> None:
+    """Y tengelyű szeletelésnél a kontúr két koordinátája világ +Z, +X —
+    nem tükrözött (l. a Slice Engine `_TO_2D_ROTATION` javítását)."""
+    # Ciklikus permutáció (forgatás): world_x = local_y, world_y = local_z,
+    # world_z = local_x — így az extrudálási tengely (local z) world Y
+    # lesz, a keresztmetszet (local x, local y) pedig world (Z, X).
+    extruded = _extrude_l_shape(height=10.0)
+    extruded.apply_transform(
+        [
+            [0.0, 1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+    )
+    mesh = _mesh_from_trimesh(extruded)
+
+    slice_set = create_slice_set(mesh, slice_thickness_mm=10.0, slice_axis=SliceAxis.Y)
+
+    assert slice_set.slice_count == 1
+    contour = slice_set.slices[0].contours[0]
+    _assert_l_shape_contour_not_mirrored(contour.points)

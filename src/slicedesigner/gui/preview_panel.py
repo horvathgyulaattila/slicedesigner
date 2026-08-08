@@ -22,7 +22,7 @@ from pyvistaqt import QtInteractor
 from slicedesigner.engines.backplate_engine import Backplate, BackplateNormalAxis
 from slicedesigner.engines.dowel_engine import DowelPosition
 from slicedesigner.engines.gap_engine import Spacer
-from slicedesigner.engines.mesh_import import Mesh
+from slicedesigner.engines.mesh_import import BoundingBox, Mesh
 from slicedesigner.engines.slice_engine import SliceSet
 from slicedesigner.gui.render_geometry import (
     backplate_to_polydata,
@@ -239,6 +239,42 @@ class PreviewPanel(QWidget):
             slice_set, dowel_positions, spacers, backplate, backplate_normal_axis
         )
 
+    def _add_origin_gizmo(self, bounding_box: BoundingBox) -> None:
+        """A világ-origó és a három pozitív tengelyirány (X, Y, Z)
+        megjelenítése apró nyilakkal, valamint az X-Y sík halvány
+        jelzése — kizárólag vizuális tájékozódási segédlet (nincs
+        geometriai/üzleti hatása), hogy a 3D nézet és az exportált DXF
+        egyértelműen, tévedés nélkül összevethető legyen.
+
+        A nyilak/sík mérete a `bounding_box` legnagyobb kiterjedéséhez
+        igazodik, hogy kis és nagy modelleknél egyaránt arányos maradjon.
+        A színek szándékosan eltérnek a Dowel/Backplate/Spacer réteg-
+        színeitől ("red"/"green"/"blue"/"lightgray"), hogy a meglévő,
+        szín szerint csoportosító tesztek (`tests/gui/test_preview_panel.py`)
+        ne keveredjenek össze velük.
+        """
+        max_extent = max(bounding_box.max[i] - bounding_box.min[i] for i in range(3))
+        arrow_length = max(max_extent * 0.25, 1.0)
+
+        for direction, color in (
+            ((1.0, 0.0, 0.0), "orangered"),
+            ((0.0, 1.0, 0.0), "mediumseagreen"),
+            ((0.0, 0.0, 1.0), "royalblue"),
+        ):
+            arrow = pv.Arrow(
+                start=(0.0, 0.0, 0.0), direction=direction, scale=arrow_length
+            )
+            self.plotter.add_mesh(arrow, color=color)
+
+        plane_size = max_extent * 1.2
+        plane = pv.Plane(
+            center=(0.0, 0.0, 0.0),
+            direction=(0.0, 0.0, 1.0),
+            i_size=plane_size,
+            j_size=plane_size,
+        )
+        self.plotter.add_mesh(plane, color="gainsboro", opacity=0.15)
+
     def _add_solid_with_edges(
         self, polydata: pv.PolyData, *, color: str, opacity: float = 1.0
     ) -> None:
@@ -275,6 +311,7 @@ class PreviewPanel(QWidget):
 
     def _render_mesh(self, mesh: Mesh) -> None:
         self.plotter.clear()
+        self._add_origin_gizmo(mesh.bounding_box)
         self._add_solid_with_edges(mesh_to_polydata(mesh), color="lightgray")
         # pyvista `Plotter.reset_camera` is `@wraps`-decorated from
         # `Renderer.reset_camera`, which confuses mypy into requiring an
@@ -291,6 +328,7 @@ class PreviewPanel(QWidget):
         backplate_normal_axis: BackplateNormalAxis | None = None,
     ) -> None:
         self.plotter.clear()
+        self._add_origin_gizmo(slice_set.source_mesh.bounding_box)
         highlighted_index = self._highlighted_slice_index()
         # Kiemeléskor minden más réteg elhalványodik, hogy a kiemelt
         # szelet köré szabadon körbejárható legyen a nézet — a kiemelt

@@ -41,7 +41,7 @@ Minden azonosító:
 | geometria | vektoros kontúr |
 | tájolás | álló vagy 90°-kal elforgatott (amelyik nagyobb, még érvényes méretet enged) |
 | tényleges magasság | a `numbering_height_mm` és a rendelkezésre álló hely alapján számolt, ténylegesen alkalmazott érték |
-| pozíció | a sziget "hátulsó-alsó" sarkában (Slice-on), illetve a legalsó érintkező szakasz sávjában (Backplate-en) |
+| pozíció | a sziget "hátulsó-alsó" sarkához legközelebbi, ténylegesen elférő pozícióban (Slice-on) — l. 6. szakasz 2–3. pont —, illetve a legalsó érintkező szakasz sávjában (Backplate-en) |
 
 ## 5. Paraméterek
 
@@ -57,9 +57,9 @@ Minden azonosító:
 ## 6. Viselkedés
 
 1. Minden szelet minden szigetéhez az azonosító szöveg meghatározása.
-2. Minden szigethez (felülírt paraméterekkel, ha van): a sziget "hátulsó" és "alsó" sarkának meghatározása, `numbering_margin_mm` távolságra a két éltől.
-3. A rendelkezésre álló hely megvizsgálása mindkét tájolásban (álló, 90°-kal elforgatott); a nagyobb elérhető magasságot engedő tájolás kiválasztása.
-4. Ha `numbering_height_mm` befér → azzal a mérettel; ha nem, de `numbering_min_height_mm` igen → a ténylegesen elférő mérettel, figyelmeztetéssel; ha még az sem fér el → a jelölés kimarad az adott szigetről, figyelmeztetéssel (ugyanígy, mint a Backplate-en lévő azonosítónál, lásd 6. lépés).
+2. Minden szigethez (felülírt paraméterekkel, ha van): a sziget "hátulsó" és "alsó" sarkának meghatározása, `numbering_margin_mm` távolságra a két éltől — ez a pozíció a keresés preferált célpontja, nem kizárólagos, kötelező helye (l. 3–4. pont).
+3. Minden vizsgált magasság-tájolás kombinációhoz (l. 4. pont): annak megállapítása, hogy a 2. pont szerinti célpontban elfér-e az azonosító; ha nem, a sziget teljes területén (a befoglaló téglalapján belül, felső korlát vagy keresési sugár nélkül) keresés a célponthoz legközelebbi olyan pozícióra, ahol az azonosító teljes egészében a sziget anyagán belül marad. A kettő közül a nagyobb elérhető magasságot engedő tájolás kiválasztása; azonos magasság esetén a célponthoz közelebbi pozíció élvez elsőbbséget.
+4. Ha `numbering_height_mm`-hez (bármelyik tájolásban) található érvényes pozíció (a 3. pont szerint) → azzal a mérettel; ha nem, de `numbering_min_height_mm`-hez igen → a ténylegesen elférő mérettel, figyelmeztetéssel; ha `numbering_min_height_mm`-hez sem található érvényes pozíció egyik tájolásban sem → a jelölés kimarad az adott szigetről, figyelmeztetéssel (ugyanígy, mint a Backplate-en lévő azonosítónál, lásd 6. lépés).
 5. Az azonosító vektoros geometriájának elhelyezése a sziget geometriájában.
 6. Ha van Backplate objektum: minden, a Backplate-hez kapcsolódó szigethez a legalsó érintkező szakaszának Backplate felőli sávjában (szélesség = szeletvastagság) ugyanazon azonosító elhelyezése, ugyanazzal a méretezési logikával — de itt, ha még a minimális méret sem fér el, az csak figyelmeztetés, nem hiba.
 7. A módosított Slice Set és (ha volt) a módosított Backplate objektum összeállítása és visszaadása a Project felé.
@@ -90,5 +90,6 @@ Nincs megválaszolatlan pont.
 * A specifikáció mind a 10 szakaszt hiánytalanul tartalmazza.
 * Az azonosító-formátum (N, illetve N/Betű) és a betűrend szabálya egyértelműen rögzített.
 * A tájolás-választási és méretezési logika mindkét elhelyezésre (szelet, Backplate) egységesen, figyelmeztetés-alapú fallback-kal rögzített.
+* A szelet-oldali elhelyezés a preferált sarok-pozícióhoz legközelebbi, ténylegesen elférő pozíciót keresi a sziget teljes területén, nem kizárólag az elméleti sarokpontot — ez a keresési elv egyértelműen rögzített.
 * A `numbering_normal_axis` és `numbering_direction_axis_sign` a Backplate Engine-től függetlenek.
 * A Hibakezelés fail-fast elven, egyértelműen felsorolja a blokkoló eseteket.

@@ -150,9 +150,9 @@ def apply_gap(
         raise InvalidGapError(
             f"A spacer_count_per_gap legalább 1 kell legyen: {spacer_count_per_gap}"
         )
-    if min_spacers_per_region < 1 or min_spacers_per_region > spacer_count_per_gap:
+    if min_spacers_per_region < 0 or min_spacers_per_region > spacer_count_per_gap:
         raise InvalidGapError(
-            "A min_spacers_per_region 1 és spacer_count_per_gap "
+            "A min_spacers_per_region 0 és spacer_count_per_gap "
             f"({spacer_count_per_gap}) közé kell essen: {min_spacers_per_region}"
         )
 
@@ -164,9 +164,10 @@ def apply_gap(
     sorted_indices = sorted(slices_by_index.keys())
 
     all_spacers: list[Spacer] = []
-    next_region_id = 1
 
     for start_index, end_index in zip(sorted_indices, sorted_indices[1:]):
+        next_region_id = 1
+
         slice_a = slices_by_index[start_index]
         slice_b = slices_by_index[end_index]
 

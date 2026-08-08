@@ -48,3 +48,11 @@ A Phase 4 előrehaladtával az eredeti döntés (geometriai alapkönyvtárak) te
 * `scipy`, `networkx` — a `trimesh` `section_multiplane()`/`Path2D.is_closed` opcionális, futásidejű függőségei, célzottan hozzáadva a `trimesh[easy]` extra helyett (Slice/Dowel Engine).
 
 Ez a döntés (geometriai ökoszisztéma választása) tartalmilag nem változott — csak a ténylegesen szükséges könyvtárak listája vált konkréttá, ahogy az implementáció haladt.
+
+## Frissítés (2026-08-07)
+
+A Backplate Engine alakszámítása (a "végső tesztelés" fázisban feltárt, a nyers Mesh helytelen koordináta-rendszerű felhasználásából eredő hiba javításaként) a modell tényleges geometriájából, térbeli Boole-metszettel állítja elő a hátlap kontúrját (BACKPLATE_SPEC.md 6. szakasz 10. pont) — ehhez a `trimesh` Boole-metszet művelete (`Trimesh.intersection()`) egy külön motort igényel, amit alapból nem tartalmaz. A választott motor:
+
+* `manifold3d` — *választott*: a `trimesh` dokumentációja szerint ez az ajánlott, karbantartott Boole-motor (a korábban gyakori, külső programot (pl. Blender) igénylő motorokkal szemben nem igényel a Python-környezeten kívüli telepítést); tiszta Python-csomagként (natív kiterjesztéssel, előre fordított wheel-ekkel) telepíthető, nem igényel külön rendszerszintű függőséget.
+
+Ez a döntés (geometriai ökoszisztéma bővítése) az ADR-0006 eredeti indoklásának (Phase 4-es, majd a 2026-08-03-as frissítés szerinti) folytatása — ugyanaz a mintázat: a `trimesh` már választott alapkönyvtár egy eddig nem használt képességének (Boole-metszet) aktiválásához szükséges, célzottan hozzáadott futásidejű függőség.

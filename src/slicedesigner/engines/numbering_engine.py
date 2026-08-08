@@ -84,6 +84,12 @@ _SLASH_STROKE: tuple[tuple[float, float], tuple[float, float]] = (
 _CHAR_WIDTH_RATIO = 0.6
 _CHAR_SPACING_RATIO = 0.2
 
+# Rács-felbontás (mm) a szelet-oldali automatikus azonosító-pozíció
+# kereséshez — belső implementációs finomhangolás, nem a specifikáció
+# szerinti üzleti paraméter (NUMBERING_SPEC.md 5. szakasza nem sorolja
+# fel).
+_PLACEMENT_GRID_STEP_MM = 1.0
+
 
 def _char_strokes(
     char: str, height_mm: float
@@ -238,17 +244,34 @@ def _glyph_to_local(
     direction_index: int,
     direction_sign: float,
 ) -> tuple[float, float]:
-    if upright:
-        normal_oriented = anchor_normal_oriented - gy
-        direction_oriented = anchor_direction_oriented - gx
-    else:
-        normal_oriented = anchor_normal_oriented - gx
-        direction_oriented = anchor_direction_oriented - gy
+    """A glyph-tér (gx, gy) pontjának leképezése a kontúr-térbe.
 
-    coords: list[float] = [0.0, 0.0]
-    coords[normal_index] = normal_oriented * normal_sign
-    coords[direction_index] = direction_oriented * direction_sign
-    return (coords[0], coords[1])
+    A horgonypont (`anchor_coords`) pozícióját a `normal_index`/
+    `normal_sign`/`direction_index`/`direction_sign` határozza meg —
+    ugyanúgy, mint eddig. A betű ALAKJA (az eltolás a horgonyponttól)
+    viszont szándékosan FÜGGETLEN ezektől: mindig ugyanaz a rögzített
+    `(gx, gy)` → `(offset0, offset1)` leképezés, `upright` szerint 0°
+    vagy 90°-os elforgatással. Ez konstrukciósan kizárja a tükröződést
+    (a betű alakja sosem függ attól, melyik kontúr-index/előjel
+    kombináció van érvényben), és — mivel ez a rögzített leképezés
+    vizuálisan ellenőrzött, helyesen álló, balról jobbra olvasható
+    szöveget ad — a korábbi tájolási (fejjel lefelé) hibát is javítja.
+
+    Elfogadott kompromisszum: a betű a horgonyponttól kifelé (nem
+    befelé) növekszik, ezért a hívó (`_search_best_anchor`) gyors,
+    egylépéses illeszkedés-tesztje gyakrabban eshet vissza a teljes
+    rácsos keresésre — ez teljesítménybeli, nem helyességi hatás.
+    """
+    anchor_coords: list[float] = [0.0, 0.0]
+    anchor_coords[normal_index] = anchor_normal_oriented * normal_sign
+    anchor_coords[direction_index] = anchor_direction_oriented * direction_sign
+
+    if upright:
+        offset0, offset1 = gx, gy
+    else:
+        offset0, offset1 = -gy, gx
+
+    return (anchor_coords[0] + offset0, anchor_coords[1] + offset1)
 
 
 def _build_text_strokes(
@@ -345,6 +368,130 @@ def _fits(
     return bool(footprint.within(island_polygon))
 
 
+def _text_footprint_offset_bounds(
+    width_mm: float, height_mm: float, upright: bool
+) -> tuple[float, float, float, float]:
+    """A szöveg-lenyomat (offset0, offset1) tartománya — (min0, max0, min1,
+    max1) —, ugyanazzal a `(gx, gy) -> (offset0, offset1)` leképezéssel,
+    amit a `_glyph_to_local()` használ a négy sarokpontra. A
+    `_search_best_anchor()` gyors útjának négy sarok-illesztési
+    jelöltjéhez szükséges.
+    """
+    corners_g = ((0.0, 0.0), (width_mm, 0.0), (width_mm, height_mm), (0.0, height_mm))
+    if upright:
+        offsets = [(gx, gy) for gx, gy in corners_g]
+    else:
+        offsets = [(-gy, gx) for gx, gy in corners_g]
+    xs = [o[0] for o in offsets]
+    ys = [o[1] for o in offsets]
+    return min(xs), max(xs), min(ys), max(ys)
+
+
+def _search_best_anchor(
+    text: str,
+    height_mm: float,
+    upright: bool,
+    target_normal: float,
+    target_direction: float,
+    normal_index: int,
+    normal_sign: float,
+    direction_index: int,
+    direction_sign: float,
+    island_polygon: Polygon,
+    min_normal: float,
+    max_normal: float,
+    min_direction: float,
+    max_direction: float,
+) -> tuple[float, float] | None:
+    """A `(target_normal, target_direction)` célponthoz legközelebbi olyan
+    horgonypont keresése, ahol a szöveg-lenyomat teljes egészében a
+    sziget anyagán belül marad (NUMBERING_SPEC.md 6. szakasz 3. pont).
+
+    Először a szöveg-téglalap mind a négy lehetséges sarok-illesztését
+    próbálja a célponthoz (olcsó, O(1) esetenként) — ez akkor talál
+    találatot, ha a célpont a téglalap bármelyik sarkával illeszkedve
+    a sziget anyagán belül esik, függetlenül attól, hogy a
+    `normal_sign`/`direction_sign` melyik sarkot jelöli ki ehhez a
+    konkrét híváshoz. Csak ha egyik gyors jelölt sem felel meg, fut le a
+    teljes, rácsos bejárás a sziget befoglaló téglalapján, felső korlát
+    vagy keresési sugár nélkül.
+    """
+    target_coords: list[float] = [0.0, 0.0]
+    target_coords[normal_index] = target_normal * normal_sign
+    target_coords[direction_index] = target_direction * direction_sign
+
+    width_mm = _text_width_mm(text, height_mm)
+    off_min0, off_max0, off_min1, off_max1 = _text_footprint_offset_bounds(
+        width_mm, height_mm, upright
+    )
+
+    quick_candidates: list[tuple[float, float]] = []
+    for off0 in (off_min0, off_max0):
+        for off1 in (off_min1, off_max1):
+            candidate_coords = [
+                target_coords[0] - off0,
+                target_coords[1] - off1,
+            ]
+            candidate = (
+                candidate_coords[normal_index] * normal_sign,
+                candidate_coords[direction_index] * direction_sign,
+            )
+            if candidate not in quick_candidates:
+                quick_candidates.append(candidate)
+
+    best: tuple[float, float] | None = None
+    best_distance = float("inf")
+    for anchor_normal, anchor_direction in quick_candidates:
+        if _fits(
+            text,
+            height_mm,
+            upright,
+            anchor_normal,
+            anchor_direction,
+            normal_index,
+            normal_sign,
+            direction_index,
+            direction_sign,
+            island_polygon,
+        ):
+            distance = (
+                (anchor_normal - target_normal) ** 2
+                + (anchor_direction - target_direction) ** 2
+            ) ** 0.5
+            if distance < best_distance:
+                best_distance = distance
+                best = (anchor_normal, anchor_direction)
+    if best is not None:
+        return best
+
+    anchor_direction = min_direction
+    while anchor_direction <= max_direction:
+        anchor_normal = min_normal
+        while anchor_normal <= max_normal:
+            if _fits(
+                text,
+                height_mm,
+                upright,
+                anchor_normal,
+                anchor_direction,
+                normal_index,
+                normal_sign,
+                direction_index,
+                direction_sign,
+                island_polygon,
+            ):
+                distance = (
+                    (anchor_normal - target_normal) ** 2
+                    + (anchor_direction - target_direction) ** 2
+                ) ** 0.5
+                if distance < best_distance:
+                    best_distance = distance
+                    best = (anchor_normal, anchor_direction)
+            anchor_normal += _PLACEMENT_GRID_STEP_MM
+        anchor_direction += _PLACEMENT_GRID_STEP_MM
+    return best
+
+
 def _resolve_numbering(
     text: str,
     target_height_mm: float,
@@ -359,30 +506,65 @@ def _resolve_numbering(
     manual_position: tuple[float, float] | None,
 ) -> tuple[float, bool, float, float] | None:
     """(alkalmazott magasság, upright?, anchor_normal, anchor_direction) vagy None."""
+    oriented_normal = [p[normal_index] * normal_sign for p in solid_points]
+    oriented_direction = [p[direction_index] * direction_sign for p in solid_points]
+    target_normal = max(oriented_normal) - margin_mm
+    target_direction = max(oriented_direction) - margin_mm
+
     if manual_position is not None:
         anchor_normal = manual_position[normal_index] * normal_sign
         anchor_direction = manual_position[direction_index] * direction_sign
-    else:
-        oriented_normal = [p[normal_index] * normal_sign for p in solid_points]
-        oriented_direction = [p[direction_index] * direction_sign for p in solid_points]
-        anchor_normal = max(oriented_normal) - margin_mm
-        anchor_direction = max(oriented_direction) - margin_mm
+        for height in (target_height_mm, min_height_mm):
+            for upright in (True, False):
+                if _fits(
+                    text,
+                    height,
+                    upright,
+                    anchor_normal,
+                    anchor_direction,
+                    normal_index,
+                    normal_sign,
+                    direction_index,
+                    direction_sign,
+                    island_polygon,
+                ):
+                    return height, upright, anchor_normal, anchor_direction
+        return None
+
+    min_normal, max_normal = min(oriented_normal), max(oriented_normal)
+    min_direction, max_direction = min(oriented_direction), max(oriented_direction)
 
     for height in (target_height_mm, min_height_mm):
+        candidates: list[tuple[float, bool, float, float]] = []
         for upright in (True, False):
-            if _fits(
+            found = _search_best_anchor(
                 text,
                 height,
                 upright,
-                anchor_normal,
-                anchor_direction,
+                target_normal,
+                target_direction,
                 normal_index,
                 normal_sign,
                 direction_index,
                 direction_sign,
                 island_polygon,
-            ):
-                return height, upright, anchor_normal, anchor_direction
+                min_normal,
+                max_normal,
+                min_direction,
+                max_direction,
+            )
+            if found is not None:
+                anchor_normal, anchor_direction = found
+                distance = (
+                    (anchor_normal - target_normal) ** 2
+                    + (anchor_direction - target_direction) ** 2
+                ) ** 0.5
+                candidates.append((distance, upright, anchor_normal, anchor_direction))
+        if candidates:
+            _distance, upright, anchor_normal, anchor_direction = min(
+                candidates, key=lambda c: c[0]
+            )
+            return height, upright, anchor_normal, anchor_direction
     return None
 
 
@@ -533,9 +715,6 @@ def apply_numbering(
     return replace(slice_set, slices=tuple(new_slices))
 
 
-_WORLD_AXIS_INDEX: dict[str, int] = {"X": 0, "Y": 1, "Z": 2}
-
-
 def _backplate_polygon(backplate: Backplate) -> BaseGeometry:
     """A Backplate kontúrjaiból egy (esetlegesen több darabból álló)
     Shapely geometria építése."""
@@ -681,8 +860,6 @@ def apply_numbering_to_backplate(
             f"A numbering_margin_mm értéke nem lehet negatív: {resolved_margin_mm}"
         )
 
-    slice_world_index = _WORLD_AXIS_INDEX[slice_set.slice_axis.value]
-    axis_min = slice_set.source_mesh.bounding_box.min[slice_world_index]
     backplate_geometry = _backplate_polygon(backplate)
 
     marks: list[EngravingMark] = []
@@ -697,7 +874,7 @@ def apply_numbering_to_backplate(
                 continue
 
             third_axis_max = max(t.third_axis_end_mm for t in island_tabs)
-            slice_axis_max = axis_min + slice_.position_mm + slice_.thickness_mm / 2
+            slice_axis_max = slice_.position_mm + slice_.thickness_mm / 2
 
             anchor_x = third_axis_max + resolved_margin_mm
             anchor_y = slice_axis_max - resolved_margin_mm
