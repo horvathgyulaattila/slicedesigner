@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "config": {
+    "use_dowels": true,
+    "use_spacers": true,
+    "use_backplate": true,
+    "mesh_import": {
+      "file_path": "C:\\Users\\horva\\Documents\\Slice Designer\\examples\\complex_example\\box.stl",
+      "origin_alignment": "none",
+      "min_plausible_size_mm": 1.0,
+      "max_plausible_size_mm": 3000.0
+    },
+    "slicing": {
+      "slice_thickness_mm": 10.0,
+      "slice_axis": "Z",
+      "gap_mm": 4.0,
+      "max_scale_tolerance": 0.02
+    },
+    "numbering": {
+      "numbering_normal_axis": "+Y",
+      "numbering_direction_axis_sign": "+",
+      "numbering_height_mm": 15.0,
+      "numbering_min_height_mm": null,
+      "numbering_margin_mm": null,
+      "slice_numbering_overrides": []
+    },
+    "nesting": {
+      "material_definitions": [
+        {
+          "material_id": "plywood_10mm",
+          "thickness_mm": 10.0,
+          "sheet_width_mm": 600.0,
+          "sheet_height_mm": 400.0,
+          "kerf_mm": 0.2
+        },
+        {
+          "material_id": "plywood_6mm",
+          "thickness_mm": 6.0,
+          "sheet_width_mm": 600.0,
+          "sheet_height_mm": 400.0,
+          "kerf_mm": 0.2
+        },
+        {
+          "material_id": "plywood_4mm",
+          "thickness_mm": 4.0,
+          "sheet_width_mm": 600.0,
+          "sheet_height_mm": 400.0,
+          "kerf_mm": 0.2
+        }
+      ],
+      "slice_material_id": "plywood_10mm",
+      "seam_marking_height_mm": 10.0,
+      "backplate_material_id": "plywood_6mm",
+      "spacer_material_id": "plywood_4mm",
+      "nesting_rotation_mode": "orthogonal",
+      "seam_marking_min_height_mm": null,
+      "seam_marking_margin_mm": null
+    },
+    "dxf_export": {
+      "output_directory": "C:\\Users\\horva\\Documents\\Slice Designer\\examples\\complex_example",
+      "dxf_version": "R12",
+      "cut_layer_name": "CUT",
+      "cut_layer_color": 1,
+      "engrave_layer_name": "ENGRAVE",
+      "engrave_layer_color": 5,
+      "output_filename_pattern": "{material_id}_sheet{sheet_number}"
+    },
+    "dowel": {
+      "dowel_diameter_mm": 6.0,
+      "spacer_diameter_mm": 20.0,
+      "min_edge_clearance_mm": null,
+      "dowel_count_per_region": 3,
+      "min_dowels_per_region": 1,
+      "blind_hole_cap_mm": null,
+      "manual_dowel_positions": []
+    },
+    "gap": {
+      "spacer_diameter_mm": 20.0,
+      "spacer_count_per_gap": 3,
+      "min_spacers_per_region": 1
+    },
+    "backplate": {
+      "backplate_normal_axis": "+X",
+      "backplate_thickness_mm": 6.0,
+      "tab_length_mm": 15.0,
+      "backplate_plane_tolerance_mm": 0.1,
+      "backplate_margin_mm": 0.0,
+      "tab_spacing_mm": 700.0,
+      "tab_edge_margin_mm": null,
+      "slice_tab_overrides": [],
+      "non_backplate_islands": [],
+      "material_reference": null
+    }
+  }
+}

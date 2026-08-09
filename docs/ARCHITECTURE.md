@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos:
 Létrehozva: 2026-07-30
-Utolsó módosítás: 2026-08-03
+Utolsó módosítás: 2026-08-09
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](PROJECT_CONSTITUTION.md), [PROJECT_VISION.md](PROJECT_VISION.md), [ENGINEERING_PRINCIPLES.md](ENGINEERING_PRINCIPLES.md), [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md), [adr/](adr/)
 
 ## Cél
@@ -167,3 +167,9 @@ A kontúr körüljárási irányának mint szolid/lyuk megkülönböztetésnek a
 A Nesting Engine csomagolási algoritmusának megválasztása (befoglaló-téglalap alapú polc-csomagolás a specifikáció "valódi alak" megfogalmazása helyett) az [ADR-0008](adr/0008-nesting-bounding-box-packing.md) dokumentumban került rögzítésre.
 
 A DXF Export leválasztása a Futtatásról (önálló, explicit felhasználói interakció a kimenet-panel "DXF Export" gombjával) az [ADR-0009](adr/0009-decoupled-dxf-export.md) dokumentumban került rögzítésre.
+
+A Slice Engine vetítésének gyökérokig visszavezetett tükrözési hibája, és az ezzel összefüggő, korábban duplikált tengely-/glyph-táblák egységes, megosztott forrásra hozása az [ADR-0010](adr/0010-slice-projection-mirror-and-shared-axis-tables.md) dokumentumban került rögzítésre.
+
+A 3D-előnézet geometria-építésének háttérszálra vitele a Futtatás utáni első megjelenítésnél az [ADR-0011](adr/0011-preview-geometry-background-thread.md) dokumentumban került rögzítésre.
+
+A kiemelés-/nézet-váltás interaktív újraépítésének háttérszálra vitele, generáció-számlálóval védve az elavult eredmények felülírása ellen, az [ADR-0012](adr/0012-interactive-preview-render-background-thread.md) dokumentumban került rögzítésre.

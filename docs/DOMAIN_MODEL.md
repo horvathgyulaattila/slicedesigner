@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-08-01
-Utolsó módosítás: 2026-08-01
+Utolsó módosítás: 2026-08-09
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](PROJECT_CONSTITUTION.md), [ROADMAP.md](ROADMAP.md), [PROJECT_VISION.md](PROJECT_VISION.md)
 
 ## A dokumentum célja

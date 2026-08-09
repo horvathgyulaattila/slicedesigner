@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "config": {
+    "use_dowels": true,
+    "use_spacers": false,
+    "use_backplate": false,
+    "mesh_import": {
+      "file_path": "C:\\Users\\horva\\Documents\\Slice Designer\\examples\\nesting_example\\cylinder.stl",
+      "origin_alignment": "none",
+      "min_plausible_size_mm": 1.0,
+      "max_plausible_size_mm": 3000.0
+    },
+    "slicing": {
+      "slice_thickness_mm": 10.0,
+      "slice_axis": "Z",
+      "gap_mm": 0.0,
+      "max_scale_tolerance": 0.02
+    },
+    "numbering": {
+      "numbering_normal_axis": "+Y",
+      "numbering_direction_axis_sign": "+",
+      "numbering_height_mm": 10.0,
+      "numbering_min_height_mm": null,
+      "numbering_margin_mm": null,
+      "slice_numbering_overrides": []
+    },
+    "nesting": {
+      "material_definitions": [
+        {
+          "material_id": "plywood_10mm",
+          "thickness_mm": 10.0,
+          "sheet_width_mm": 300.0,
+          "sheet_height_mm": 200.0,
+          "kerf_mm": 0.2
+        }
+      ],
+      "slice_material_id": "plywood_10mm",
+      "seam_marking_height_mm": 10.0,
+      "backplate_material_id": null,
+      "spacer_material_id": null,
+      "nesting_rotation_mode": "orthogonal",
+      "seam_marking_min_height_mm": null,
+      "seam_marking_margin_mm": null
+    },
+    "dxf_export": {
+      "output_directory": "C:\\Users\\horva\\Documents\\Slice Designer\\examples\\nesting_example",
+      "dxf_version": "R12",
+      "cut_layer_name": "CUT",
+      "cut_layer_color": 1,
+      "engrave_layer_name": "ENGRAVE",
+      "engrave_layer_color": 5,
+      "output_filename_pattern": "{material_id}_sheet{sheet_number}"
+    },
+    "dowel": {
+      "dowel_diameter_mm": 6.0,
+      "spacer_diameter_mm": 0.0,
+      "min_edge_clearance_mm": null,
+      "dowel_count_per_region": 3,
+      "min_dowels_per_region": 1,
+      "blind_hole_cap_mm": null,
+      "manual_dowel_positions": []
+    },
+    "gap": null,
+    "backplate": null
+  }
+}

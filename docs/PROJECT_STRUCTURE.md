@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos:
 Létrehozva: 2026-07-30
-Utolsó módosítás: 2026-08-04
+Utolsó módosítás: 2026-08-09
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](PROJECT_CONSTITUTION.md), [ARCHITECTURE.md](ARCHITECTURE.md), [README.md](../README.md)
 
 ## Cél
@@ -45,9 +45,9 @@ A ROADMAP Phase 2 (Functional Specifications) alatt készülő, egy-egy engine-h
 
 A `src/slicedesigner/` a telepíthető Python csomag gyökere (src-layout — elkerüli a véletlen helyi importot teszteléskor). Almappái az Architecture három rétegét tükrözik:
 
-* **`engines/`** — a 8 domain engine, egy modul / engine: `mesh_import.py`, `slice_engine.py`, `gap_engine.py`, `dowel_engine.py`, `backplate_engine.py`, `numbering_engine.py`, `nesting_engine.py`, `dxf_export_engine.py`.
-* **`project/`** — a koordinációs réteg: `pipeline.py` (Project állapota, pipeline-vezérlés), `persistence.py` (mentés/betöltés).
-* **`gui/`** — a PySide6-alapú prezentációs réteg: `main_window.py` (fő ablak), `parameter_panel.py`, `run_panel.py`, `preview_panel.py` (3D előnézet), `render_geometry.py` (megjelenítési geometria-segédfüggvények), `config_builder.py`/`config_loader.py` (widget ↔ `PipelineConfig` leképezés), `app_settings.py` (alkalmazás-szintű alapértelmezések).
+* **`engines/`** — a 8 domain engine, egy modul / engine: `mesh_import.py`, `slice_engine.py`, `gap_engine.py`, `dowel_engine.py`, `backplate_engine.py`, `numbering_engine.py`, `nesting_engine.py`, `dxf_export_engine.py`; valamint `exceptions.py` (a közös `SliceDesignerError`-alapú kivétel-hierarchia, CODING_STANDARDS.md 5. szakasz).
+* **`project/`** — a koordinációs réteg: `pipeline.py` (Project állapota, pipeline-vezérlés), `persistence.py` (mentés/betöltés), `exceptions.py` (`PipelineConfigurationError`, a koordinációs réteg saját kivétele).
+* **`gui/`** — a PySide6-alapú prezentációs réteg: `app.py` (belépési pont — `QApplication`/`MainWindow` indítása), `main_window.py` (fő ablak), `parameter_panel.py`, `run_panel.py`, `preview_panel.py` (3D előnézet), `render_geometry.py` (megjelenítési geometria-segédfüggvények), `config_builder.py`/`config_loader.py` (widget ↔ `PipelineConfig` leképezés), `app_settings.py` (alkalmazás-szintű alapértelmezések).
 
 ## 6. `tests/` – tesztek
 
@@ -55,7 +55,14 @@ A `src/slicedesigner/` struktúráját tükrözi (`tests/engines/`, `tests/proje
 
 ## 7. `examples/` – példák
 
-Minta STL-modellek és minta mentett Project-fájlok, amelyek manuális teszteléshez és bemutatáshoz használhatók. Tartalma a Phase 4 (Implementation) előrehaladtával bővül.
+Minta STL-modellek és minta mentett Project-fájlok, amelyek manuális teszteléshez és bemutatáshoz használhatók. Négy, leíró nevű alkönyvtárra tagolva (ROADMAP Phase 6, 6.5–6.8 tétel):
+
+* `basic_example/` — egyszerű 3D modell, minimális szeletelési beállítások; az alap workflow bemutatására.
+* `complex_example/` — több szelet, Gap, Dowel, Numbering, Backplate és export együttes bemutatására.
+* `nesting_example/` — több alkatrész, Nesting használata, gyártási elrendezés.
+* `reference_project/` — egy reális, összetett modell teljes beállításkészlettel, bemeneti modellel, exportált eredményekkel és rövid leírással.
+
+Minden alkönyvtár tartalma reprodukálható (Phase 6, 6.9 tétel).
 
 ## 8. `assets/` – statikus erőforrások
 
