@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from collections.abc import Iterator
 from typing import cast
 
@@ -31,6 +32,7 @@ from slicedesigner.engines.slice_engine import (  # noqa: E402
     SliceAxis,
     SliceSet,
 )
+from slicedesigner.gui import preview_panel as preview_panel_module  # noqa: E402
 from slicedesigner.gui.preview_panel import PreviewPanel  # noqa: E402
 
 
@@ -140,6 +142,113 @@ def _backplate() -> Backplate:
     )
 
 
+def _show_sliced_assembly_sync(
+    qtbot: QtBot, panel: PreviewPanel, *args: object, **kwargs: object
+) -> None:
+    """`show_sliced_assembly()` hívása, és szinkron megvárása a
+    háttérszálas geometria-építés/renderelés befejezéséig (ADR-0011).
+
+    A `show_sliced_assembly()` a widget-állapotot (tárolt referenciák,
+    spinbox-tartomány, láthatóság) szinkron frissíti, de a tényleges
+    `plotter`-hívásokat (`add_mesh`/`reset_camera`) egy háttérszál
+    befejezésére kötött, queued slotban végzi el — enélkül a
+    `qtbot.waitSignal` nélkül a tesztek vagy determinisztikusan hibás
+    (üres) renderelési eredményt látnának, vagy — rosszabb esetben — egy,
+    a teszt végeztével még futó/befejezetlen háttérszálat hagynának
+    hátra, ami a KÖVETKEZŐ teszt lefutását is megzavarhatja (l. a
+    `preview_panel` fixture docstringjét a VTK/offscreen instabilitásról).
+    """
+    with qtbot.waitSignal(panel.assembly_render_succeeded, timeout=5000):
+        panel.show_sliced_assembly(*args, **kwargs)
+
+
+def _wait_for_interactive_render(qtbot: QtBot, panel: PreviewPanel) -> None:
+    """A kiemelés-/nézet-váltás eredetű (interaktív) async render
+    befejezésének szinkron megvárása (ADR-0012).
+
+    Az interaktív render — a Futtatás utáni renderrel ellentétben —
+    SOSEM emittálja az `assembly_render_succeeded`/`assembly_render_failed`
+    jelzéseket (ez maga a legfontosabb korlát, l. a modul docstringjét),
+    ezért `qtbot.waitSignal` itt nem használható; a `_preview_worker`
+    nullázódását kell megvárni. Csak EGYETLEN, egymással nem átfedő
+    interaktív render megvárására alkalmas — több, gyorsan egymást követő
+    render esetén (amikor a korábbiak elavulttá válhatnak, és emiatt
+    sosem törlik a `_preview_worker`-referenciát) az
+    `_install_ready_call_counter()`-rel számolt hívásszámra várakozás a
+    helyes minta."""
+    qtbot.waitUntil(lambda: panel._preview_worker is None, timeout=5000)
+
+
+def _install_render_call_recorder(monkeypatch: pytest.MonkeyPatch) -> list[object]:
+    """`PreviewPanel._render_geometry_bundle()` tényleges hívásainak (a
+    ténylegesen renderelt köteg-objektumoknak) rögzítése — a metódus
+    valós viselkedése (a monkeypatchelt `add_mesh`-en keresztüli
+    "renderelés") is lefut, csak a hívás emellett fel is jegyzésre kerül.
+    """
+    calls: list[object] = []
+    original = PreviewPanel._render_geometry_bundle
+
+    def _recording(self: PreviewPanel, bundle: object) -> None:
+        calls.append(bundle)
+        original(self, bundle)
+
+    monkeypatch.setattr(PreviewPanel, "_render_geometry_bundle", _recording)
+    return calls
+
+
+def _install_ready_call_counter(monkeypatch: pytest.MonkeyPatch) -> list[None]:
+    """`PreviewPanel._on_preview_geometry_ready()` hívásainak számlálása —
+    determinisztikus várakozási feltételként használható arra, hogy egy
+    (akár elavultként csendben eldobott) worker eredménye ténylegesen
+    feldolgozásra került-e a fő szálon — enélkül nem lenne mód
+    `time.sleep()` nélkül megvárni egy olyan worker befejezését, amelynek
+    NINCS megfigyelhető (renderelési vagy jelzés-) mellékhatása."""
+    counter: list[None] = []
+    original = PreviewPanel._on_preview_geometry_ready
+
+    def _counting(self: PreviewPanel, outcome: object) -> None:
+        original(self, outcome)
+        counter.append(None)
+
+    monkeypatch.setattr(PreviewPanel, "_on_preview_geometry_ready", _counting)
+    return counter
+
+
+def _install_blocking_build_on_first_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[threading.Event, threading.Event]:
+    """A modul-szintű `_build_sliced_assembly_geometry()` ELSŐ (az
+    installálás UTÁN induló) hívását a háttérszálon blokkolja, amíg a
+    teszt explicit fel nem oldja — determinisztikus (`threading.Event`-
+    alapú, nem `time.sleep()`) végrehajtási sorrend biztosításához két,
+    egymást gyorsan követő async-render között (CODING_STANDARDS 4.
+    szakasz).
+
+    Returns:
+        `(entered, may_proceed)` — `entered` akkor íródik, amikor az
+        első hívás ténylegesen blokkolni kezdett (a teszt ezt várja meg,
+        mielőtt a MÁSODIK rendert elindítaná); `may_proceed`-et a teszt
+        állítja be, hogy az első hívás folytatódhasson.
+    """
+    entered = threading.Event()
+    may_proceed = threading.Event()
+    call_count = 0
+    original = preview_panel_module._build_sliced_assembly_geometry
+
+    def _blocking(*args: object, **kwargs: object) -> object:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            entered.set()
+            assert may_proceed.wait(timeout=5.0)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(
+        preview_panel_module, "_build_sliced_assembly_geometry", _blocking
+    )
+    return entered, may_proceed
+
+
 @pytest.fixture
 def preview_panel(
     qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
@@ -158,9 +267,9 @@ def preview_panel(
     tartomány, widget-láthatóság, kiemelés-állapot) teszteljük, nem a
     VTK-rajzolást (azt a `render_geometry.py` tiszta, Qt-független tesztjei
     már lefedik) — ezért kizárólag az `add_mesh`/`reset_camera` metódusokat
-    semlegesítjük, a `show_sliced_assembly()`/`_render_sliced_assembly()`
-    teljes vezérlési logikája (a `render_geometry.py`-hívásokkal együtt)
-    valós marad.
+    semlegesítjük, a `show_sliced_assembly()`/kiemelés-/nézet-váltás
+    teljes vezérlési logikája (a `render_geometry.py`-hívásokkal együtt,
+    valódi háttérszálon, ADR-0011/ADR-0012) valós marad.
     """
     panel = PreviewPanel()
     qtbot.addWidget(panel)
@@ -184,9 +293,9 @@ def test_highlight_widget_hidden_before_any_data_loaded(
 
 
 def test_show_sliced_assembly_shows_highlight_widget_and_sets_spinbox_range(
-    preview_panel: PreviewPanel,
+    preview_panel: PreviewPanel, qtbot: QtBot
 ) -> None:
-    preview_panel.show_sliced_assembly(_slice_set(5))
+    _show_sliced_assembly_sync(qtbot, preview_panel, _slice_set(5))
 
     assert preview_panel._highlight_widget.isVisible()
     assert preview_panel.highlight_spinbox.minimum() == 1
@@ -194,19 +303,19 @@ def test_show_sliced_assembly_shows_highlight_widget_and_sets_spinbox_range(
 
 
 def test_highlight_spinbox_range_updates_on_new_slice_set(
-    preview_panel: PreviewPanel,
+    preview_panel: PreviewPanel, qtbot: QtBot
 ) -> None:
-    preview_panel.show_sliced_assembly(_slice_set(3))
+    _show_sliced_assembly_sync(qtbot, preview_panel, _slice_set(3))
     assert preview_panel.highlight_spinbox.maximum() == 3
 
-    preview_panel.show_sliced_assembly(_slice_set(7))
+    _show_sliced_assembly_sync(qtbot, preview_panel, _slice_set(7))
     assert preview_panel.highlight_spinbox.maximum() == 7
 
 
 def test_switching_to_mesh_view_hides_highlight_widget(
-    preview_panel: PreviewPanel,
+    preview_panel: PreviewPanel, qtbot: QtBot
 ) -> None:
-    preview_panel.show_sliced_assembly(_slice_set(5))
+    _show_sliced_assembly_sync(qtbot, preview_panel, _slice_set(5))
     assert preview_panel._highlight_widget.isVisible()
 
     preview_panel.show_mesh_radio.setChecked(True)
@@ -214,12 +323,14 @@ def test_switching_to_mesh_view_hides_highlight_widget(
 
     preview_panel.show_sliced_assembly_radio.setChecked(True)
     assert preview_panel._highlight_widget.isVisible()
+    _wait_for_interactive_render(qtbot, preview_panel)
 
 
 def test_highlight_checkbox_toggled_enables_spinbox(
-    preview_panel: PreviewPanel,
+    preview_panel: PreviewPanel, monkeypatch: pytest.MonkeyPatch, qtbot: QtBot
 ) -> None:
-    preview_panel.show_sliced_assembly(_slice_set(5))
+    _show_sliced_assembly_sync(qtbot, preview_panel, _slice_set(5))
+    ready_calls = _install_ready_call_counter(monkeypatch)
     assert not preview_panel.highlight_spinbox.isEnabled()
 
     preview_panel.highlight_checkbox.setChecked(True)
@@ -228,33 +339,204 @@ def test_highlight_checkbox_toggled_enables_spinbox(
     preview_panel.highlight_checkbox.setChecked(False)
     assert not preview_panel.highlight_spinbox.isEnabled()
 
+    # Két, gyorsan egymást követő interaktív render indult (checkbox be,
+    # majd ki) — mindkettő teljes feldolgozását (renderelést vagy
+    # elavultkénti csendes eldobást) megvárjuk, hogy ne maradjon
+    # befejezetlen háttérszál a teszt végeztével.
+    qtbot.waitUntil(lambda: len(ready_calls) == 2, timeout=5000)
+
 
 def test_highlighted_slice_index_none_while_checkbox_unchecked(
-    preview_panel: PreviewPanel,
+    preview_panel: PreviewPanel, qtbot: QtBot
 ) -> None:
-    preview_panel.show_sliced_assembly(_slice_set(5))
+    _show_sliced_assembly_sync(qtbot, preview_panel, _slice_set(5))
     preview_panel.highlight_spinbox.setValue(3)
 
     assert preview_panel._highlighted_slice_index() is None
+    _wait_for_interactive_render(qtbot, preview_panel)
 
 
 def test_highlighted_slice_index_matches_spinbox_once_checked(
-    preview_panel: PreviewPanel,
+    preview_panel: PreviewPanel, monkeypatch: pytest.MonkeyPatch, qtbot: QtBot
 ) -> None:
-    preview_panel.show_sliced_assembly(_slice_set(5))
+    _show_sliced_assembly_sync(qtbot, preview_panel, _slice_set(5))
+    ready_calls = _install_ready_call_counter(monkeypatch)
+
     preview_panel.highlight_checkbox.setChecked(True)
     preview_panel.highlight_spinbox.setValue(3)
 
     assert preview_panel._highlighted_slice_index() == 3
+    qtbot.waitUntil(lambda: len(ready_calls) == 2, timeout=5000)
 
 
-def test_checking_highlight_renders_without_error(preview_panel: PreviewPanel) -> None:
-    preview_panel.show_sliced_assembly(_slice_set(5))
+def test_checking_highlight_renders_without_error(
+    preview_panel: PreviewPanel, monkeypatch: pytest.MonkeyPatch, qtbot: QtBot
+) -> None:
+    _show_sliced_assembly_sync(qtbot, preview_panel, _slice_set(5))
+    ready_calls = _install_ready_call_counter(monkeypatch)
 
     preview_panel.highlight_checkbox.setChecked(True)
     preview_panel.highlight_spinbox.setValue(3)
     preview_panel.highlight_spinbox.setValue(5)
     preview_panel.highlight_checkbox.setChecked(False)
+
+    qtbot.waitUntil(lambda: len(ready_calls) == 4, timeout=5000)
+
+
+def test_show_sliced_assembly_defers_render_to_background_worker(
+    preview_panel: PreviewPanel, monkeypatch: pytest.MonkeyPatch, qtbot: QtBot
+) -> None:
+    """ADR-0011: a Futtatás utáni első megjelenítéskor a geometria-építés/
+    renderelés egy külön háttérszálra (`_PreviewComputeWorker`) kerül,
+    nem a hívó szálon, szinkron történik.
+
+    Determinisztikus (nem időzítés-függő, CODING_STANDARDS 4. szakasz)
+    bizonyíték: a `with qtbot.waitSignal(...)` blokkon BELÜL, közvetlenül
+    a `show_sliced_assembly()` visszatérése után — még mielőtt bármilyen
+    várakozás/eseményhurok-feldolgozás történne — a
+    `preview_panel._preview_worker` már nem `None` (a worker-objektum
+    szinkron, a hívás részeként jön létre és indul el, l.
+    `_start_async_sliced_assembly_render()`), miközben a `plotter.add_mesh()`
+    MÉG NEM futott le. Csak a jelzés (a háttérszál tényleges befejezése)
+    UTÁN nullázódik a worker-referencia és jelennek meg az `add_mesh`-hívások."""
+    calls = _record_add_mesh_calls(preview_panel, monkeypatch)
+    assert preview_panel._preview_worker is None
+
+    with qtbot.waitSignal(preview_panel.assembly_render_succeeded, timeout=5000):
+        preview_panel.show_sliced_assembly(_slice_set(5))
+        assert preview_panel._preview_worker is not None
+        assert calls == []
+
+    assert preview_panel._preview_worker is None
+    assert len(calls) > 0
+
+
+def test_interactive_render_never_emits_public_signals(
+    preview_panel: PreviewPanel, monkeypatch: pytest.MonkeyPatch, qtbot: QtBot
+) -> None:
+    """ADR-0012 legfontosabb korlátja: a kiemelés-/nézet-váltás eredetű
+    (interaktív) renderek SOSEM emittálják a publikus
+    `assembly_render_succeeded`/`assembly_render_failed` jelzéseket — a
+    `MainWindow` ezekről nem szerezhet (és nem is kell, hogy szerezzen)
+    tudomást. Kiemelés be-/kikapcsolás, spinbox-érték-változás ÉS
+    "Eredeti Mesh" → "Szeletelt összeállítás" nézet-váltás is szerepel."""
+    _show_sliced_assembly_sync(qtbot, preview_panel, _slice_set(5))
+    ready_calls = _install_ready_call_counter(monkeypatch)
+
+    succeeded_events: list[None] = []
+    preview_panel.assembly_render_succeeded.connect(
+        lambda: succeeded_events.append(None)
+    )
+    failed_events: list[Exception] = []
+    preview_panel.assembly_render_failed.connect(failed_events.append)
+
+    preview_panel.highlight_checkbox.setChecked(True)
+    preview_panel.highlight_spinbox.setValue(3)
+    preview_panel.show_mesh_radio.setChecked(True)
+    preview_panel.show_sliced_assembly_radio.setChecked(True)
+
+    # A négy widget-interakció közül három indít interaktív rendert (a
+    # "Eredeti Mesh"-re váltás szinkron `_render_mesh()`-t hív, nem
+    # async-t) — mindhármat megvárjuk, mielőtt a jelzéseket ellenőriznénk.
+    qtbot.waitUntil(lambda: len(ready_calls) == 3, timeout=5000)
+
+    assert succeeded_events == []
+    assert failed_events == []
+
+
+def test_stale_interactive_render_discarded_when_newer_completes_first(
+    preview_panel: PreviewPanel, monkeypatch: pytest.MonkeyPatch, qtbot: QtBot
+) -> None:
+    """ADR-0012: ha egy korábban induló kiemelés-váltás eredetű render
+    KÉSŐBB fejeződik be, mint egy közben elindult, frissebb interaktív
+    render, a korábbi eredménye csendben eldobásra kerül — sosem jut el
+    a plotterig.
+
+    Determinisztikus (`threading.Event`-alapú, CODING_STANDARDS 4.
+    szakasz) végrehajtási sorrend: az ELSŐ (korábban induló) worker
+    geometria-építése a háttérszálon blokkolva marad, amíg a teszt
+    explicit fel nem oldja — ezalatt a MÁSODIK (frissebb) worker
+    teljesen lefut és renderel. Csak EZUTÁN engedjük tovább az elsőt —
+    a `_render_geometry_bundle()` hívásszáma igazolja, hogy a later
+    érkező, elavult eredmény sosem jutott el a rendereléshez.
+    """
+    _show_sliced_assembly_sync(qtbot, preview_panel, _slice_set(5))
+
+    # A checkbox bekapcsolása önmagában is indítana egy rendert — ezt itt,
+    # a blokkoló intercept beállítása ELŐTT, kivárva végezzük el, hogy a
+    # lenti hívásszámlálás egyértelműen csak a két, ténylegesen vizsgált
+    # workerre vonatkozzon.
+    preview_panel.highlight_checkbox.setChecked(True)
+    _wait_for_interactive_render(qtbot, preview_panel)
+
+    render_calls = _install_render_call_recorder(monkeypatch)
+    ready_calls = _install_ready_call_counter(monkeypatch)
+    entered, may_proceed = _install_blocking_build_on_first_call(monkeypatch)
+
+    preview_panel.highlight_spinbox.setValue(2)  # korábban induló worker (blokkolva)
+    assert entered.wait(timeout=5.0)
+
+    preview_panel.highlight_spinbox.setValue(4)  # később induló, frissebb worker
+    qtbot.waitUntil(lambda: len(ready_calls) == 1, timeout=5000)
+    assert len(render_calls) == 1  # csak a frissebb jutott el a renderelésig
+
+    may_proceed.set()  # a korábban induló (elavult) worker most fejeződik be
+    qtbot.waitUntil(lambda: len(ready_calls) == 2, timeout=5000)
+
+    # Az elavult eredmény SOSEM jutott el a rendereléshez.
+    assert len(render_calls) == 1
+
+
+def test_stale_interactive_render_does_not_override_or_signal_after_new_run(
+    preview_panel: PreviewPanel, monkeypatch: pytest.MonkeyPatch, qtbot: QtBot
+) -> None:
+    """A PROMPT_2026-08-09_interactive-preview-render-background-thread.md
+    1. szakaszának korrektségi kockázata: ha egy korábban elindult,
+    kiemelés-váltás eredetű worker egy KÖZBEN elindult, Futtatás-eredetű
+    (post-run) render UTÁN fejeződik be, az utóbbi eredményét nem írhatja
+    felül a plotteren, és nem válthatja ki a `MainWindow`-t érintő
+    publikus `assembly_render_succeeded`/`assembly_render_failed`
+    jelzéseket sem (ADR-0012) — a kiemelés-/nézet-váltás eredetű workerek
+    SOSEM emittálják ezeket a jelzéseket, függetlenül a befejezés
+    időpontjától.
+    """
+    _show_sliced_assembly_sync(qtbot, preview_panel, _slice_set(5))
+
+    succeeded_events: list[None] = []
+    preview_panel.assembly_render_succeeded.connect(
+        lambda: succeeded_events.append(None)
+    )
+    failed_events: list[Exception] = []
+    preview_panel.assembly_render_failed.connect(failed_events.append)
+
+    render_calls = _install_render_call_recorder(monkeypatch)
+    ready_calls = _install_ready_call_counter(monkeypatch)
+    entered, may_proceed = _install_blocking_build_on_first_call(monkeypatch)
+
+    # 1) Interaktív (kiemelés-váltás) worker indítása — a háttérszálon
+    # blokkolva marad.
+    preview_panel.highlight_checkbox.setChecked(True)
+    assert entered.wait(timeout=5.0)
+
+    # 2) Egy ÚJ, Futtatás-eredetű render indul, MIELŐTT az interaktív
+    # worker befejeződne — ez rendes, nem blokkolt módon lefut.
+    _show_sliced_assembly_sync(qtbot, preview_panel, _slice_set(7))
+
+    assert succeeded_events == [None]
+    assert failed_events == []
+    assert len(render_calls) == 1
+    post_run_bundle = render_calls[-1]
+
+    # 3) Az elavult interaktív worker most fejeződik be.
+    may_proceed.set()
+    qtbot.waitUntil(lambda: len(ready_calls) == 2, timeout=5000)
+
+    # Az elavult eredmény SOSEM emittálta a publikus jelzéseket, és
+    # SOSEM írta felül a plottert a Futtatás eredménye felett.
+    assert succeeded_events == [None]
+    assert failed_events == []
+    assert len(render_calls) == 1
+    assert render_calls[-1] is post_run_bundle
 
 
 def _record_add_mesh_calls(
@@ -285,11 +567,13 @@ def _group_calls_by_color(
 
 
 def test_no_highlight_layers_are_fully_opaque_with_base_colors(
-    preview_panel: PreviewPanel, monkeypatch: pytest.MonkeyPatch
+    preview_panel: PreviewPanel, monkeypatch: pytest.MonkeyPatch, qtbot: QtBot
 ) -> None:
     calls = _record_add_mesh_calls(preview_panel, monkeypatch)
 
-    preview_panel.show_sliced_assembly(
+    _show_sliced_assembly_sync(
+        qtbot,
+        preview_panel,
         _slice_set_with_hole(5),
         dowel_positions=(_dowel_position(),),
         spacers=(_spacer(),),
@@ -347,22 +631,24 @@ def test_origin_gizmo_layers_added_when_showing_mesh(
 
 
 def test_origin_gizmo_layers_added_when_showing_sliced_assembly(
-    preview_panel: PreviewPanel, monkeypatch: pytest.MonkeyPatch
+    preview_panel: PreviewPanel, monkeypatch: pytest.MonkeyPatch, qtbot: QtBot
 ) -> None:
     """Az origó-jelölő a "Szeletelt összeállítás" nézetben
     (`show_sliced_assembly()`) is megjelenik."""
     calls = _record_add_mesh_calls(preview_panel, monkeypatch)
 
-    preview_panel.show_sliced_assembly(_slice_set(5))
+    _show_sliced_assembly_sync(qtbot, preview_panel, _slice_set(5))
 
     grouped = _group_calls_by_color(calls)
     assert {"orangered", "mediumseagreen", "royalblue", "gainsboro"} <= grouped.keys()
 
 
 def test_highlight_dims_other_layers_keeps_highlight_and_holes_opaque(
-    preview_panel: PreviewPanel, monkeypatch: pytest.MonkeyPatch
+    preview_panel: PreviewPanel, monkeypatch: pytest.MonkeyPatch, qtbot: QtBot
 ) -> None:
-    preview_panel.show_sliced_assembly(
+    _show_sliced_assembly_sync(
+        qtbot,
+        preview_panel,
         _slice_set_with_hole(5),
         dowel_positions=(_dowel_position(),),
         spacers=(_spacer(),),
@@ -370,9 +656,11 @@ def test_highlight_dims_other_layers_keeps_highlight_and_holes_opaque(
         backplate_normal_axis=BackplateNormalAxis.PLUS_X,
     )
     preview_panel.highlight_spinbox.setValue(3)
+    _wait_for_interactive_render(qtbot, preview_panel)
 
     calls = _record_add_mesh_calls(preview_panel, monkeypatch)
     preview_panel.highlight_checkbox.setChecked(True)
+    _wait_for_interactive_render(qtbot, preview_panel)
 
     grouped = _group_calls_by_color(calls)
     assert grouped.keys() == {

@@ -149,6 +149,44 @@ def test_apply_gap_reuses_dowel_position_despite_hole() -> None:
     assert start_indices == [1, 2, 3, 4]
 
 
+def test_apply_gap_dowel_based_spacer_carries_dowel_diameter() -> None:
+    """GAP_SYSTEM_SPEC.md 4. és 6. szakasz 4/a. pont: a Dowel-re fűzött
+    Spacer `dowel_diameter_mm` mezője a rajta átmenő Dowel átmérőjével
+    egyezzen meg — hogy a Nesting Engine a korong közepén a megfelelő
+    méretű furatot tudja vágni."""
+    slice_set = _make_box_slice_set(
+        extents=(30.0, 30.0, 14.0), slice_thickness_mm=2.0, gap_mm=1.0
+    )
+    slice_set, dowel_positions = apply_dowels(
+        slice_set, dowel_diameter_mm=3.0, dowel_count_per_region=1
+    )
+
+    _final_slice_set, spacers = apply_gap(
+        slice_set,
+        spacer_diameter_mm=5.0,
+        dowel_positions=dowel_positions,
+        spacer_count_per_gap=1,
+        min_spacers_per_region=1,
+    )
+
+    assert len(spacers) == 4  # 5 szelet -> 4 Gap
+    for spacer in spacers:
+        assert spacer.dowel_diameter_mm == pytest.approx(3.0)
+
+
+def test_apply_gap_standalone_spacer_has_no_dowel_diameter() -> None:
+    """GAP_SYSTEM_SPEC.md 4. szakasz: egy önálló (nem Dowel-re fűzött)
+    Spacer `dowel_diameter_mm` mezője `None` marad."""
+    slice_set = _make_box_slice_set(
+        extents=(30.0, 30.0, 14.0), slice_thickness_mm=2.0, gap_mm=1.0
+    )
+
+    _slice_set, spacers = apply_gap(slice_set, spacer_diameter_mm=3.0)
+
+    assert len(spacers) == 12  # 5 szelet -> 4 Gap, egyenként 3 (alapértelmezett cél)
+    assert all(spacer.dowel_diameter_mm is None for spacer in spacers)
+
+
 def test_apply_gap_insufficient_region_raises() -> None:
     slice_set = _make_box_slice_set(
         extents=(2.0, 2.0, 14.0), slice_thickness_mm=2.0, gap_mm=1.0

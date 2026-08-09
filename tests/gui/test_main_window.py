@@ -48,6 +48,32 @@ def _get_file_menu_action(main_window: MainWindow, text: str) -> QAction:
     raise AssertionError(f"'Fájl' menü akció nem található: {text!r}")
 
 
+def _mock_show_sliced_assembly_succeeds(
+    main_window: MainWindow, monkeypatch: pytest.MonkeyPatch
+) -> list[tuple[object, ...]]:
+    """`PreviewPanel.show_sliced_assembly()` mockolása: az argumentumokat
+    rögzíti, és — a valódi (ADR-0011 óta háttérszálas) geometria-építés/
+    renderelés nélkül — azonnal kibocsátja az `assembly_render_succeeded`
+    jelzést.
+
+    A `MainWindow._finish_run()`-t immár ez a jelzés indítja el (l.
+    `MainWindow.__init__`), nem közvetlenül `_on_pipeline_succeeded()` —
+    enélkül a mockolt hívással a jelzés-lánc megszakadna, és a
+    `qtbot.waitUntil(...)`-alapú tesztek (amik a Futtatás-gomb újra-
+    engedélyezését várják) örökre elakadnának. `test_main_window.py`
+    a `preview_panel` fixture dokumentált VTK/offscreen-instabilitása
+    miatt sosem hívja a valódi `show_sliced_assembly()`-t — ez a mock a
+    `MainWindow`-oldali orchestrálást attól függetlenül teszteli."""
+    calls: list[tuple[object, ...]] = []
+
+    def _fake(*args: object) -> None:
+        calls.append(args)
+        main_window.preview_panel.assembly_render_succeeded.emit()
+
+    monkeypatch.setattr(main_window.preview_panel, "show_sliced_assembly", _fake)
+    return calls
+
+
 @pytest.fixture
 def main_window(
     qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -146,11 +172,8 @@ def test_run_button_success_updates_status_log(
         "slicedesigner.gui.main_window.run_pipeline",
         lambda config: fake_result,
     )
-    show_sliced_assembly_calls = []
-    monkeypatch.setattr(
-        main_window.preview_panel,
-        "show_sliced_assembly",
-        lambda *args: show_sliced_assembly_calls.append(args),
+    show_sliced_assembly_calls = _mock_show_sliced_assembly_succeeds(
+        main_window, monkeypatch
     )
 
     main_window.run_panel.run_button.click()
@@ -223,9 +246,7 @@ def test_run_button_and_menu_disabled_while_pipeline_running(
     monkeypatch.setattr(
         "slicedesigner.gui.main_window.run_pipeline", _blocking_run_pipeline
     )
-    monkeypatch.setattr(
-        main_window.preview_panel, "show_sliced_assembly", lambda *args: None
-    )
+    _mock_show_sliced_assembly_succeeds(main_window, monkeypatch)
 
     main_window.run_panel.run_button.click()
 
@@ -349,9 +370,7 @@ def test_new_run_resets_last_nests_and_disables_export_button(
         "slicedesigner.gui.main_window.run_pipeline",
         lambda config: fake_result,
     )
-    monkeypatch.setattr(
-        main_window.preview_panel, "show_sliced_assembly", lambda *args: None
-    )
+    _mock_show_sliced_assembly_succeeds(main_window, monkeypatch)
 
     main_window.run_panel.run_button.click()
 
@@ -384,9 +403,7 @@ def test_close_event_rejects_close_while_pipeline_running(
     monkeypatch.setattr(
         "slicedesigner.gui.main_window.run_pipeline", _blocking_run_pipeline
     )
-    monkeypatch.setattr(
-        main_window.preview_panel, "show_sliced_assembly", lambda *args: None
-    )
+    _mock_show_sliced_assembly_succeeds(main_window, monkeypatch)
     save_calls = []
     monkeypatch.setattr(
         "slicedesigner.gui.main_window.app_settings.save_current_config",

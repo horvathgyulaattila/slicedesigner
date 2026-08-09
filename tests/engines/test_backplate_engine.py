@@ -122,6 +122,177 @@ def _make_hand_slice_set(
     )
 
 
+def _notched_contact_edge_contour(
+    x_min: float,
+    x_max: float,
+    x_notch: float,
+    y_min: float,
+    y_max: float,
+    notch_y_min: float,
+    notch_y_max: float,
+) -> Contour:
+    """Egy (Y, X) sorrendű (l. `_rect_contour`) téglalap kontúr, aminek az
+    `x_max`-nál húzódó, Backplate felé néző éle NEM tökéletesen egyenes: a
+    (`notch_y_min`, `notch_y_max`) tartományban egy lépcsős bemetszéssel
+    `x_notch`-ig (`< x_max`) befelé lép, majd visszatér `x_max`-hoz.
+
+    Ez a "Wobbly Toad"-jellegű, nem tökéletesen sík érintkezési határ
+    minimális, kézzel épített modellje (prompt 8. szakasz) — a
+    `_find_contact_segments()` `in_plane` szűrője (`local_extreme_mm -
+    o <= plane_tolerance_mm`) a bemetszést így is EGY, összefüggő
+    érintkező szakasznak látja, ha `x_max - x_notch <=
+    backplate_plane_tolerance_mm`.
+    """
+    return Contour(
+        points=(
+            (y_min, x_min),
+            (y_max, x_min),
+            (y_max, x_max),
+            (notch_y_max, x_max),
+            (notch_y_max, x_notch),
+            (notch_y_min, x_notch),
+            (notch_y_min, x_max),
+            (y_min, x_max),
+        )
+    )
+
+
+def _make_notched_hand_slice_set(
+    contour: Contour, thickness_mm: float = 3.0
+) -> SliceSet:
+    """Egyetlen szeletből álló Slice Set, aminek a valós (extrudált) Mesh-e
+    ténylegesen a `contour` (Y, X) alakú keresztmetszetét adja vissza —
+    hogy a `_build_backplate_shape_from_mesh()` térbeli Boole-metszete is
+    a kézzel megadott, lépcsős kontúrnak megfelelő geometrián fusson,
+    ugyanúgy, ahogy a `_stepped_solid_from_rects()` a többi kézi
+    fixture-nél."""
+    slice_ = Slice(
+        thickness_mm=thickness_mm,
+        contours=(contour,),
+        position_mm=thickness_mm / 2,
+        index=1,
+    )
+    # A kontúr (Y, X) sorrendű pontjaiból (X, Y) polygont építünk, majd Z
+    # mentén a szeletvastagsággal kihúzzuk — így a nyers Mesh ténylegesen
+    # a kontúrnak megfelelő, lépcsős keresztmetszetű test.
+    polygon_xy = Polygon([(x, y) for y, x in contour.points])
+    solid = trimesh.creation.extrude_polygon(polygon_xy, height=thickness_mm)
+    mesh = _mesh_from_trimesh(solid)
+    return SliceSet(
+        source_mesh=mesh,
+        slice_axis=SliceAxis.Z,
+        gap_mm=0.0,
+        slices=(slice_,),
+        slice_count=1,
+    )
+
+
+def test_place_backplate_tabs_stepped_contact_edge_merges_into_single_island() -> None:
+    """Diagnosztikai/regressziós teszt (prompt 8. szakasz): egy nem
+    tökéletesen egyenes (lépcsős) érintkezési határú szigeten a
+    `place_backplate_tabs()` a csappal kiegészített geometriát EGYETLEN
+    összefüggő szigetként adja vissza — nem egy, a `unary_union`
+    tangencia-hibája miatt kettévált `MultiPolygon`-ként (ami a Nesting
+    Engine-t egynél több `NestablePart` előállítására vezetné, l.
+    `test_place_backplate_tabs_stepped_contact_edge_yields_single_nestable_part`).
+
+    A bemetszés mélysége (0.05 mm) a `backplate_plane_tolerance_mm`
+    alapértékén (0.1 mm) belül van — a `_find_contact_segments()` tehát
+    egyetlen, összefüggő érintkező szakasznak látja a teljes élet, a csap
+    pedig pontosan a bemetszés fölé kerül (`tab_length_mm=8.0`,
+    a bemetszés `y in [-5, 5]`-jét lefedve)."""
+    contour = _notched_contact_edge_contour(
+        x_min=-10.0,
+        x_max=10.0,
+        x_notch=9.95,
+        y_min=-15.0,
+        y_max=15.0,
+        notch_y_min=-5.0,
+        notch_y_max=5.0,
+    )
+    slice_set = _make_notched_hand_slice_set(contour)
+
+    modified, tabs, _common_plane_mm, _backplate_shape = place_backplate_tabs(
+        slice_set,
+        backplate_normal_axis=BackplateNormalAxis.PLUS_X,
+        backplate_thickness_mm=3.0,
+        tab_length_mm=8.0,
+        tab_spacing_mm=700.0,
+    )
+
+    assert len(tabs) == 1
+    assert tabs[0].third_axis_start_mm == pytest.approx(-4.0)
+    assert tabs[0].third_axis_end_mm == pytest.approx(4.0)
+
+    result_slice = modified.slices[0]
+    solid_contours = [c for c in result_slice.contours if is_ccw(c.points)]
+    # A javítás előtt ez 2 volt (a sziget és a csap a `unary_union` után
+    # csak érintkező, de nem ténylegesen egyesített `MultiPolygon`-t
+    # adott) — a diagnózis szerint ennek 1-nek KELL lennie.
+    assert len(solid_contours) == 1
+
+    islands = reconstruct_islands(result_slice)
+    assert len(islands) == 1
+    # A csap ténylegesen hozzáadódott (a sziget területe nő a csap
+    # területével, kb. 8 mm x 3 mm = 24 mm² -- kis eltéréssel a
+    # bemetszés-átfedés miatt), nem csak érintette a szigetet.
+    original_area = Polygon([(x, y) for y, x in contour.points]).area
+    assert islands[0].polygon.area > original_area
+
+
+def test_place_backplate_tabs_stepped_contact_edge_yields_single_nestable_part() -> (
+    None
+):
+    """A fenti geometriai megerősítés (`test_place_backplate_tabs_stepped_
+    contact_edge_merges_into_single_island`) közvetlen következménye a
+    Nesting Engine felől nézve: `prepare_nesting_parts()` a csappal
+    kiegészített, lépcsős határú szigethez EGYETLEN `NestablePart`-ot
+    állít elő — nem kettőt (prompt 2., 7. és 9. szakasz, "egy sziget = egy
+    alkatrész" elfogadási kritérium)."""
+    from slicedesigner.engines.nesting_engine import (
+        MaterialDefinition,
+        PartKind,
+        prepare_nesting_parts,
+    )
+
+    contour = _notched_contact_edge_contour(
+        x_min=-10.0,
+        x_max=10.0,
+        x_notch=9.95,
+        y_min=-15.0,
+        y_max=15.0,
+        notch_y_min=-5.0,
+        notch_y_max=5.0,
+    )
+    slice_set = _make_notched_hand_slice_set(contour)
+
+    modified, _tabs, _common_plane_mm, _backplate_shape = place_backplate_tabs(
+        slice_set,
+        backplate_normal_axis=BackplateNormalAxis.PLUS_X,
+        backplate_thickness_mm=3.0,
+        tab_length_mm=8.0,
+        tab_spacing_mm=700.0,
+    )
+
+    materials = (
+        MaterialDefinition(
+            material_id="wood3",
+            thickness_mm=3.0,
+            sheet_width_mm=1000.0,
+            sheet_height_mm=1000.0,
+            kerf_mm=0.2,
+        ),
+    )
+    grouped = prepare_nesting_parts(
+        modified, materials, slice_material_id="wood3", seam_marking_height_mm=2.0
+    )
+
+    island_parts = [
+        p for p in grouped["wood3"] if p.reference.kind == PartKind.SLICE_ISLAND
+    ]
+    assert len(island_parts) == 1
+
+
 def test_backplate_third_axis_sign_minus_z_slice_axis_x_regression() -> None:
     """A projektgazda 2026-08-08-i élő tesztelése ((`slice_axis=X`,
     `backplate_normal_axis=MINUS_Z`) konkrét kombináció) egy, a

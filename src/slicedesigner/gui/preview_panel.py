@@ -6,8 +6,10 @@ ROADMAP Phase 5 "teljes workflow" 1. rész — 3D előnézet feltöltése).
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
 import pyvista as pv
+from PySide6.QtCore import QObject, QThread, Signal
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -37,6 +39,193 @@ from slicedesigner.gui.render_geometry import (
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class _PreviewGeometryBundle:
+    """A szeletelt összeállítás geometria-építő részének
+    (`render_geometry.py`-hívások) kész eredménye, egy kötegben —
+    `_PreviewComputeWorker` adja vissza a `succeeded` jelzéssel, hogy a
+    tényleges VTK-renderelés (`PreviewPanel._render_geometry_bundle()`)
+    a fő szálon, már kizárólag kész `PolyData`-objektumokból, további
+    geometria-építés nélkül történhessen (ADR-0011).
+
+    A `highlight_polydata`/`backplate_polydata` `None`, ha nincs
+    megjelenítendő kiemelés/Backplate (vagy a hozzá tartozó `PolyData`
+    üres) — `_render_geometry_bundle()` ezt a korábbi, egybefont
+    `_render_sliced_assembly()` `if ... n_points > 0` feltételeivel
+    megegyezően értelmezi.
+    """
+
+    slice_set: SliceSet
+    other_layers_opacity: float
+    main_polydata: pv.PolyData
+    highlight_polydata: pv.PolyData | None
+    dowel_polydata: pv.PolyData
+    hole_polydata: pv.PolyData
+    spacer_polydata: pv.PolyData
+    backplate_polydata: pv.PolyData | None
+
+
+def _build_sliced_assembly_geometry(
+    slice_set: SliceSet,
+    dowel_positions: tuple[DowelPosition, ...],
+    spacers: tuple[Spacer, ...],
+    backplate: Backplate | None,
+    backplate_normal_axis: BackplateNormalAxis | None,
+    highlighted_index: int | None,
+) -> _PreviewGeometryBundle:
+    """A szeletelt összeállítás geometria-építő része — kizárólag
+    `render_geometry.py`-hívások, semmilyen Qt/VTK-`plotter`-hozzáférés
+    (l. e modul és a `render_geometry.py` docstringjét) — hogy
+    `_PreviewComputeWorker` háttérszálon biztonságosan futtathassa
+    (ADR-0011). A `render_geometry.py` maga nem változott — ez a
+    függvény szó szerint ugyanazokat a hívásokat végzi el, ugyanabban a
+    sorrendben, mint amit korábban a rendereléssel egybefont
+    `_render_sliced_assembly()` tett.
+    """
+    other_layers_opacity = 0.15 if highlighted_index is not None else 1.0
+
+    main_polydata = slice_set_to_polydata(
+        slice_set, exclude_slice_index=highlighted_index
+    )
+
+    highlight_polydata: pv.PolyData | None = None
+    if highlighted_index is not None:
+        candidate = single_slice_to_polydata(slice_set, highlighted_index)
+        if candidate.n_points > 0:
+            highlight_polydata = candidate
+
+    dowel_polydata = dowel_positions_to_polydata(dowel_positions, slice_set)
+    hole_polydata = dowel_hole_contours_to_polydata(slice_set)
+    spacer_polydata = spacers_to_polydata(spacers, slice_set)
+
+    backplate_polydata: pv.PolyData | None = None
+    if backplate is not None and backplate_normal_axis is not None:
+        candidate = backplate_to_polydata(backplate, slice_set, backplate_normal_axis)
+        if candidate.n_points > 0:
+            backplate_polydata = candidate
+
+    return _PreviewGeometryBundle(
+        slice_set=slice_set,
+        other_layers_opacity=other_layers_opacity,
+        main_polydata=main_polydata,
+        highlight_polydata=highlight_polydata,
+        dowel_polydata=dowel_polydata,
+        hole_polydata=hole_polydata,
+        spacer_polydata=spacer_polydata,
+        backplate_polydata=backplate_polydata,
+    )
+
+
+@dataclass(frozen=True)
+class _PreviewRenderSucceeded:
+    """A `_PreviewComputeWorker.succeeded` jelzésének kísérő adatai —
+    a `generation` (l. `PreviewPanel._render_generation`, ADR-0012) és az
+    `is_post_run` (Futtatás utáni vs. interaktív kiemelés-/nézet-váltás
+    eredetű) együtt utazik a kész `bundle`-lel, hogy a fogadó
+    (`PreviewPanel._on_preview_geometry_ready()`) egyetlen, megosztott
+    slotként tudja helyesen kezelni MINDHÁROM hívási helyet."""
+
+    generation: int
+    is_post_run: bool
+    bundle: _PreviewGeometryBundle
+
+
+@dataclass(frozen=True)
+class _PreviewRenderFailed:
+    """A `_PreviewComputeWorker.failed` jelzésének kísérő adatai — l.
+    `_PreviewRenderSucceeded` docstringje."""
+
+    generation: int
+    is_post_run: bool
+    error: Exception
+
+
+class _PreviewComputeWorker(QThread):
+    """Háttérszál: kizárólag a szeletelt összeállítás GEOMETRIA-építő
+    részét (`_build_sliced_assembly_geometry()`, azaz a
+    `render_geometry.py`-hívásokat) végzi el — semmilyen VTK/`plotter`-
+    hívás nem történik itt (Qt/OpenGL-kontextus-kötött, kizárólag a fő
+    szálon biztonságos), ezért futtatása a fő száltól elkülönítve
+    biztonságos (ADR-0011).
+
+    A Futtatás utáni első megjelenítéshez ÉS a kiemelés-/nézet-váltás
+    interaktív újraépítéséhez is EZT az egyetlen worker-osztályt
+    használja (ADR-0012) — a `generation`/`is_post_run` paraméterek
+    különböztetik meg a két esetet a `PreviewPanel` fogadó oldalán (l.
+    `_on_preview_geometry_ready()`/`_on_preview_geometry_failed()`): a
+    `generation` teszi lehetővé, hogy egy elavult (közben egy újabb
+    render által felülírt) interaktív eredmény csendben eldobásra
+    kerüljön ahelyett, hogy hibásan felülírná a plottert egy frissebb
+    eredmény felett.
+
+    A `main_window.py::_PipelineWorker` mintáját követi: `QThread`-
+    alosztály `run()`-felülírással, egyetlen blokkoló hívás-sorozatot
+    végez el egyszer, `succeeded`/`failed` jelzéssel adja vissza az
+    eredményt a fő szálon futó fogadóhoz (queued connection — a
+    `PreviewPanel`, a fogadó, a fő szál affinitású marad, csak a
+    `run()`-on belüli kód fut ténylegesen a háttérszálon).
+    """
+
+    succeeded = Signal(object)  # _PreviewRenderSucceeded
+    failed = Signal(object)  # _PreviewRenderFailed
+
+    def __init__(
+        self,
+        slice_set: SliceSet,
+        dowel_positions: tuple[DowelPosition, ...],
+        spacers: tuple[Spacer, ...],
+        backplate: Backplate | None,
+        backplate_normal_axis: BackplateNormalAxis | None,
+        highlighted_index: int | None,
+        generation: int,
+        *,
+        is_post_run: bool,
+        parent: QObject | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._slice_set = slice_set
+        self._dowel_positions = dowel_positions
+        self._spacers = spacers
+        self._backplate = backplate
+        self._backplate_normal_axis = backplate_normal_axis
+        self._highlighted_index = highlighted_index
+        self._generation = generation
+        self._is_post_run = is_post_run
+
+    def run(self) -> None:
+        try:
+            bundle = _build_sliced_assembly_geometry(
+                self._slice_set,
+                self._dowel_positions,
+                self._spacers,
+                self._backplate,
+                self._backplate_normal_axis,
+                self._highlighted_index,
+            )
+        except Exception as error:  # a render_geometry.py függvényei tiszta,
+            # már validált SliceSet-en dolgoznak — gyakorlatban itt hiba nem
+            # várható, de a `_PipelineWorker`-nél megszokott, szándékosan
+            # tág védelem itt is indokolt: egy háttérszálon elszálló,
+            # elkapatlan kivétel a `succeeded`/`failed` jelzés nélkül
+            # néma szál-leállást okozna, a `PreviewPanel`-t örökre "függő"
+            # (Futtatás gomb letiltva maradó) állapotban hagyva.
+            self.failed.emit(
+                _PreviewRenderFailed(
+                    generation=self._generation,
+                    is_post_run=self._is_post_run,
+                    error=error,
+                )
+            )
+        else:
+            self.succeeded.emit(
+                _PreviewRenderSucceeded(
+                    generation=self._generation,
+                    is_post_run=self._is_post_run,
+                    bundle=bundle,
+                )
+            )
+
+
 class PreviewPanel(QWidget):
     """A középső 3D előnézet-terület.
 
@@ -62,7 +251,24 @@ class PreviewPanel(QWidget):
     keretrendszer (`pytest-qt`) minden teszt köré `app.processEvents()`
     hívásokat illeszt, ami a still-futó `render_timer`-t egy már
     törlés/lezárás alatt álló render-kontextusba futtatta bele.
+
+    A Futtatás utáni első megjelenítés (`show_sliced_assembly()`), a
+    kiemelés-váltás (`_on_highlight_changed()`) ÉS a nézet-váltás
+    (`_on_view_switch_toggled()`, "Szeletelt összeállítás" ág) geometria-
+    építése egyaránt háttérszálon fut (ADR-0011, ADR-0012) — a hívó
+    (`MainWindow`) kizárólag a Futtatás utáni útvonalról szerez tudomást
+    az `assembly_render_succeeded`/`assembly_render_failed` jelzéseken
+    keresztül (a Futtatás-állapot lezárásához); a kiemelés-/nézet-váltás
+    ezeket a jelzéseket SOSEM emittálja (ADR-0012 — a `MainWindow`-t nem
+    érinti). Egy `self._render_generation` számláló biztosítja, hogy egy
+    elavult (közben egy újabb render által felülírt) interaktív eredmény
+    sose írja felül a nézeten egy közben elindult, frissebb rendert — a
+    Futtatás utáni renderre ez az ellenőrzés nem vonatkozik (l.
+    `_on_preview_geometry_ready()` docstringjét).
     """
+
+    assembly_render_succeeded = Signal()
+    assembly_render_failed = Signal(object)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -73,6 +279,11 @@ class PreviewPanel(QWidget):
         self._spacers: tuple[Spacer, ...] = ()
         self._backplate: Backplate | None = None
         self._backplate_normal_axis: BackplateNormalAxis | None = None
+        self._preview_worker: _PreviewComputeWorker | None = None
+        # Minden async-render indításkor eggyel nő (a Futtatás utáni is
+        # beleértve) — l. `_start_async_sliced_assembly_render()` és
+        # `_on_preview_geometry_ready()` (ADR-0012).
+        self._render_generation = 0
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -157,12 +368,13 @@ class PreviewPanel(QWidget):
                 self._render_mesh(self._mesh)
         else:
             if self._slice_set is not None:
-                self._render_sliced_assembly(
+                self._start_async_sliced_assembly_render(
                     self._slice_set,
                     self._dowel_positions,
                     self._spacers,
                     self._backplate,
                     self._backplate_normal_axis,
+                    is_post_run=False,
                 )
 
     def _on_highlight_changed(self) -> None:
@@ -171,12 +383,13 @@ class PreviewPanel(QWidget):
         összeállítás" nézet aktív (a nézet-váltás ugyanígy ezt hívja meg,
         lásd `_on_view_switch_toggled()`)."""
         if self._slice_set is not None and not self.show_mesh_radio.isChecked():
-            self._render_sliced_assembly(
+            self._start_async_sliced_assembly_render(
                 self._slice_set,
                 self._dowel_positions,
                 self._spacers,
                 self._backplate,
                 self._backplate_normal_axis,
+                is_post_run=False,
             )
 
     def _update_highlight_widget_visibility(self) -> None:
@@ -218,6 +431,13 @@ class PreviewPanel(QWidget):
         a `use_backplate` kapcsoló ki volt kapcsolva) `backplate_normal_axis`
         nélkül nem ágyazható be a világkoordinátákba — a hívónak (`MainWindow`)
         mindkettőt vagy egyiket sem kell átadnia.
+
+        A widget-állapot (tárolt referenciák, spinbox-tartomány,
+        láthatóság) SZINKRON, azonnal frissül — csak a tényleges
+        geometria-építés/renderelés indul háttérszálon, azonnal visszatérő
+        hívással (ADR-0011). A hívó (`MainWindow`) az
+        `assembly_render_succeeded`/`assembly_render_failed` jelzésekre
+        kötve értesül a tényleges befejezésről.
         """
         self._slice_set = slice_set
         self._mesh = slice_set.source_mesh
@@ -235,9 +455,163 @@ class PreviewPanel(QWidget):
         self.highlight_spinbox.blockSignals(False)
         self._update_highlight_widget_visibility()
 
-        self._render_sliced_assembly(
-            slice_set, dowel_positions, spacers, backplate, backplate_normal_axis
+        self._start_async_sliced_assembly_render(
+            slice_set,
+            dowel_positions,
+            spacers,
+            backplate,
+            backplate_normal_axis,
+            is_post_run=True,
         )
+
+    def _start_async_sliced_assembly_render(
+        self,
+        slice_set: SliceSet,
+        dowel_positions: tuple[DowelPosition, ...],
+        spacers: tuple[Spacer, ...],
+        backplate: Backplate | None,
+        backplate_normal_axis: BackplateNormalAxis | None,
+        *,
+        is_post_run: bool,
+    ) -> None:
+        """A geometria-építés háttérszálra indítása, azonnali visszatéréssel
+        (ADR-0011) — a Futtatás utáni első megjelenítéshez
+        (`show_sliced_assembly()`, `is_post_run=True`) ÉS a kiemelés-/
+        nézet-váltáshoz (`_on_highlight_changed()`/`_on_view_switch_toggled()`,
+        `is_post_run=False`) egyaránt (ADR-0012).
+
+        Minden hívás — a Futtatás utáni is — eggyel növeli
+        `self._render_generation`-t, és ezt a (hívás pillanatában
+        rögzített) generációt adja át a workernek; lásd
+        `_on_preview_geometry_ready()` a felhasználásáról.
+
+        A kiemelés-index a HÍVÁS PILLANATÁBAN kerül rögzítésre (átadva a
+        workernek), nem a renderelés idején újra lekérdezve — ez teszi
+        lehetővé, hogy egy gyors egymásutáni kiemelés-váltás-sorozat
+        minden tagja a SAJÁT, indításkori állapotát építse fel, még akkor
+        is, ha a widget-állapot időközben tovább változik.
+        """
+        self._render_generation += 1
+        highlighted_index = self._highlighted_slice_index()
+        worker = _PreviewComputeWorker(
+            slice_set,
+            dowel_positions,
+            spacers,
+            backplate,
+            backplate_normal_axis,
+            highlighted_index,
+            self._render_generation,
+            is_post_run=is_post_run,
+            parent=self,
+        )
+        worker.succeeded.connect(self._on_preview_geometry_ready)
+        worker.failed.connect(self._on_preview_geometry_failed)
+        worker.finished.connect(worker.deleteLater)
+        self._preview_worker = worker
+        worker.start()
+
+    def _on_preview_geometry_ready(self, outcome: _PreviewRenderSucceeded) -> None:
+        """A `_PreviewComputeWorker.succeeded` jelzésre kötött, MEGOSZTOTT
+        slot (fő szál) — a Futtatás utáni ÉS a kiemelés-/nézet-váltás
+        eredetű workerek is ide futnak be (ADR-0012).
+
+        **Futtatás utáni** (`outcome.is_post_run`): változatlan viselkedés
+        — mindig renderel, mindig emittálja a publikus
+        `assembly_render_succeeded`-t, staleness-ellenőrzés nélkül (két
+        egyidejű Futtatás-eredetű worker strukturálisan kizárt, mert a
+        "Futtatás" gomb a teljes folyamat alatt letiltva marad).
+
+        **Kiemelés-/nézet-váltás eredetű** (`not outcome.is_post_run`):
+        HA `outcome.generation` már nem egyezik `self._render_generation`
+        aktuális értékével (mert közben — akár interaktív, akár Futtatás-
+        eredetű — egy újabb render indult), a bundle csendben eldobásra
+        kerül — SEM a plotter, SEM a `MainWindow` felé nem emittált
+        publikus jelzés nem történik. Ez zárja el az ADR-0011
+        "külön mérlegelés tárgya" pontját: egy régebbi, később
+        befejeződő interaktív render sosem írhatja felül egy közben
+        elindult, frissebb (akár Futtatás-eredetű) render eredményét.
+        """
+        if outcome.is_post_run:
+            self._render_geometry_bundle(outcome.bundle)
+            self._preview_worker = None
+            self.assembly_render_succeeded.emit()
+            return
+
+        if outcome.generation != self._render_generation:
+            return  # elavult interaktív render — csendes eldobás
+        self._render_geometry_bundle(outcome.bundle)
+        self._preview_worker = None
+
+    def _on_preview_geometry_failed(self, outcome: _PreviewRenderFailed) -> None:
+        """A `_PreviewComputeWorker.failed` jelzésre kötött, MEGOSZTOTT
+        slot (fő szál) — l. `_on_preview_geometry_ready()` docstringjét a
+        Futtatás utáni/kiemelés-/nézet-váltás eredetű megkülönböztetésről.
+
+        A `render_geometry.py` függvényei tiszta, már validált
+        `SliceSet`-en dolgoznak — gyakorlatban itt hiba nem várható, de a
+        `_PipelineWorker` mintáját követve, védelemből mégis kezelve van
+        (CODING_STANDARDS 5. szakasz: minden elkapott kivétel naplózásra
+        kerül, kivéve az elavult interaktív hibát — az a csendes eldobás
+        részeként ugyanúgy figyelmen kívül marad, mint egy elavult siker).
+        """
+        if outcome.is_post_run:
+            logger.exception(
+                "Hiba a 3D-előnézet geometria-építése során (háttérszál).",
+                exc_info=outcome.error,
+            )
+            self._preview_worker = None
+            self.assembly_render_failed.emit(outcome.error)
+            return
+
+        if outcome.generation != self._render_generation:
+            return  # elavult interaktív render — csendes eldobás
+        logger.exception(
+            "Hiba a 3D-előnézet interaktív (kiemelés-/nézet-váltás) "
+            "geometria-építése során (háttérszál).",
+            exc_info=outcome.error,
+        )
+        self._preview_worker = None
+
+    def _render_geometry_bundle(self, bundle: _PreviewGeometryBundle) -> None:
+        """A `_PreviewGeometryBundle` tényleges VTK-renderelése —
+        kizárólag `plotter`-hívások, geometria-építés nélkül. Ez a rész
+        MINDIG a fő szálon fut (ADR-0011: `clear()`/`add_mesh()`/
+        `reset_camera()` Qt/OpenGL-kontextus-kötött, kizárólag a fő
+        szálon biztonságos)."""
+        self.plotter.clear()
+        self._add_origin_gizmo(bundle.slice_set.source_mesh.bounding_box)
+
+        self._add_solid_with_edges(
+            bundle.main_polydata,
+            color="lightgray",
+            opacity=bundle.other_layers_opacity,
+        )
+        if bundle.highlight_polydata is not None:
+            self._add_solid_with_edges(bundle.highlight_polydata, color="navy")
+
+        if bundle.dowel_polydata.n_points > 0:
+            self.plotter.add_mesh(
+                bundle.dowel_polydata, color="red", opacity=bundle.other_layers_opacity
+            )
+
+        if bundle.hole_polydata.n_points > 0:
+            self.plotter.add_mesh(bundle.hole_polydata, color="black")
+
+        if bundle.spacer_polydata.n_points > 0:
+            self.plotter.add_mesh(
+                bundle.spacer_polydata,
+                color="blue",
+                opacity=bundle.other_layers_opacity,
+            )
+
+        if bundle.backplate_polydata is not None:
+            self.plotter.add_mesh(
+                bundle.backplate_polydata,
+                color="green",
+                opacity=bundle.other_layers_opacity,
+            )
+
+        self.plotter.reset_camera()  # type: ignore[call-arg]
 
     def _add_origin_gizmo(self, bounding_box: BoundingBox) -> None:
         """A világ-origó és a három pozitív tengelyirány (X, Y, Z)
@@ -317,61 +691,4 @@ class PreviewPanel(QWidget):
         # `Renderer.reset_camera`, which confuses mypy into requiring an
         # explicit `self` argument on the already-bound call — a pyvista
         # typing quirk, not a real argument-count error.
-        self.plotter.reset_camera()  # type: ignore[call-arg]
-
-    def _render_sliced_assembly(
-        self,
-        slice_set: SliceSet,
-        dowel_positions: tuple[DowelPosition, ...] = (),
-        spacers: tuple[Spacer, ...] = (),
-        backplate: Backplate | None = None,
-        backplate_normal_axis: BackplateNormalAxis | None = None,
-    ) -> None:
-        self.plotter.clear()
-        self._add_origin_gizmo(slice_set.source_mesh.bounding_box)
-        highlighted_index = self._highlighted_slice_index()
-        # Kiemeléskor minden más réteg elhalványodik, hogy a kiemelt
-        # szelet köré szabadon körbejárható legyen a nézet — a kiemelt
-        # szelet és a Dowel Hole-körvonalak mindig teljesen átlátszatlanok
-        # maradnak (lásd lentebb, nekik nincs `opacity`-átadás).
-        other_layers_opacity = 0.15 if highlighted_index is not None else 1.0
-
-        self._add_solid_with_edges(
-            slice_set_to_polydata(slice_set, exclude_slice_index=highlighted_index),
-            color="lightgray",
-            opacity=other_layers_opacity,
-        )
-
-        if highlighted_index is not None:
-            highlight_polydata = single_slice_to_polydata(slice_set, highlighted_index)
-            if highlight_polydata.n_points > 0:
-                self._add_solid_with_edges(highlight_polydata, color="navy")
-
-        dowel_polydata = dowel_positions_to_polydata(dowel_positions, slice_set)
-        if dowel_polydata.n_points > 0:
-            self.plotter.add_mesh(
-                dowel_polydata, color="red", opacity=other_layers_opacity
-            )
-
-        hole_polydata = dowel_hole_contours_to_polydata(slice_set)
-        if hole_polydata.n_points > 0:
-            self.plotter.add_mesh(hole_polydata, color="black")
-
-        spacer_polydata = spacers_to_polydata(spacers, slice_set)
-        if spacer_polydata.n_points > 0:
-            self.plotter.add_mesh(
-                spacer_polydata, color="blue", opacity=other_layers_opacity
-            )
-
-        if backplate is not None and backplate_normal_axis is not None:
-            backplate_polydata = backplate_to_polydata(
-                backplate, slice_set, backplate_normal_axis
-            )
-            if backplate_polydata.n_points > 0:
-                self.plotter.add_mesh(
-                    backplate_polydata,
-                    color="green",
-                    opacity=other_layers_opacity,
-                )
-
         self.plotter.reset_camera()  # type: ignore[call-arg]

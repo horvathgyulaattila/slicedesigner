@@ -39,6 +39,7 @@ Minden Spacer:
 | vastagság | = az adott Gap mérete (`gap_mm`) | mm |
 | pozíció | koordináta a metszet-régión belül | mm |
 | tartozó Gap / régió azonosító | hivatkozás — a régió-azonosító minden Gap-en belül 1-től újraindul (nem a teljes Slice Set-en át folyamatos sorszám) | — |
+| furat átmérője (opcionális) | kizárólag a Dowel-re fűzött Spacer-eknél (6. szakasz 4/a. pont): a rajta átmenő Dowel átmérőjével egyezik meg. Önálló (nem Dowel-re fűzött) Spacer-eknél nincs furat. | mm |
 
 ## 5. Paraméterek
 
@@ -54,7 +55,7 @@ Minden Spacer:
 2. Minden egymást követő szeletpár (Slice_i, Slice_i+1) esetén: a két szelet teljes geometriájának (összes kontúrjuk uniója) metszetének meghatározása.
 3. A metszet egymástól elkülönülő (össze nem függő) régiókra bontása.
 4. Minden régióban:
-   - a. Az adott régióba eső, mindkét szeletet érintő Dowel-pozíciók azonosítása — ezek mindegyike kötelezően Spacer-helyet kap (a Dowel-re fűzött Spacer).
+   - a. Az adott régióba eső, mindkét szeletet érintő Dowel-pozíciók azonosítása — ezek mindegyike kötelezően Spacer-helyet kap (a Dowel-re fűzött Spacer), a rajta átmenő Dowel átmérőjével megegyező furattal (4. szakasz).
    - b. Ha az így kapott Spacer-szám eléri `spacer_count_per_gap`-et → nincs szükség további, önálló pozícióra.
    - c. Ha kevesebb → a hiányzó darabszámig önálló, a Dowel-pozíciókkal és egymással sem átfedő `spacer_diameter_mm` átmérőjű henger-pozíciók generálása, amíg el nem érjük a célszámot vagy be nem telik a régió.
 5. Ha az így kapott összes Spacer-szám egy régióban nem éri el `spacer_count_per_gap`-et, de legalább `min_spacers_per_region`-t igen → a ténylegesen elférő darabszám elhelyezése; figyelmeztetés rögzítése.
@@ -89,3 +90,4 @@ Nincs megválaszolatlan pont.
 * A `min_spacers_per_region` `0` értékének explicit megengedettsége és jelentése egyértelműen rögzített.
 * A régió-azonosító Gap-enkénti újraindítása egyértelműen rögzített.
 * A Hibakezelés fail-fast elven, egyértelműen felsorolja a blokkoló eseteket.
+* A Dowel-re fűzött Spacer kimenete tartalmazza a rajta átmenő Dowel átmérőjével megegyező furat-adatot; az önálló (nem Dowel-re fűzött) Spacer-eké nem.

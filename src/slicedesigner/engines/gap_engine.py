@@ -33,6 +33,13 @@ class Spacer:
     """Egy elhelyezett Spacer.
 
     Lásd: GAP_SYSTEM_SPEC.md 4. szakasz.
+
+    A `dowel_diameter_mm` kizárólag a Dowel-re fűzött Spacer-eknél (6.
+    szakasz 4/a. pont) kerül kitöltésre, a rajta átmenő Dowel
+    `DowelPosition.diameter_mm` értékével — ez teszi lehetővé, hogy a
+    Nesting Engine a korong közepén a Dowel-nek megfelelő furatot vágjon
+    (NESTING_SPEC.md 6. szakasz 2. pont). Önálló (nem Dowel-re fűzött)
+    Spacer-eknél `None` marad — ezek furat nélküli, tömör korongok.
     """
 
     shape: Literal["cylinder"]
@@ -42,6 +49,7 @@ class Spacer:
     thickness_mm: float
     start_slice_index: int
     region_id: int
+    dowel_diameter_mm: float | None = None
 
 
 def _slice_solid_union(slice_: Slice) -> BaseGeometry:
@@ -200,6 +208,7 @@ def apply_gap(
                     thickness_mm=slice_set.gap_mm,
                     start_slice_index=start_index,
                     region_id=next_region_id,
+                    dowel_diameter_mm=d.diameter_mm,
                 )
                 for d in dowel_based
             ]

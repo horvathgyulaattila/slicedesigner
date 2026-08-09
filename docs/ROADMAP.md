@@ -3,7 +3,7 @@
 Státusz: Aktív
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-07-31
-Utolsó módosítás: 2026-08-08
+Utolsó módosítás: 2026-08-09
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](PROJECT_CONSTITUTION.md), [AI_WORKFLOW.md](AI_WORKFLOW.md), [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md), [DOMAIN_MODEL.md](DOMAIN_MODEL.md)
 
 ## Cél
@@ -155,8 +155,9 @@ Megjegyzés: az eredeti öt tételen felül a GUI-t lezáró négy kiegészítő
 Feladata:
 
 * ~~DXF export leválasztása a Futtatásról (önálló interakció)~~ — kész (ADR-0009)
-* ~~optimalizálás — Dowel automatikus pozíciókeresés teljesítmény-javítása~~ — kész
-* végső tesztelés — 🟡 folyamatban, ld. lentebb (lezárt és nyitott tételek)
+* ~~optimalizálás — Dowel automatikus pozíciókeresés teljesítmény-javítása (1. kör)~~ — kész
+* ~~optimalizálás — 2. kör (Numbering, Dowel, GUI-előnézet szálkezelés)~~ — kész, ld. lentebb
+* ~~végső tesztelés~~ — kész, ld. lentebb
 * dokumentáció
 * példaprojektek
 
@@ -233,6 +234,22 @@ def _glyph_point_rect(gx, gy, upright, anchor_x, anchor_y, height_mm):
 **Nyitva maradó kérdés, amit élő teszteléssel kell megerősíteni, miután a fenti javítás megtörtént:** a projektgazda a Backplate **kontúrját** (nem csak a feliratait) is tükrözöttnek jelezte. A Szoftverarchitekt minden elérhető ellenőrzése (szintetikus aszimmetrikus teszt-alakzat a tényleges vetítési képlettel; a teljes lánc valódi modellen történő összevetése a szeletek saját adataival) a kontúrt helyesnek mutatta — lehetséges, hogy a "tükrözöttnek tűnés" részben vagy egészben a fenti, ténylegesen tükrözött feliratból eredt. **Ezt a fenti javítás után, a feliratoktól függetlenül (pl. a puszta vágási vonalat nézve), élőben külön meg kell erősíteni.**
 
 > **Élő megerősítés (2026-08-08):** A `render_geometry.py::_AXIS_MAPPING`/`_backplate_third_axis_sign` GUI-oldali szinkronizálása, majd a `_backplate_third_axis_sign()` levezetésében talált hibás nézőpont-feltevés javítása (a teljes visszatérési érték globális előjel-megfordítása, ld. ADR-0010 "Frissítés (2026-08-08)" szakasza) után a projektgazda mindhárom szeletelési tengelyen (X, Y, Z) elvégezte az élő tesztelést, és megerősítette: a szelet-kontúr, a Backplate-kontúr és a Backplate-felirat egyaránt helyesen, tükrözés nélkül jelenik meg — mind a 3D előnézetben, mind az exportált DXF-en. A fentebb (a Phase 6 "NYITOTT" szakasz 1. tételében) leírt, korábban validálatlan "nézőpont" magyarázat ezzel okafogyottá vált: nem azért zárul le a kérdés, mert az az érvelés helyesnek bizonyult volna, hanem mert a tényleges gyökérokot (a Slice Engine vetítéséből hiányzó, majd az ADR-0010-zel bevezetett szándékos tükrözés, és annak Backplate-re és a GUI-ra kiterjedő teljes utókövetése) azonosítottuk és javítottuk. A "Végső tesztelés" tétel e vonatkozásban — a teljes tükrözési hibaosztály (szelet-kontúr, Backplate-kontúr, Backplate-felirat) — lezárva; a Phase 6 egyéb, még hátralévő tételei (dokumentáció, példaprojektek) miatt maga a Phase 6 továbbra is 🟡 In Progress marad.
+
+#### Végső tesztelés — 2026-08-09-ig lezárt kiegészítő tételek
+
+* **ADR-0010 tükröződés-javítás élő tesztelése megerősítve** — a "folytatás 11" bejegyzésben leírt gyökérok-javítást a projektgazda élesben, fizikai modellel összevetve megerősítette. Ezzel a szelet-kontúr és a Backplate (kontúr és felirat) tükröződési hibaosztálya véglegesen lezárva.
+* **Backplate-csapok külön alkatrészként jelentek meg a DXF exportban, a hozzájuk tartozó szelet helyett/mellett** — gyökérok: a `backplate_engine.py::_apply_tab_geometry()` a csap-téglalapot a sziget tényleges (a `backplate_plane_tolerance_mm` tűrésen belül ingadozó) pereméhez képest pontatlanul illesztette, ami `unary_union()` után `MultiPolygon`-t (két külön szigetet) eredményezett nem tökéletesen sík érintkezési határnál. Javítás: a csap belső élének garantált átfedéssel történő illesztése (`_TAB_OVERLAP_SAFETY_EPSILON_MM`, a Dowel Engine tolerancia-mintájára). 236/236 automatizált teszt, élő teszttel megerősítve.
+* **A Spacer-korongok közepén nem volt furat a rajtuk átmenő Dowel számára** — ez dokumentációs hiány is volt, nem csak implementációs: a `GAP_SYSTEM_SPEC.md`/`DOMAIN_MODEL.md` nem tartalmazott furat-attribútumot a Spacer-en. Javítás: a Dowel-re fűzött Spacer-ek új, opcionális `dowel_diameter_mm` attribútumot kapnak (a rajtuk átmenő Dowel átmérőjével), amiből a Nesting Engine a korong furatát vágja; az önálló (nem Dowel-alapú) Spacer-ek tömörek maradnak. `GAP_SYSTEM_SPEC.md`, `DOMAIN_MODEL.md`, `NESTING_SPEC.md` kiegészítve. 240/240 automatizált teszt, élő teszttel megerősítve.
+
+#### Optimalizálás — 2. kör (2026-08-09)
+
+Élő tesztelés közben jelzett, jelentős futásidő-panasz nyomán szisztematikus, szakaszonkénti időmérési diagnosztika (nem találgatás) tárta fel a tényleges szűk keresztmetszeteket — ezek egyike sem esett egybe az eredetileg gyanított pontokkal (Gap/Backplate Engine), ami alátámasztja a mérés-előbb-javítás-utóbb elvet:
+
+* **Numbering Engine** — a kimerítő fallback-keresés (amikor a gyors sarok-illesztés nem talál pozíciót) sorrend-vak, teljes rácsot bejáró implementációja akár egyszerű modelleknél is a teljes futásidő 80%-át tette ki. Javítás: távolság szerint táguló, korai megállásos bejárás (`_iter_grid_points_by_distance()`), bizonyítottan azonos kimenettel. ~53× gyorsulás a mért forgatókönyvön.
+* **Dowel Engine** — az automatikus jelölt-generálás (`_longest_run()`) rácspontonként, Python-szinten, minden szeletre egyenként tesztelt — nagy szeletszámnál ez dominált (88,7%, 19 s). Javítás: `shapely.contains_xy()`/NumPy-alapú vektorizálás, bizonyítottan azonos kimenettel (referencia-implementációval bitre pontosan összevetve). ~28× gyorsulás.
+* **GUI-előnézet (ADR-0011, ADR-0012)** — a 3D-előnézet geometria-építése a fő szálon, szinkron futott, UI-fagyasztó módon — mind a Futtatás utáni első megjelenítésnél, mind a kiemelés-/nézet-váltásnál. Javítás: a geometria-építés (tiszta, Qt-független `render_geometry.py`-hívások) háttérszálra vitele; a kiemelés-/nézet-váltásnál egy könnyű generáció-számláló védi ki az elavult eredmények felülírását, publikus jelzés-elkülönítéssel a `MainWindow`-tól (elkerülve egy Futtatás-közbeni interakcióból eredő korrektségi hibát).
+
+Mindhárom élő teszttel megerősítve. Összesített hatás a diagnosztikai forgatókönyveken: "Egyszerű, TIPIKUS" 1911 ms → 368 ms; "Komplex, TIPIKUS" 21 462 ms → 3299 ms.
 
 ---
 

@@ -4,13 +4,22 @@ import logging
 
 import pytest
 import trimesh
+from shapely.geometry import Point, Polygon
 
-from slicedesigner.engines.dowel_engine import ManualDowelPosition, apply_dowels
+from slicedesigner.engines.dowel_engine import (
+    _MIN_AUTO_RUN_LENGTH_SLICES,
+    _PLACEMENT_GRID_STEP_MM,
+    ManualDowelPosition,
+    _build_placement_candidates,
+    _erode_islands_by_slice,
+    apply_dowels,
+)
 from slicedesigner.engines.exceptions import InvalidDowelError
 from slicedesigner.engines.mesh_import import BoundingBox, Mesh
 from slicedesigner.engines.slice_engine import (
     Contour,
     HoleKind,
+    Island,
     Slice,
     SliceSet,
     create_slice_set,
@@ -480,3 +489,178 @@ def test_apply_dowels_never_coverable_island_warns_without_raising(
         and "nem kaphat Dowelt" in record.getMessage()
         for record in caplog.records
     )
+
+
+# --- Regressziós referencia a jelölt-generálás vektorizálásához --------
+#
+# A JAVÍTÁS ELŐTTI (rácspontonkénti, Python `for`-ciklusos) `_longest_run()`
+# és `_build_placement_candidates()` szó szerinti másolata — KIZÁRÓLAG
+# regressziós referenciaként tartva, hogy az új, vektorizált
+# `_build_placement_candidates()` kimenete ellene ellenőrizhető legyen
+# (PROMPT_2026-08-09_dowel-engine-performance-fix.md, 7. szakasz: "a régi
+# implementációt... referenciaként használva"). NEM a Dowel Engine
+# tényleges, éles kódja — kizárólag e teszt-modulban él.
+
+
+def _reference_longest_run(
+    eroded_by_slice: dict[int, list],
+    slice_indices_sorted: list[int],
+    x_mm: float,
+    y_mm: float,
+) -> tuple[int, int]:
+    point = Point(x_mm, y_mm)
+    fits_by_index: dict[int, bool] = {
+        slice_index: any(
+            eroded_polygon.contains(point)
+            for eroded_polygon in eroded_by_slice.get(slice_index, [])
+        )
+        for slice_index in slice_indices_sorted
+    }
+
+    best_start, best_end, best_length = 0, 0, 0
+    current_start: int | None = None
+    previous_index: int | None = None
+
+    for slice_index in slice_indices_sorted:
+        consecutive = previous_index is not None and slice_index == previous_index + 1
+        if fits_by_index[slice_index]:
+            if current_start is None or not consecutive:
+                current_start = slice_index
+            current_length = slice_index - current_start + 1
+            if current_length > best_length:
+                best_start, best_end, best_length = (
+                    current_start,
+                    slice_index,
+                    current_length,
+                )
+        else:
+            current_start = None
+        previous_index = slice_index
+
+    if best_length < _MIN_AUTO_RUN_LENGTH_SLICES:
+        return (0, 0)
+    return (best_start, best_end)
+
+
+def _reference_build_placement_candidates(
+    by_slice: dict[int, list[Island]],
+    slice_indices_sorted: list[int],
+    check_radius_mm: float,
+) -> list[tuple[int, float, float, int, int]]:
+    all_islands = [island for islands in by_slice.values() for island in islands]
+    if not all_islands:
+        return []
+
+    min_x = min(island.polygon.bounds[0] for island in all_islands)
+    min_y = min(island.polygon.bounds[1] for island in all_islands)
+    max_x = max(island.polygon.bounds[2] for island in all_islands)
+    max_y = max(island.polygon.bounds[3] for island in all_islands)
+
+    eroded_by_slice = _erode_islands_by_slice(by_slice, check_radius_mm)
+
+    candidates: list[tuple[int, float, float, int, int]] = []
+    y_mm = min_y
+    while y_mm <= max_y:
+        x_mm = min_x
+        while x_mm <= max_x:
+            start_index, end_index = _reference_longest_run(
+                eroded_by_slice, slice_indices_sorted, x_mm, y_mm
+            )
+            if end_index >= start_index and start_index > 0:
+                length = end_index - start_index + 1
+                candidates.append((length, y_mm, x_mm, start_index, end_index))
+            x_mm += _PLACEMENT_GRID_STEP_MM
+        y_mm += _PLACEMENT_GRID_STEP_MM
+
+    candidates.sort(key=lambda c: (-c[0], c[1], c[2]))
+    return candidates
+
+
+def _make_varied_region_fixture(
+    n_slices: int,
+) -> tuple[dict[int, list[Island]], list[int]]:
+    """Sok szeletes, változó szélességű/hiányos/elágazó régió — a
+    diagnosztikai jelentés "Komplex" forgatókönyvére (sok szelet egyetlen
+    összefüggő régióban) emlékeztető méretskála, a teszt gyors futása
+    érdekében kisebb szeletszámmal.
+
+    Néhány szeleten szándékosan keskenyebb sáv (kevesebb hely a körnek),
+    néhányon teljesen hiányzó sziget (megszakítja a futásokat — próbára
+    teszi a `consecutive`/szomszédossági törést), egy szeleten pedig két
+    külön sziget (elágazás — próbára teszi a szeletenkénti OR-kombinációt,
+    l. `_build_placement_candidates()` `fits[:, col] |= ...`)."""
+    by_slice: dict[int, list[Island]] = {}
+    dummy_solid = Contour(points=())
+    for i in range(1, n_slices + 1):
+        if i % 11 == 0:
+            continue  # szándékos hiány -> megszakítja a futásokat
+        half = 6.0 if i % 7 == 0 else 15.0  # néhány szeleten keskenyebb sáv
+        cx = 20.0 + 0.4 * i  # enyhén elcsúszó középpont (nem triviálisan szimmetrikus)
+
+        if i == 15:
+            # Elágazás: két, egymástól távoli sziget ugyanazon a szeleten.
+            islands = [
+                Island(
+                    slice_index=i,
+                    solid=dummy_solid,
+                    holes=(),
+                    polygon=Polygon(
+                        [(cx - half, -half), (cx, -half), (cx, half), (cx - half, half)]
+                    ),
+                ),
+                Island(
+                    slice_index=i,
+                    solid=dummy_solid,
+                    holes=(),
+                    polygon=Polygon(
+                        [
+                            (cx + 40.0, -half),
+                            (cx + 40.0 + half, -half),
+                            (cx + 40.0 + half, half),
+                            (cx + 40.0, half),
+                        ]
+                    ),
+                ),
+            ]
+        else:
+            polygon = Polygon(
+                [
+                    (cx - half, -half),
+                    (cx + half, -half),
+                    (cx + half, half),
+                    (cx - half, half),
+                ]
+            )
+            islands = [
+                Island(slice_index=i, solid=dummy_solid, holes=(), polygon=polygon)
+            ]
+        by_slice[i] = islands
+    return by_slice, sorted(by_slice.keys())
+
+
+def test_build_placement_candidates_matches_pre_vectorization_reference() -> None:
+    """Az új, vektorizált `_build_placement_candidates()` a javítás előtti,
+    rácspontonkénti implementációval (`_reference_build_placement_candidates()`)
+    BITRE PONTOSAN azonos `candidates`-listát ad — a hossz, pozíció,
+    kezdő/záró szeletindex ÉS a sorrend is (PROMPT_2026-08-09_dowel-engine-
+    performance-fix.md 4. szakasz, legfontosabb korlát).
+
+    A fixture (`_make_varied_region_fixture`) szándékosan sok szeletes,
+    változó szélességű, néhány helyen hiányos és egy helyen elágazó — a
+    `consecutive`-törés, a keskeny sávok szűrő hatása és a
+    több-sziget-egy-szeleten OR-kombináció mind ténylegesen próbára van
+    téve, nem csak a triviális "mindenhol minden elfér" eset."""
+    by_slice, slice_indices_sorted = _make_varied_region_fixture(n_slices=40)
+    check_radius_mm = 5.0
+
+    reference = _reference_build_placement_candidates(
+        by_slice, slice_indices_sorted, check_radius_mm
+    )
+    actual = _build_placement_candidates(
+        by_slice, slice_indices_sorted, check_radius_mm
+    )
+
+    # A fixture ténylegesen termel jelölteket — a puszta ürescsoport-
+    # egyezés nem lenne meggyőző bizonyíték.
+    assert len(reference) > 100
+    assert actual == reference

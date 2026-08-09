@@ -464,13 +464,51 @@ def _circle_contour(cx: float, cy: float, radius: float) -> Contour:
     return Contour(points=points)
 
 
+def _circle_contour_cw(cx: float, cy: float, radius: float) -> Contour:
+    """Kör alakú furat-kontúr, CW körüljárással (ADR-0007 lyuk-konvenció).
+
+    Dokumentált, szándékos duplikáció a Dowel Engine `_circle_contour_cw()`-
+    jéhez képest (ADR-0007 szerint minden kontúr-előállító helyen explicit
+    körüljárás-kikényszerítés szükséges). A `hole_kind`/`depth_mm`
+    kitöltetlenül (`None`) marad — ez a Spacer-korong furata, NEM a Dowel
+    Engine által vágott Dowel Hole, amelyre e két mező dokumentáltan
+    korlátozódik (l. `slice_engine.Contour` docstringje).
+    """
+    points = tuple(
+        (
+            cx + radius * math.cos(-2 * math.pi * i / _DISC_SEGMENT_COUNT),
+            cy + radius * math.sin(-2 * math.pi * i / _DISC_SEGMENT_COUNT),
+        )
+        for i in range(_DISC_SEGMENT_COUNT)
+    )
+    return Contour(points=points)
+
+
 def _spacer_to_discs(
     spacer: Spacer, spacer_index: int, spacer_material: MaterialDefinition
 ) -> list[NestablePart]:
+    """Lásd: NESTING_SPEC.md 6. szakasz 2. pont.
+
+    Ha a Spacer Dowel-re fűzött (`dowel_diameter_mm is not None`,
+    GAP_SYSTEM_SPEC.md 6. szakasz 4/a. pont), minden korong a külső (CCW)
+    kontúr mellett egy második, CW körüljárású furat-kontúrt is kap,
+    `dowel_diameter_mm / 2` sugárral, a korong középpontjával megegyező
+    középponttal — ez a rajta ténylegesen átmenő Dowel helye. Önálló
+    Spacer-eknél (`dowel_diameter_mm is None`) a korong változatlanul
+    egyetlen, furat nélküli CCW kontúrt kap.
+    """
     disc_count = math.ceil(spacer.thickness_mm / spacer_material.thickness_mm)
     discs = []
     for disc_index in range(disc_count):
-        contour = _circle_contour(spacer.x_mm, spacer.y_mm, spacer.diameter_mm / 2)
+        outer_contour = _circle_contour(
+            spacer.x_mm, spacer.y_mm, spacer.diameter_mm / 2
+        )
+        contours: tuple[Contour, ...] = (outer_contour,)
+        if spacer.dowel_diameter_mm is not None:
+            hole_contour = _circle_contour_cw(
+                spacer.x_mm, spacer.y_mm, spacer.dowel_diameter_mm / 2
+            )
+            contours = (outer_contour, hole_contour)
         discs.append(
             NestablePart(
                 reference=PartReference(
@@ -478,7 +516,7 @@ def _spacer_to_discs(
                     spacer_index=spacer_index,
                     disc_index=disc_index,
                 ),
-                contours=(contour,),
+                contours=contours,
                 numbering_marks=(),
                 material_id=spacer_material.material_id,
             )

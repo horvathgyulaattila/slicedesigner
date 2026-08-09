@@ -563,6 +563,80 @@ def test_search_best_anchor_quick_path_finds_inward_corner_without_full_scan(
     assert call_count <= 4
 
 
+def test_search_best_anchor_exhaustive_branch_avoids_full_grid_scan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A kimerítő ág (amikor a gyors sarok-jelöltek egyike sem talál
+    érvényes pozíciót) a célponttól táguló sorrendben, NEM a rács rögzített
+    bejárási sorrendjében vizsgálja a rácspontokat — az első megfelelő
+    találatnál megáll, mert az garantáltan a legközelebbi (l.
+    `_iter_grid_points_by_distance()` docstringje).
+
+    Ugyanaz az L-alakú sziget és célpont, mint
+    `test_search_best_anchor_finds_closest_valid_position`-ban (a gyors
+    sarok-jelöltek ugyanúgy elbuknak, mert a célpont a kimetszett sarokba
+    esne) — DE a keresési tartomány (`min_normal`..`max_normal`,
+    `min_direction`..`max_direction`) itt szándékosan sokkal nagyobb
+    (0..2000 mind a két tengelyen, szemben a sziget tényleges 0..20
+    kiterjedésével), hogy a teljes rács mérete (2001 x 2001 =
+    4 004 001 rácspont) egyértelműen elváljon a ténylegesen szükséges
+    `_fits()`-hívások számától. A visszaadott horgonypontnak a tágabb
+    tartomány ellenére is ugyanannak (12.0, 15.0) kell lennie, mint a
+    kisebb tartománnyal — a keresési tartomány mérete nem befolyásolja a
+    helyességet (NUMBERING_SPEC.md 6. szakasz 3. pont: nincs felső korlát
+    vagy keresési sugár), csak a bejárás sorrendjét/korai megállását."""
+    l_shape_polygon = Polygon(
+        [
+            (0.0, 0.0),
+            (20.0, 0.0),
+            (20.0, 15.0),
+            (15.0, 15.0),
+            (15.0, 20.0),
+            (0.0, 20.0),
+        ]
+    )
+
+    call_count = 0
+    original_fits = numbering_engine_module._fits
+
+    def _counting_fits(*args: object, **kwargs: object) -> bool:
+        nonlocal call_count
+        call_count += 1
+        return bool(original_fits(*args, **kwargs))
+
+    monkeypatch.setattr(numbering_engine_module, "_fits", _counting_fits)
+
+    result = _search_best_anchor(
+        "1",
+        5.0,
+        True,
+        18.75,
+        18.75,
+        0,
+        1.0,
+        1,
+        1.0,
+        l_shape_polygon,
+        0.0,
+        2000.0,
+        0.0,
+        2000.0,
+    )
+
+    assert result is not None
+    anchor_normal, anchor_direction = result
+    assert anchor_normal == pytest.approx(12.0)
+    assert anchor_direction == pytest.approx(15.0)
+
+    # A teljes rács mérete ezzel a tartománnyal (2001 x 2001 rácspont)
+    # ~4 millió `_fits()`-hívást jelentene egy sorrend-vak, kimerítő
+    # bejárásnál. A távolság szerint táguló bejárás ennek töredékét —
+    # nagyságrendekkel kevesebb hívást — igényel, mert a legközelebbi
+    # érvényes pozíció a célponthoz közel van, nem a rács túlsó szélén.
+    full_grid_upper_bound = 2001 * 2001
+    assert call_count < full_grid_upper_bound / 1000
+
+
 def test_build_text_strokes_not_mirrored_for_normal_index_zero() -> None:
     """Regressziós teszt az új `_glyph_to_local()`-ra — élő eset:
     `slice_axis=X`, `numbering_normal_axis=+Z`, ami `normal_index=0`-t

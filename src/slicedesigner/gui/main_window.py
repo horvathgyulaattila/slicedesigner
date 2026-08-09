@@ -98,6 +98,15 @@ class MainWindow(QMainWindow):
         self.run_panel.run_button.clicked.connect(self._on_run_clicked)
         self.run_panel.export_dxf_button.clicked.connect(self._on_export_dxf_clicked)
         self.parameter_panel.mesh_file_selected.connect(self._on_mesh_file_selected)
+        # A 3D-előnézet geometria-építése a Futtatás utáni első
+        # megjelenítéskor háttérszálon fut (ADR-0011) — a Futtatás-állapot
+        # (gomb/menü/folyamatjelző) lezárása (`_finish_run()`) ezért csak
+        # ENNEK befejezésekor történik, nem közvetlenül a pipeline-számítás
+        # végén (l. `_on_pipeline_succeeded()`).
+        self.preview_panel.assembly_render_succeeded.connect(self._finish_run)
+        self.preview_panel.assembly_render_failed.connect(
+            self._on_preview_render_failed
+        )
         self._build_menu_bar()
 
         splitter = QSplitter(Qt.Orientation.Horizontal, self)
@@ -120,10 +129,15 @@ class MainWindow(QMainWindow):
         """A jelenlegi widget-állapot mentése alkalmazás-szintű
         alapértelmezésként, bezárás előtt.
 
-        Amíg a pipeline háttérszála fut, a bezárás elutasításra kerül
-        (`event.ignore()`) — a `run_pipeline()`-nak nincs megszakítási
-        pontja, egy futó szál mellett bezárt ablak esetén a szál
-        widget-hozzáférés nélkül, de befejezetlenül maradna hátra.
+        Amíg a Futtatás folyamatban van — a pipeline háttérszála (`self._worker`)
+        VAGY az azt követő, a 3D-előnézet geometria-építését végző
+        háttérszál (`PreviewPanel._preview_worker`, ADR-0011) fut —, a
+        bezárás elutasításra kerül (`event.ignore()`): egyiknek sincs
+        megszakítási pontja, egy futó szál mellett bezárt ablak esetén a
+        szál widget-hozzáférés nélkül, de befejezetlenül maradna hátra.
+        `self._worker` a `_finish_run()`-ig (amit a 3D-előnézet befejezése
+        indít el, l. `__init__`) nem `None`, ezért ez az egyetlen
+        ellenőrzés mindkét szakaszt lefedi.
 
         Ha a szál nem fut, a mentés kimenetelétől függetlenül mindig
         engedélyezi a bezárást (`app_settings.save_current_config()` sosem
@@ -294,6 +308,18 @@ class MainWindow(QMainWindow):
         előállított exportot, ezért a sikeres üzenet a Nest-ek (lapok)
         számát jelzi, és a `self._last_nests` kerül beállításra a "DXF
         Export" gomb engedélyezésével együtt.
+
+        A `_finish_run()` hívása itt SZÁNDÉKOSAN NEM történik meg — a
+        3D-előnézet geometria-építése (`show_sliced_assembly()`) mostantól
+        háttérszálon fut (ADR-0011), és a `_finish_run()`-t csak annak
+        befejezésekor (`PreviewPanel.assembly_render_succeeded`/
+        `assembly_render_failed`, l. `__init__`) hívjuk meg — így a
+        "Futtatás" gomb/menü a teljes, felhasználó számára látható
+        művelet (pipeline-számítás + 3D-megjelenítés) végéig letiltott
+        marad, ugyanúgy, ahogy a korábbi, szinkron viselkedésnél is
+        (amikor a renderelés még a hívás része volt) — ez egyúttal
+        kizárja, hogy egy újabb Futtatás a még folyamatban lévő
+        előnézet-építéssel versenyhelyzetbe kerüljön.
         """
         message = (
             f"Futtatás sikeres — {result.slice_set.slice_count} szelet, "
@@ -317,6 +343,21 @@ class MainWindow(QMainWindow):
             result.spacers,
             result.backplate,
             backplate_normal_axis,
+        )
+
+    def _on_preview_render_failed(self, error: Exception) -> None:
+        """A `PreviewPanel.assembly_render_failed` jelzésre kötött slot (fő
+        szál, ADR-0011) — a 3D-előnézet geometria-építése (háttérszálon)
+        hibába ütközött.
+
+        A `PreviewPanel` már naplózta a kivételt (CODING_STANDARDS 5.
+        szakasz); itt csak a felhasználó felé látható állapot-üzenet és a
+        futtatás-állapot lezárása (`_finish_run()`) történik — a Futtatás
+        maga (a pipeline-számítás) sikeres volt, ezért ez figyelmeztetés,
+        nem a Futtatás sikerességének visszavonása.
+        """
+        self.run_panel.status_log.append(
+            f"Figyelem: a 3D-előnézet felépítése hibába ütközött: {error}"
         )
         self._finish_run()
 

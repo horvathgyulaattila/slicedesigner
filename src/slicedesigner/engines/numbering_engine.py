@@ -4,7 +4,9 @@ Lásd: docs/specifications/NUMBERING_SPEC.md (6. szakasz, 1-5. lépés).
 A Backplate-oldali jelölés (6. lépés) külön menetben készül.
 """
 
+import heapq
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from enum import Enum
 
@@ -378,6 +380,128 @@ def _text_footprint_offset_bounds(
     return min(xs), max(xs), min(ys), max(ys)
 
 
+def _grid_values(min_value: float, max_value: float, step: float) -> list[float]:
+    """A `min_value`-tól `max_value`-ig, `step`-enként, összegzéssel (nem
+    osztással) generált rácsérték-lista — szó szerint ugyanaz a
+    lebegőpontos akkumuláció (`value = min_value; while value <= max_value:
+    ...; value += step`), mint amit a korábbi, közvetlenül beágyazott
+    ciklusos bejárás használt, hogy a visszaadott rácspontok bitre
+    pontosan azonosak maradjanak (l. `_iter_grid_points_by_distance()`
+    docstringje)."""
+    values: list[float] = []
+    value = min_value
+    while value <= max_value:
+        values.append(value)
+        value += step
+    return values
+
+
+def _distance_ordered_ranks(values: tuple[float, ...], target: float) -> list[int]:
+    """`values` indexei, a `target`-től vett (négyzetes) távolság szerint
+    nem csökkenő sorrendben; azonos távolság esetén a kisebb index (azaz
+    — mivel `values` szigorúan növekvő — a kisebb érték) áll előrébb.
+    Mivel `values` szigorúan monoton növekvő, ez a "rang"-sorrend maga is
+    a `target`-hez legközelebbi indextől táguló, mindkét irányba
+    egyenletesen táguló sorrend — ezt használja fel
+    `_iter_grid_points_by_distance()` a teljes rács rendezése nélkül."""
+    return sorted(range(len(values)), key=lambda i: ((values[i] - target) ** 2, i))
+
+
+def _iter_grid_points_by_distance(
+    normal_values: tuple[float, ...],
+    direction_values: tuple[float, ...],
+    target_normal: float,
+    target_direction: float,
+) -> Iterator[tuple[float, float]]:
+    """`(anchor_normal, anchor_direction)` rácspontokat ad vissza a
+    `(target_normal, target_direction)` célponttól vett euklideszi
+    távolság szerint NEM csökkenő sorrendben — azonos távolságú pontok
+    közül a korábbi, beágyazott ciklusos bejárás (kívül
+    `anchor_direction`, belül `anchor_normal`, mindkettő növekvő
+    sorrendben) sorrendjével megegyező tie-breakkel (kisebb
+    `anchor_direction`, majd kisebb `anchor_normal` előbb).
+
+    A "két rendezett sorozat legkisebb összegű párjai" klasszikus,
+    heap-alapú algoritmusát alkalmazza: mindkét tengely saját,
+    cél-távolság szerint rendezett rangsorában (`_distance_ordered_ranks`)
+    a négyzetes távolság-hozzájárulás rangonként monoton nő (mivel
+    `normal_values`/`direction_values` szigorúan monoton, a
+    legközelebbi rangtól távolodva csak nőhet a különbség), ezért a
+    legközelebbi (rang 0, rang 0) párból kiindulva, csak a szomszédos
+    rangokra terjeszkedve garantáltan táguló-távolság sorrendben járja be
+    a rácsot — a teljes N×M rács előállítása vagy rendezése nélkül. Ez
+    lehetővé teszi a hívó számára, hogy az ELSŐ megfelelő (`_fits()`)
+    találatnál megálljon, mert az garantáltan a legközelebbi érvényes
+    pozíció (NUMBERING_SPEC.md 6. szakasz 3. pont) — csak a bejárás
+    sorrendje/korai megállása változik a korábbi, kimerítő bejáráshoz
+    képest, a rács maga (érték-lista, `_PLACEMENT_GRID_STEP_MM`) nem.
+    """
+    normal_ranks = _distance_ordered_ranks(normal_values, target_normal)
+    direction_ranks = _distance_ordered_ranks(direction_values, target_direction)
+    normal_sq = tuple((normal_values[i] - target_normal) ** 2 for i in normal_ranks)
+    direction_sq = tuple(
+        (direction_values[j] - target_direction) ** 2 for j in direction_ranks
+    )
+
+    # Heap-elem: (négyzetes távolság, anchor_direction, anchor_normal, rang0,
+    # rang1) — a rendezés elsődlegesen a távolság, másodlagosan/
+    # harmadlagosan a korábbi bejárás tie-breakjét adó tényleges érték
+    # szerint történik (a rangok csak biztonsági, sosem ténylegesen
+    # kiértékelt végső tie-breakként szerepelnek).
+    heap: list[tuple[float, float, float, int, int]] = [
+        (
+            normal_sq[0] + direction_sq[0],
+            direction_values[direction_ranks[0]],
+            normal_values[normal_ranks[0]],
+            0,
+            0,
+        )
+    ]
+    visited = {(0, 0)}
+    while heap:
+        _distance_sq, _dir_val, _norm_val, rank_normal, rank_direction = heapq.heappop(
+            heap
+        )
+        yield (
+            normal_values[normal_ranks[rank_normal]],
+            direction_values[direction_ranks[rank_direction]],
+        )
+
+        next_normal = rank_normal + 1
+        if (
+            next_normal < len(normal_ranks)
+            and (next_normal, rank_direction) not in visited
+        ):
+            visited.add((next_normal, rank_direction))
+            heapq.heappush(
+                heap,
+                (
+                    normal_sq[next_normal] + direction_sq[rank_direction],
+                    direction_values[direction_ranks[rank_direction]],
+                    normal_values[normal_ranks[next_normal]],
+                    next_normal,
+                    rank_direction,
+                ),
+            )
+
+        next_direction = rank_direction + 1
+        if (
+            next_direction < len(direction_ranks)
+            and (rank_normal, next_direction) not in visited
+        ):
+            visited.add((rank_normal, next_direction))
+            heapq.heappush(
+                heap,
+                (
+                    normal_sq[rank_normal] + direction_sq[next_direction],
+                    direction_values[direction_ranks[next_direction]],
+                    normal_values[normal_ranks[rank_normal]],
+                    rank_normal,
+                    next_direction,
+                ),
+            )
+
+
 def _search_best_anchor(
     text: str,
     height_mm: float,
@@ -455,32 +579,41 @@ def _search_best_anchor(
     if best is not None:
         return best
 
-    anchor_direction = min_direction
-    while anchor_direction <= max_direction:
-        anchor_normal = min_normal
-        while anchor_normal <= max_normal:
-            if _fits(
-                text,
-                height_mm,
-                upright,
-                anchor_normal,
-                anchor_direction,
-                normal_index,
-                normal_sign,
-                direction_index,
-                direction_sign,
-                island_polygon,
-            ):
-                distance = (
-                    (anchor_normal - target_normal) ** 2
-                    + (anchor_direction - target_direction) ** 2
-                ) ** 0.5
-                if distance < best_distance:
-                    best_distance = distance
-                    best = (anchor_normal, anchor_direction)
-            anchor_normal += _PLACEMENT_GRID_STEP_MM
-        anchor_direction += _PLACEMENT_GRID_STEP_MM
-    return best
+    # Kimerítő ág, felső korlát/keresési sugár nélkül (NUMBERING_SPEC.md 6.
+    # szakasz 3. pont) — de NEM a rács rögzített (kívül `anchor_direction`,
+    # belül `anchor_normal`) bejárási sorrendjében, hanem a célponttól vett
+    # távolság szerint táguló sorrendben (`_iter_grid_points_by_distance()`):
+    # az első `_fits()`-nek megfelelő rácspont garantáltan a legközelebbi,
+    # ezért a keresés ott megállhat — a teljes rács bejárása csak akkor
+    # történik meg ténylegesen, ha SEHOL nincs érvényes pozíció (ez a
+    # helyesség ára, nem a teljesítményé). A rács maga (értékek,
+    # `_PLACEMENT_GRID_STEP_MM`) és a visszaadott horgonypont változatlan;
+    # csak a bejárás sorrendje/korai megállása változott a korábbi,
+    # kimerítő bejáráshoz képest.
+    normal_values = tuple(_grid_values(min_normal, max_normal, _PLACEMENT_GRID_STEP_MM))
+    direction_values = tuple(
+        _grid_values(min_direction, max_direction, _PLACEMENT_GRID_STEP_MM)
+    )
+    if not normal_values or not direction_values:
+        return None
+
+    for anchor_normal, anchor_direction in _iter_grid_points_by_distance(
+        normal_values, direction_values, target_normal, target_direction
+    ):
+        if _fits(
+            text,
+            height_mm,
+            upright,
+            anchor_normal,
+            anchor_direction,
+            normal_index,
+            normal_sign,
+            direction_index,
+            direction_sign,
+            island_polygon,
+        ):
+            return anchor_normal, anchor_direction
+    return None
 
 
 def _resolve_numbering(

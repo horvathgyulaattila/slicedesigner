@@ -8,6 +8,9 @@ import math
 from dataclasses import dataclass, replace
 
 import networkx as nx
+import numpy as np
+from numpy.typing import NDArray
+from shapely import contains_xy
 from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
 
@@ -139,49 +142,95 @@ def _erode_islands_by_slice(
     }
 
 
-def _longest_run(
-    eroded_by_slice: dict[int, list[BaseGeometry]],
-    slice_indices_sorted: list[int],
-    x_mm: float,
-    y_mm: float,
-) -> tuple[int, int]:
-    """A leghosszabb egymást követő szeletfutás (kezdő, záró sorszám), ahol a kör elfér.
+def _grid_values(min_value: float, max_value: float, step: float) -> list[float]:
+    """A `min_value`-tól `max_value`-ig, `step`-enként, összegzéssel (nem
+    osztással) generált rácsérték-lista — szó szerint ugyanaz a
+    lebegőpontos akkumuláció (`value = min_value; while value <= max_value:
+    ...; value += step`), mint amit a korábbi, közvetlenül beágyazott
+    ciklusos rácsos bejárás használt, hogy a rácspontok (és így a
+    `candidates` bemenete) bitre pontosan azonosak maradjanak a korábbi
+    implementációéval (l. `_build_placement_candidates()` docstringje)."""
+    values: list[float] = []
+    value = min_value
+    while value <= max_value:
+        values.append(value)
+        value += step
+    return values
 
-    Nincs elfogadható (legalább `_MIN_AUTO_RUN_LENGTH_SLICES` hosszú) futás
-    esetén (0, 0) az eredmény.
+
+def _longest_run_matrix(
+    fits: NDArray[np.bool_], slice_indices_sorted: list[int]
+) -> tuple[NDArray[np.int64], NDArray[np.int64]]:
+    """A korábbi, pontonkénti `_longest_run()`-nal egyenértékű, de a rács
+    MINDEN pontjára egyszerre, vektorizáltan számított "leghosszabb
+    egymást követő szeletfutás" — `fits` sorai a rácspontok, oszlopai a
+    `slice_indices_sorted` szerinti szeletek (`fits[i, j]` = a `j`.
+    szeleten elfér-e az `i`. rácspont köre, l. `_build_placement_candidates()`).
+
+    Returns:
+        `(start_index, end_index)` — mindkettő `(n_pontok,)` alakú int
+        tömb; nincs elfogadható (legalább `_MIN_AUTO_RUN_LENGTH_SLICES`
+        hosszú) futás esetén `(0, 0)` az adott pontra — szó szerint a
+        korábbi, pontonkénti `_longest_run()` szerződése.
+
+    A `slice_indices_sorted` szomszédossága (nem csak a lista-pozíció,
+    hanem a TÉNYLEGES szeletindexek `+1` különbsége) törik a futást — a
+    korábbi `consecutive = slice_index == previous_index + 1` feltétel
+    vektorizált megfelelője (`adjacent`).
+
+    Az oszloponkénti (`slice_indices_sorted` szerinti) ciklus Python-
+    szintű, DE az iterációk száma a régió szeleteinek száma (nem a
+    rácspontok száma) — minden iteráció a rács ÖSSZES pontjára egyszerre,
+    NumPy-vektorművelettel fut. Ez a korábbi, (rácspontok száma × szeletek
+    száma) darab `.contains()`-hívást (rácspontonkénti pontonkénti
+    ciklusban) (szeletek száma) darab vektorművelet-lépésre cseréli — a
+    kimenet (mely rácspontokhoz milyen futás tartozik) nem változik,
+    kizárólag a számítási módszer (PROMPT_2026-08-09_dowel-engine-
+    performance-fix.md, teljesítmény-optimalizáció, nem viselkedésváltozás).
     """
-    point = Point(x_mm, y_mm)
-    fits_by_index: dict[int, bool] = {
-        slice_index: any(
-            eroded_polygon.contains(point)
-            for eroded_polygon in eroded_by_slice.get(slice_index, [])
+    n_points, n_slices = fits.shape
+    slice_indices_arr = np.array(slice_indices_sorted, dtype=np.int64)
+
+    if n_slices == 0 or n_points == 0:
+        return (
+            np.zeros(n_points, dtype=np.int64),
+            np.zeros(n_points, dtype=np.int64),
         )
-        for slice_index in slice_indices_sorted
-    }
 
-    best_start, best_end, best_length = 0, 0, 0
-    current_start: int | None = None
-    previous_index: int | None = None
+    run_length = np.zeros((n_points, n_slices), dtype=np.int64)
+    run_start_col = np.zeros((n_points, n_slices), dtype=np.int64)
 
-    for slice_index in slice_indices_sorted:
-        consecutive = previous_index is not None and slice_index == previous_index + 1
-        if fits_by_index[slice_index]:
-            if current_start is None or not consecutive:
-                current_start = slice_index
-            current_length = slice_index - current_start + 1
-            if current_length > best_length:
-                best_start, best_end, best_length = (
-                    current_start,
-                    slice_index,
-                    current_length,
-                )
-        else:
-            current_start = None
-        previous_index = slice_index
+    run_length[:, 0] = fits[:, 0].astype(np.int64)
+    # run_start_col[:, 0] marad 0 — csak ott releváns, ahol fits[:, 0] igaz,
+    # ott pedig a futás pontosan a 0. oszlopon (magán) kezdődik.
 
-    if best_length < _MIN_AUTO_RUN_LENGTH_SLICES:
-        return (0, 0)
-    return (best_start, best_end)
+    adjacent = slice_indices_arr[1:] == slice_indices_arr[:-1] + 1
+    for col in range(1, n_slices):
+        can_continue = fits[:, col] & fits[:, col - 1] & adjacent[col - 1]
+        run_length[:, col] = np.where(
+            fits[:, col],
+            np.where(can_continue, run_length[:, col - 1] + 1, 1),
+            0,
+        )
+        run_start_col[:, col] = np.where(
+            fits[:, col],
+            np.where(can_continue, run_start_col[:, col - 1], col),
+            run_start_col[:, col - 1],
+        )
+
+    # `argmax` az érték-sorozat ELSŐ (legkisebb oszlopindexű) maximumát adja
+    # — ez pontosan a korábbi, `current_length > best_length` (szigorú)
+    # összehasonlítású pontonkénti ciklus viselkedése: azonos hosszúságú
+    # futások közül mindig a korábban (balrább) befejeződő nyer.
+    best_col = np.argmax(run_length, axis=1)
+    point_indices = np.arange(n_points)
+    best_length = run_length[point_indices, best_col]
+    best_start_col = run_start_col[point_indices, best_col]
+
+    meets_threshold = best_length >= _MIN_AUTO_RUN_LENGTH_SLICES
+    start_index = np.where(meets_threshold, slice_indices_arr[best_start_col], 0)
+    end_index = np.where(meets_threshold, slice_indices_arr[best_col], 0)
+    return start_index, end_index
 
 
 def _match_manual_position_to_region(
@@ -247,6 +296,19 @@ def _build_placement_candidates(
     Nem függ a már elhelyezett Dowelektől — ezért régiónként egyszer
     hívandó, nem minden egyes elhelyezendő Dowelnél újra (lásd
     `apply_dowels()`).
+
+    A rácspontonkénti illeszkedés-teszt (`shapely.contains_xy()`) és a
+    "leghosszabb egymást követő szeletfutás" számítás (`_longest_run_matrix()`)
+    vektorizált, NumPy-alapú: a korábbi, (rácspontok száma × régió
+    szeleteinek száma) darab Python-szintű, egyenkénti `.contains()`-hívás
+    helyett szeletenként (nem rácspontonként) egy-egy vektorizált hívás
+    történik, a rács ÖSSZES pontjára egyszerre. A visszaadott `candidates`
+    lista TARTALMA (a rendezés után) bitre pontosan azonos a korábbi,
+    pontonkénti bejárással — mivel az `(y_mm, x_mm)` rácspont-párok minden
+    ténylegesen felvett jelöltnél egyedik (nincs két azonos rácsponthoz
+    tartozó jelölt), a végső `.sort()` a felépítés sorrendjétől
+    függetlenül determinisztikus (PROMPT_2026-08-09_dowel-engine-
+    performance-fix.md).
     """
     all_islands = [island for islands in by_slice.values() for island in islands]
     if not all_islands:
@@ -259,19 +321,40 @@ def _build_placement_candidates(
 
     eroded_by_slice = _erode_islands_by_slice(by_slice, check_radius_mm)
 
-    candidates: list[tuple[int, float, float, int, int]] = []
-    y_mm = min_y
-    while y_mm <= max_y:
-        x_mm = min_x
-        while x_mm <= max_x:
-            start_index, end_index = _longest_run(
-                eroded_by_slice, slice_indices_sorted, x_mm, y_mm
-            )
-            if end_index >= start_index and start_index > 0:
-                length = end_index - start_index + 1
-                candidates.append((length, y_mm, x_mm, start_index, end_index))
-            x_mm += _PLACEMENT_GRID_STEP_MM
-        y_mm += _PLACEMENT_GRID_STEP_MM
+    x_values = _grid_values(min_x, max_x, _PLACEMENT_GRID_STEP_MM)
+    y_values = _grid_values(min_y, max_y, _PLACEMENT_GRID_STEP_MM)
+    if not x_values or not y_values:
+        return []
+
+    # `xs_grid`/`ys_grid` sorai `y_values`, oszlopai `x_values` szerint —
+    # `.ravel()` után a rácspontok sorrendje pontosan a korábbi, kívül
+    # `y_mm`, belül `x_mm` beágyazott ciklusos bejárás sorrendje (nem
+    # helyességi követelmény, l. a docstring fenti része, de a
+    # hibakereséshez/naplózáshoz hasznos, hogy megmaradjon).
+    xs_grid, ys_grid = np.meshgrid(np.array(x_values), np.array(y_values))
+    xs_flat = xs_grid.ravel()
+    ys_flat = ys_grid.ravel()
+    n_points = xs_flat.shape[0]
+
+    fits = np.zeros((n_points, len(slice_indices_sorted)), dtype=np.bool_)
+    for col, slice_index in enumerate(slice_indices_sorted):
+        for eroded_polygon in eroded_by_slice.get(slice_index, []):
+            fits[:, col] |= contains_xy(eroded_polygon, xs_flat, ys_flat)
+
+    start_index_arr, end_index_arr = _longest_run_matrix(fits, slice_indices_sorted)
+    length_arr = end_index_arr - start_index_arr + 1
+
+    candidates: list[tuple[int, float, float, int, int]] = [
+        (
+            int(length_arr[i]),
+            float(ys_flat[i]),
+            float(xs_flat[i]),
+            int(start_index_arr[i]),
+            int(end_index_arr[i]),
+        )
+        for i in range(n_points)
+        if end_index_arr[i] >= start_index_arr[i] and start_index_arr[i] > 0
+    ]
 
     candidates.sort(key=lambda c: (-c[0], c[1], c[2]))
     return candidates

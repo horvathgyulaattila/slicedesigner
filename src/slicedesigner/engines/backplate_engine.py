@@ -58,6 +58,42 @@ _WORLD_AXIS_INDEX: dict[str, int] = {"X": 0, "Y": 1, "Z": 2}
 
 _AXIS_CYCLE: tuple[str, str, str] = ("X", "Y", "Z")
 
+# A csap-téglalap belső élének a sziget saját `local_extreme_mm` szélső
+# koordinátáján túli, befelé irányuló ráhagyása (`_build_tab_rectangle()`).
+#
+# A `local_extreme_mm` a sziget kontúrjának globális szélsőértéke — de az
+# érintkező szakaszt alkotó, "egy síkban lévőnek" tekintett pontok
+# (`_find_contact_segments()` `in_plane` szűrője) csak `backplate_plane_
+# tolerance_mm`-en BELÜL kell hogy essenek ehhez a szélsőértékhez, nem
+# pontosan rajta. Egy nem tökéletesen egyenes (pl. lépcsős) érintkezési
+# határnál ez azt jelenti, hogy a sziget tényleges pereme a szakasz egyes
+# pontjai között akár `backplate_plane_tolerance_mm`-nyit is befelé
+# hajolhat a csap-téglalap (korábban a `local_extreme_mm`-nél konstans)
+# belső éléhez képest — a kettő között egy vékony, egyik alakzat által sem
+# fedett sáv marad, ezért a `unary_union([island.polygon, rectangle])` a
+# szigetet és a csapot csak érintkező, de nem ténylegesen egyesített
+# `MultiPolygon`-ként adja vissza (l. `_apply_tab_geometry()` és a
+# `test_place_backplate_tabs_stepped_contact_edge_merges_into_single_island()`
+# regressziós teszt).
+#
+# A javítás: a téglalap belső élét nem `local_extreme_mm`-nél, hanem attól
+# `backplate_plane_tolerance_mm + _TAB_OVERLAP_SAFETY_EPSILON_MM`-mel
+# befelé húzzuk meg. Mivel az érintkezési határ ezen a tűréshatáron belüli
+# eltérését a klaszterezési/érintkezés-azonosítási logika (6. szakasz
+# 2-3. pont) már eleve "ugyanabban a síkban lévőnek" fogadja el, ez a
+# ráhagyás nem vezet be új pontatlanságot — kizárólag garantálja, hogy a
+# csap-téglalap ténylegesen ÁTFEDI (nem csak érinti) a sziget tényleges
+# perem-geometriáját, a sziget-oldalon már eleve tolerált sávon belül. A
+# csap látható (a szigeten túl kinyúló) mérete/mélysége (BACKPLATE_SPEC.md
+# 6. szakasz 9. pont) nem változik, mert a ráhagyás kizárólag a sziget
+# saját anyagával fedésbe kerülő, a végeredményben láthatatlan tartományt
+# bővíti. A `_TAB_OVERLAP_SAFETY_EPSILON_MM` (a Dowel Engine
+# `_EROSION_TANGENCY_EPSILON_MM`-mintájára, CODING_STANDARDS.md 7. szakasz)
+# minden gyártási/geometriai pontosság alatt van, kizárólag a `<=`
+# tűréshatár-egyenlőség (határeseti tangencia) ellen nyújt biztonsági
+# ráhagyást.
+_TAB_OVERLAP_SAFETY_EPSILON_MM = 1e-6
+
 
 def _cyclic_parity(first: str, second: str) -> float:
     """+1.0, ha (first, second) az X→Y→Z→X kanonikus ciklikus sorrendet
@@ -366,14 +402,21 @@ def _build_tab_rectangle(
     normal_index: int,
     sign: float,
     third_index: int,
+    plane_tolerance_mm: float,
 ) -> Polygon:
     """Egy csap-protrúzió téglalapjának felépítése kontúr-lokális koordinátákban.
 
-    A belső él a sziget saját szélső koordinátájánál kezdődik (hogy a
-    protrúzió biztosan érintkezzen a sziget geometriájával), a külső éle
-    a validált közös Backplate-síktól számított `backplate_thickness_mm`.
+    A belső él a sziget saját szélső koordinátájától
+    `plane_tolerance_mm + _TAB_OVERLAP_SAFETY_EPSILON_MM`-mel befelé
+    kezdődik — nem pontosan a szélső koordinátánál —, hogy a protrúzió a
+    sziget geometriájával nem tökéletesen egyenes (pl. lépcsős) érintkezési
+    határ esetén is garantáltan ÁTFEDJEN, ne csak érintkezzen (l.
+    `_TAB_OVERLAP_SAFETY_EPSILON_MM` docstringje). A külső éle a validált
+    közös Backplate-síktól számított `backplate_thickness_mm` — ez, és a
+    csap látható mélysége/mérete, a ráhagyástól függetlenül változatlan.
     """
-    inner_normal = local_extreme_mm * sign
+    inner_overlap_mm = plane_tolerance_mm + _TAB_OVERLAP_SAFETY_EPSILON_MM
+    inner_normal = (local_extreme_mm - inner_overlap_mm) * sign
     outer_normal = (common_plane_mm + backplate_thickness_mm) * sign
 
     def _point(normal_value: float, third_value: float) -> tuple[float, float]:
@@ -740,6 +783,7 @@ def place_backplate_tabs(
                     normal_index,
                     sign,
                     third_index,
+                    backplate_plane_tolerance_mm,
                 )
                 tab_rectangles_by_key.setdefault(key, []).append(rectangle)
 

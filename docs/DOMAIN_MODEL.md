@@ -119,9 +119,9 @@ Minden fogalom azonos szerkezetben szerepel: Definíció, Szerepe, Attribútumok
 
 **Szerepe:** Fenntartja a szeletek között tervezett távolságot.
 
-**Attribútumok (felsorolás szinten):** geometriai forma, vastagság, darabszám Gap-enként.
+**Attribútumok (felsorolás szinten):** geometriai forma, vastagság, darabszám Gap-enként, a rajta átmenő Dowel átmérőjével megegyező furat (kizárólag a Dowel-re fűzött Spacer-eknél).
 
-**Kapcsolódó fogalmak:** Gap, Slice
+**Kapcsolódó fogalmak:** Gap, Slice, Dowel
 
 ---
 
