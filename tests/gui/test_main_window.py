@@ -17,6 +17,7 @@ from PySide6.QtGui import QAction  # noqa: E402
 from PySide6.QtWidgets import QMenu  # noqa: E402
 from pytestqt.qtbot import QtBot  # noqa: E402
 
+from slicedesigner.gui.examples_dialog import ExampleInfo  # noqa: E402
 from slicedesigner.gui.main_window import MainWindow  # noqa: E402
 from slicedesigner.project.exceptions import PipelineConfigurationError  # noqa: E402
 
@@ -72,6 +73,33 @@ def _mock_show_sliced_assembly_succeeds(
 
     monkeypatch.setattr(main_window.preview_panel, "show_sliced_assembly", _fake)
     return calls
+
+
+def _mock_show_nests(
+    main_window: MainWindow, monkeypatch: pytest.MonkeyPatch
+) -> list[tuple[object, ...]]:
+    """`PreviewPanel.show_nests()` mockolása: az argumentumokat rögzíti,
+    a valódi (`Nest`-objektumok mezőire — `material_id`/`sheet_count` —
+    támaszkodó) feldolgozás nélkül, hogy a teszt-fixture-ök egyszerű,
+    nem valódi `Nest`-eket (pl. `object()`) is átadhassanak."""
+    calls: list[tuple[object, ...]] = []
+    monkeypatch.setattr(
+        main_window.preview_panel, "show_nests", lambda *args: calls.append(args)
+    )
+    return calls
+
+
+def _fake_pipeline_config(
+    *, material_definitions: tuple[object, ...] = ()
+) -> SimpleNamespace:
+    """A `_PipelineWorker.config` (`self._worker.config`) minimális,
+    `_on_pipeline_succeeded()` által ténylegesen olvasott hamisítványa —
+    `nesting.material_definitions` (2D export-előnézet) és `backplate`
+    (Backplate 3D-előnézet)."""
+    return SimpleNamespace(
+        nesting=SimpleNamespace(material_definitions=material_definitions),
+        backplate=None,
+    )
 
 
 @pytest.fixture
@@ -164,9 +192,12 @@ def test_run_button_success_updates_status_log(
         backplate=None,
         nests=fake_nests,
     )
+    fake_material_definitions = (object(),)
     monkeypatch.setattr(
         "slicedesigner.gui.main_window.config_builder.build_pipeline_config",
-        lambda parameter_panel, run_panel: object(),
+        lambda parameter_panel, run_panel: _fake_pipeline_config(
+            material_definitions=fake_material_definitions
+        ),
     )
     monkeypatch.setattr(
         "slicedesigner.gui.main_window.run_pipeline",
@@ -175,6 +206,7 @@ def test_run_button_success_updates_status_log(
     show_sliced_assembly_calls = _mock_show_sliced_assembly_succeeds(
         main_window, monkeypatch
     )
+    show_nests_calls = _mock_show_nests(main_window, monkeypatch)
 
     main_window.run_panel.run_button.click()
     # A tényleges `run_pipeline()`-hívás egy háttérszálon fut; a
@@ -193,6 +225,7 @@ def test_run_button_success_updates_status_log(
     assert show_sliced_assembly_calls == [
         (fake_slice_set, fake_dowel_positions, fake_spacers, None, None)
     ]
+    assert show_nests_calls == [(fake_nests, fake_material_definitions)]
 
 
 def test_run_button_engine_error_shows_processing_error(
@@ -241,12 +274,13 @@ def test_run_button_and_menu_disabled_while_pipeline_running(
 
     monkeypatch.setattr(
         "slicedesigner.gui.main_window.config_builder.build_pipeline_config",
-        lambda parameter_panel, run_panel: object(),
+        lambda parameter_panel, run_panel: _fake_pipeline_config(),
     )
     monkeypatch.setattr(
         "slicedesigner.gui.main_window.run_pipeline", _blocking_run_pipeline
     )
     _mock_show_sliced_assembly_succeeds(main_window, monkeypatch)
+    _mock_show_nests(main_window, monkeypatch)
 
     main_window.run_panel.run_button.click()
 
@@ -364,13 +398,14 @@ def test_new_run_resets_last_nests_and_disables_export_button(
     )
     monkeypatch.setattr(
         "slicedesigner.gui.main_window.config_builder.build_pipeline_config",
-        lambda parameter_panel, run_panel: object(),
+        lambda parameter_panel, run_panel: _fake_pipeline_config(),
     )
     monkeypatch.setattr(
         "slicedesigner.gui.main_window.run_pipeline",
         lambda config: fake_result,
     )
     _mock_show_sliced_assembly_succeeds(main_window, monkeypatch)
+    _mock_show_nests(main_window, monkeypatch)
 
     main_window.run_panel.run_button.click()
 
@@ -398,12 +433,13 @@ def test_close_event_rejects_close_while_pipeline_running(
 
     monkeypatch.setattr(
         "slicedesigner.gui.main_window.config_builder.build_pipeline_config",
-        lambda parameter_panel, run_panel: object(),
+        lambda parameter_panel, run_panel: _fake_pipeline_config(),
     )
     monkeypatch.setattr(
         "slicedesigner.gui.main_window.run_pipeline", _blocking_run_pipeline
     )
     _mock_show_sliced_assembly_succeeds(main_window, monkeypatch)
+    _mock_show_nests(main_window, monkeypatch)
     save_calls = []
     monkeypatch.setattr(
         "slicedesigner.gui.main_window.app_settings.save_current_config",
@@ -421,6 +457,53 @@ def test_close_event_rejects_close_while_pipeline_running(
 
     release_event.set()
     qtbot.waitUntil(lambda: main_window.run_panel.run_button.isEnabled(), timeout=2000)
+
+
+def test_close_event_rejects_close_while_example_generation_running(
+    main_window: MainWindow,
+    qtbot: QtBot,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A `closeEvent()` a "Példák megnyitása" háttérszála alatt is védi az
+    ablakbezárást (EXAMPLES_LAUNCHER_SPEC.md 6.5. pont) — ugyanaz a
+    minta, mint `test_close_event_rejects_close_while_pipeline_running`."""
+    example = _fake_example(tmp_path)
+    _install_fake_examples_dialog(monkeypatch, example)
+    release_event = threading.Event()
+
+    def _blocking_run(*args: object, **kwargs: object) -> SimpleNamespace:
+        assert release_event.wait(timeout=2.0)
+        return SimpleNamespace(returncode=0, stderr="")
+
+    monkeypatch.setattr(
+        "slicedesigner.gui.examples_dialog.subprocess.run", _blocking_run
+    )
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.persistence.load_project_config",
+        lambda file_path: object(),
+    )
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.config_loader.apply_pipeline_config",
+        lambda config, parameter_panel, run_panel: 0,
+    )
+    save_calls = []
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.app_settings.save_current_config",
+        lambda parameter_panel, run_panel: save_calls.append(True),
+    )
+
+    _get_file_menu_action(main_window, "Példák megnyitása...").trigger()
+    assert main_window._examples_worker is not None
+
+    main_window.close()
+
+    assert main_window.isVisible()
+    assert save_calls == []
+    assert "Futtatás folyamatban" in main_window.run_panel.status_log.toPlainText()
+
+    release_event.set()
+    qtbot.waitUntil(lambda: main_window._open_examples_action.isEnabled(), timeout=5000)
 
 
 def test_mesh_file_selected_shows_mesh_preview(
@@ -633,6 +716,188 @@ def test_close_event_saves_current_config(
     main_window.close()
 
     assert save_calls == [(main_window.parameter_panel, main_window.run_panel)]
+
+
+def _install_fake_examples_dialog(
+    monkeypatch: pytest.MonkeyPatch,
+    example: ExampleInfo | None,
+    *,
+    accepted: bool = True,
+) -> list[Path]:
+    """`ExamplesDialog` mockolása a `main_window` modulnévtérben (ugyanaz
+    a minta, mint a `QFileDialog.getOpenFileName`-nél a többi tesztnél)
+    — a valódi, modális `QDialog.exec()` a tesztek alatt (nincs
+    felhasználói interakció, ami elfogadná/elutasítaná) örökre
+    blokkolna, ezért a teljes dialógus-osztály egy egyszerű hamisítvánnyal
+    kerül helyettesítésre. Visszaadja a ténylegesen átadott
+    `examples_root` értékeket, ellenőrzés céljából."""
+    from PySide6.QtWidgets import QDialog
+
+    seen_roots: list[Path] = []
+
+    class _FakeExamplesDialog:
+        def __init__(self, examples_root: Path, parent: object = None) -> None:
+            seen_roots.append(examples_root)
+
+        def exec(self) -> int:
+            return int(
+                QDialog.DialogCode.Accepted if accepted else QDialog.DialogCode.Rejected
+            )
+
+        @property
+        def selected_example(self) -> ExampleInfo | None:
+            return example
+
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.ExamplesDialog", _FakeExamplesDialog
+    )
+    return seen_roots
+
+
+def _fake_example(tmp_path: Path, directory_name: str = "basic_example") -> ExampleInfo:
+    return ExampleInfo(
+        directory=tmp_path / directory_name,
+        name="Alap példaprojekt",
+        description="",
+    )
+
+
+def test_file_menu_has_examples_action(main_window: MainWindow) -> None:
+    file_menu = _get_file_menu(main_window)
+    action_texts = [action.text() for action in file_menu.actions()]
+    assert "Példák megnyitása..." in action_texts
+
+
+def test_open_examples_cancelled_does_nothing(
+    main_window: MainWindow, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _install_fake_examples_dialog(monkeypatch, _fake_example(tmp_path), accepted=False)
+
+    _get_file_menu_action(main_window, "Példák megnyitása...").trigger()
+
+    assert main_window._examples_worker is None
+    assert main_window.run_panel.status_log.toPlainText() == ""
+    assert main_window._open_examples_action.isEnabled()
+
+
+def test_open_examples_no_selection_does_nothing(
+    main_window: MainWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _install_fake_examples_dialog(monkeypatch, None, accepted=True)
+
+    _get_file_menu_action(main_window, "Példák megnyitása...").trigger()
+
+    assert main_window._examples_worker is None
+    assert main_window.run_panel.status_log.toPlainText() == ""
+
+
+def test_open_examples_success_loads_project(
+    main_window: MainWindow,
+    qtbot: QtBot,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    example = _fake_example(tmp_path)
+    _install_fake_examples_dialog(monkeypatch, example)
+    monkeypatch.setattr(
+        "slicedesigner.gui.examples_dialog.subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stderr=""),
+    )
+    fake_config = object()
+    load_calls = []
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.persistence.load_project_config",
+        lambda file_path: load_calls.append(file_path) or fake_config,
+    )
+    apply_calls = []
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.config_loader.apply_pipeline_config",
+        lambda config, parameter_panel, run_panel: apply_calls.append(config) or 0,
+    )
+
+    _get_file_menu_action(main_window, "Példák megnyitása...").trigger()
+
+    assert main_window._examples_worker is not None
+    qtbot.waitUntil(lambda: main_window._open_examples_action.isEnabled(), timeout=5000)
+
+    expected_project_path = str(example.directory / "basic_example.json")
+    assert load_calls == [expected_project_path]
+    assert apply_calls == [fake_config]
+    status_text = main_window.run_panel.status_log.toPlainText()
+    assert "Példa generálása: Alap példaprojekt" in status_text
+    assert "Példa betöltve: Alap példaprojekt." in status_text
+    assert main_window._examples_worker is None
+
+
+def test_open_examples_and_run_button_disabled_during_generation(
+    main_window: MainWindow,
+    qtbot: QtBot,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    example = _fake_example(tmp_path)
+    _install_fake_examples_dialog(monkeypatch, example)
+    release_event = threading.Event()
+
+    def _blocking_run(*args: object, **kwargs: object) -> SimpleNamespace:
+        assert release_event.wait(timeout=2.0)
+        return SimpleNamespace(returncode=0, stderr="")
+
+    monkeypatch.setattr(
+        "slicedesigner.gui.examples_dialog.subprocess.run", _blocking_run
+    )
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.persistence.load_project_config",
+        lambda file_path: object(),
+    )
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.config_loader.apply_pipeline_config",
+        lambda config, parameter_panel, run_panel: 0,
+    )
+
+    _get_file_menu_action(main_window, "Példák megnyitása...").trigger()
+
+    assert not main_window.run_panel.run_button.isEnabled()
+    assert not main_window._save_action.isEnabled()
+    assert not main_window._open_action.isEnabled()
+    assert not main_window._open_examples_action.isEnabled()
+
+    release_event.set()
+    qtbot.waitUntil(lambda: main_window._open_examples_action.isEnabled(), timeout=5000)
+
+    assert main_window.run_panel.run_button.isEnabled()
+    assert main_window._save_action.isEnabled()
+    assert main_window._open_action.isEnabled()
+
+
+def test_open_examples_generation_failure_shows_message(
+    main_window: MainWindow,
+    qtbot: QtBot,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    example = _fake_example(tmp_path)
+    _install_fake_examples_dialog(monkeypatch, example)
+    monkeypatch.setattr(
+        "slicedesigner.gui.examples_dialog.subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=1, stderr="valami elszállt"),
+    )
+    load_calls = []
+    monkeypatch.setattr(
+        "slicedesigner.gui.main_window.persistence.load_project_config",
+        lambda file_path: load_calls.append(file_path) or object(),
+    )
+
+    _get_file_menu_action(main_window, "Példák megnyitása...").trigger()
+
+    qtbot.waitUntil(lambda: main_window._open_examples_action.isEnabled(), timeout=5000)
+
+    assert load_calls == []
+    status_text = main_window.run_panel.status_log.toPlainText()
+    assert "Hiba a példa generálása során" in status_text
+    assert "valami elszállt" in status_text
+    assert main_window.run_panel.run_button.isEnabled()
+    assert main_window._examples_worker is None
 
 
 def test_close_event_succeeds_even_if_settings_save_fails(

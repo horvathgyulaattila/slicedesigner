@@ -9,11 +9,22 @@ import logging
 from dataclasses import dataclass
 
 import pyvista as pv
-from PySide6.QtCore import QObject, QThread, Signal
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtCore import QObject, QPointF, QRectF, Qt, QThread, Signal
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QGuiApplication,
+    QPainterPath,
+    QPen,
+    QWheelEvent,
+)
 from PySide6.QtWidgets import (
     QCheckBox,
+    QGraphicsScene,
+    QGraphicsView,
     QHBoxLayout,
+    QLabel,
+    QPushButton,
     QRadioButton,
     QSpinBox,
     QVBoxLayout,
@@ -25,6 +36,7 @@ from slicedesigner.engines.backplate_engine import Backplate, BackplateNormalAxi
 from slicedesigner.engines.dowel_engine import DowelPosition
 from slicedesigner.engines.gap_engine import Spacer
 from slicedesigner.engines.mesh_import import BoundingBox, Mesh
+from slicedesigner.engines.nesting_engine import MaterialDefinition, Nest
 from slicedesigner.engines.slice_engine import SliceSet
 from slicedesigner.gui.render_geometry import (
     backplate_to_polydata,
@@ -37,6 +49,85 @@ from slicedesigner.gui.render_geometry import (
 )
 
 logger = logging.getLogger(__name__)
+
+# --- 2D export-előnézet (EXPORT_PREVIEW_SPEC.md 5. szakasz) ---
+#
+# A vágási kontúrok/azonosítók előnézeti színei szándékosan függetlenek a
+# tényleges DXF export réteg-színeitől (`cut_layer_color`/
+# `engrave_layer_color`), mert azok Futtatáskor még nem feltétlenül
+# állítottak be — l. `PreviewPanel._render_current_sheet()`.
+_PREVIEW_CUT_COLOR = QColor("black")
+_PREVIEW_ENGRAVE_COLOR = QColor("blue")
+_PREVIEW_SHEET_BACKGROUND_COLOR = QColor("whitesmoke")
+_PREVIEW_SHEET_BORDER_COLOR = QColor("darkgray")
+
+# A nagyítás megengedett tartománya, a lapváltáskori "illessz ablakhoz"
+# alapállapothoz (fitInView) képest relatív szorzóként értelmezve — l.
+# `_NestingGraphicsView.wheelEvent()`.
+_PREVIEW_MIN_ZOOM = 0.1
+_PREVIEW_MAX_ZOOM = 10.0
+# Egérgörgő-notch-onkénti fix nagyítási szorzó.
+_PREVIEW_ZOOM_STEP_FACTOR = 1.15
+
+
+def _to_scene_point(x: float, y: float) -> QPointF:
+    """Domain-koordináta (X jobbra, Y felfelé, mm) → `QGraphicsScene`-
+    koordináta (X jobbra, Y lefelé) — a Y-tengely megfordítása EGYETLEN,
+    jól látható helyen történik, hogy a 2D előnézet a fizikai/DXF-
+    elrendezéssel megegyező (nem tükrözött) tájolást mutasson."""
+    return QPointF(x, -y)
+
+
+def _points_to_path(
+    points: tuple[tuple[float, float], ...], *, closed: bool
+) -> QPainterPath:
+    """Egy pontsorozat `QPainterPath`-szá alakítása — zárt (`closed=True`,
+    vágási kontúrok) vagy nyitott (`closed=False`, azonosító-vonáskötegek)
+    módban."""
+    path = QPainterPath()
+    if not points:
+        return path
+    path.moveTo(_to_scene_point(*points[0]))
+    for x, y in points[1:]:
+        path.lineTo(_to_scene_point(x, y))
+    if closed:
+        path.closeSubpath()
+    return path
+
+
+class _NestingGraphicsView(QGraphicsView):
+    """`QGraphicsView`-alosztály, kizárólag az egérgörgős nagyítás
+    felülírásához (EXPORT_PREVIEW_SPEC.md 6.7. pont) — a kattintva-húzva
+    mozgatás (pan) a Qt beépített `ScrollHandDrag` módjával működik,
+    felülírás nélkül (l. `PreviewPanel.__init__`).
+
+    `self._zoom_factor` az utolsó `reset_zoom_tracking()` (lapváltáskor, a
+    `fitInView`-hívás UTÁN) óta alkalmazott, összesített nagyítási szorzót
+    követi — ez korlátozza a nagyítást `_PREVIEW_MIN_ZOOM`/
+    `_PREVIEW_MAX_ZOOM` közé, a fit-to-window alapállapothoz képest
+    relatívan."""
+
+    def __init__(self, scene: QGraphicsScene, parent: QWidget | None = None) -> None:
+        super().__init__(scene, parent)
+        self._zoom_factor = 1.0
+
+    def reset_zoom_tracking(self) -> None:
+        self._zoom_factor = 1.0
+
+    def wheelEvent(self, event: QWheelEvent) -> None:
+        angle_delta = event.angleDelta().y()
+        if angle_delta == 0:
+            return
+        step_factor = (
+            _PREVIEW_ZOOM_STEP_FACTOR
+            if angle_delta > 0
+            else 1 / _PREVIEW_ZOOM_STEP_FACTOR
+        )
+        new_zoom_factor = self._zoom_factor * step_factor
+        if not (_PREVIEW_MIN_ZOOM <= new_zoom_factor <= _PREVIEW_MAX_ZOOM):
+            return
+        self._zoom_factor = new_zoom_factor
+        self.scale(step_factor, step_factor)
 
 
 @dataclass(frozen=True)
@@ -285,8 +376,35 @@ class PreviewPanel(QWidget):
         # `_on_preview_geometry_ready()` (ADR-0012).
         self._render_generation = 0
 
+        # 2D export-előnézet (EXPORT_PREVIEW_SPEC.md) — a legutóbbi
+        # sikeres Futtatás `Nest`-jei és a hozzájuk tartozó
+        # anyag-lapméretek; l. `show_nests()`.
+        self._nests: tuple[Nest, ...] = ()
+        self._material_definitions: tuple[MaterialDefinition, ...] = ()
+        # Determinisztikus lap-sorrend: (material_id, sheet_number) párok,
+        # material_id szerint ábécésorrendben, azon belül 1..sheet_count
+        # laponkénti sorszám szerint — l. `show_nests()`.
+        self._sheet_keys: list[tuple[str, int]] = []
+        self._current_sheet_index = 0
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+
+        # 3D/2D nézet-váltó — a `switch_widget` FÖLÖTT, önálló sorban
+        # (EXPORT_PREVIEW_SPEC.md). A `show_2d_radio` kezdetben letiltott —
+        # csak `show_nests()` után válik engedélyezetté.
+        mode_widget = QWidget(self)
+        mode_layout = QHBoxLayout(mode_widget)
+        mode_layout.setContentsMargins(0, 0, 0, 0)
+        self.show_3d_radio = QRadioButton("3D", mode_widget)
+        self.show_2d_radio = QRadioButton("2D (export-előnézet)", mode_widget)
+        self.show_3d_radio.setChecked(True)
+        self.show_2d_radio.setEnabled(False)
+        self.show_2d_radio.setToolTip("Nincs még Futtatás eredménye.")
+        mode_layout.addWidget(self.show_3d_radio)
+        mode_layout.addWidget(self.show_2d_radio)
+        layout.addWidget(mode_widget)
+        self.show_2d_radio.toggled.connect(self._on_3d_2d_toggled)
 
         switch_widget = QWidget(self)
         switch_layout = QHBoxLayout(switch_widget)
@@ -322,6 +440,37 @@ class PreviewPanel(QWidget):
         self.highlight_checkbox.toggled.connect(self._on_highlight_changed)
         self.highlight_spinbox.valueChanged.connect(self._on_highlight_changed)
         layout.addWidget(highlight_widget)
+
+        # 2D export-előnézet widget-csoport (EXPORT_PREVIEW_SPEC.md) —
+        # kezdetben rejtett, csak 2D módban látható (l.
+        # `_sync_view_mode_visibility()`).
+        nesting_2d_widget = QWidget(self)
+        nesting_2d_layout = QVBoxLayout(nesting_2d_widget)
+        nesting_2d_layout.setContentsMargins(0, 0, 0, 0)
+
+        nesting_nav_widget = QWidget(nesting_2d_widget)
+        nesting_nav_layout = QHBoxLayout(nesting_nav_widget)
+        nesting_nav_layout.setContentsMargins(0, 0, 0, 0)
+        self.nesting_prev_button = QPushButton("◀ Előző lap", nesting_nav_widget)
+        self.nesting_sheet_label = QLabel("", nesting_nav_widget)
+        self.nesting_next_button = QPushButton("Következő lap ▶", nesting_nav_widget)
+        self.nesting_prev_button.setEnabled(False)
+        self.nesting_next_button.setEnabled(False)
+        self.nesting_prev_button.clicked.connect(self._on_nesting_prev_clicked)
+        self.nesting_next_button.clicked.connect(self._on_nesting_next_clicked)
+        nesting_nav_layout.addWidget(self.nesting_prev_button)
+        nesting_nav_layout.addWidget(self.nesting_sheet_label)
+        nesting_nav_layout.addWidget(self.nesting_next_button)
+        nesting_2d_layout.addWidget(nesting_nav_widget)
+
+        self._nesting_scene = QGraphicsScene(nesting_2d_widget)
+        self.nesting_view = _NestingGraphicsView(self._nesting_scene, nesting_2d_widget)
+        self.nesting_view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        nesting_2d_layout.addWidget(self.nesting_view)
+
+        nesting_2d_widget.setVisible(False)
+        self._nesting_2d_widget = nesting_2d_widget
+        layout.addWidget(nesting_2d_widget)
 
         is_offscreen_platform = QGuiApplication.platformName() == "offscreen"
         self.plotter = QtInteractor(
@@ -359,6 +508,7 @@ class PreviewPanel(QWidget):
                 exc_info=error,
             )
 
+        self._sync_view_mode_visibility()
         logger.debug("PreviewPanel felépítve, üres jelenettel.")
 
     def _on_view_switch_toggled(self, mesh_checked: bool) -> None:
@@ -394,8 +544,37 @@ class PreviewPanel(QWidget):
 
     def _update_highlight_widget_visibility(self) -> None:
         self._highlight_widget.setVisible(
-            self._slice_set is not None and not self.show_mesh_radio.isChecked()
+            not self.show_2d_radio.isChecked()
+            and self._slice_set is not None
+            and not self.show_mesh_radio.isChecked()
         )
+
+    def _on_3d_2d_toggled(self, show_2d: bool) -> None:
+        """A 3D/2D nézet-váltó rádiógombjaira kötött slot
+        (EXPORT_PREVIEW_SPEC.md 6.1–6.2. pont) — kizárólag a widget-
+        láthatóságot vezérli, nem indít pipeline- vagy geometria-
+        újraszámítást: a 2D rajz a már eltárolt `self._nests`-ből, a 3D
+        pedig a már eltárolt `self._mesh`/`self._slice_set`-ből azonnal
+        elérhető."""
+        self._sync_view_mode_visibility()
+        if show_2d:
+            self._render_current_sheet()
+
+    def _sync_view_mode_visibility(self) -> None:
+        """A 3D-widgetek (nézet-váltó, kiemelés, `plotter`) és a 2D-widget-
+        csoport láthatóságának szinkronizálása az aktuális 3D/2D
+        mód-választással.
+
+        A `show_mesh()`/`show_sliced_assembly()` (amik korábban a
+        `switch_widget`-et feltétel nélkül láthatóvá tették) is EZT hívják
+        a láthatóság frissítéséhez — enélkül egy, a 2D nézetben aktívan
+        tartózkodó felhasználónál egy közben lezajló új Futtatás
+        visszakapcsolná láthatóvá a 3D-widgeteket a 2D-csoport mögött."""
+        show_2d = self.show_2d_radio.isChecked()
+        self._switch_widget.setVisible(not show_2d and self._mesh is not None)
+        self.plotter.setVisible(not show_2d)
+        self._update_highlight_widget_visibility()
+        self._nesting_2d_widget.setVisible(show_2d)
 
     def _highlighted_slice_index(self) -> int | None:
         if not self.highlight_checkbox.isChecked():
@@ -405,7 +584,7 @@ class PreviewPanel(QWidget):
     def show_mesh(self, mesh: Mesh) -> None:
         """Az eredeti Mesh megjelenítése, és eltárolása a nézet-váltóhoz."""
         self._mesh = mesh
-        self._switch_widget.setVisible(True)
+        self._sync_view_mode_visibility()
         self._render_mesh(mesh)
 
     def show_sliced_assembly(
@@ -445,7 +624,6 @@ class PreviewPanel(QWidget):
         self._spacers = spacers
         self._backplate = backplate
         self._backplate_normal_axis = backplate_normal_axis
-        self._switch_widget.setVisible(True)
 
         # `blockSignals` — a tartomány-igazítás önmagában nem tekinthető
         # felhasználói kiemelés-változtatásnak, a hívás végén amúgy is
@@ -453,7 +631,7 @@ class PreviewPanel(QWidget):
         self.highlight_spinbox.blockSignals(True)
         self.highlight_spinbox.setRange(1, max(1, slice_set.slice_count))
         self.highlight_spinbox.blockSignals(False)
-        self._update_highlight_widget_visibility()
+        self._sync_view_mode_visibility()
 
         self._start_async_sliced_assembly_render(
             slice_set,
@@ -692,3 +870,114 @@ class PreviewPanel(QWidget):
         # explicit `self` argument on the already-bound call — a pyvista
         # typing quirk, not a real argument-count error.
         self.plotter.reset_camera()  # type: ignore[call-arg]
+
+    # --- 2D export-előnézet (EXPORT_PREVIEW_SPEC.md) ---
+
+    def show_nests(
+        self,
+        nests: tuple[Nest, ...],
+        material_definitions: tuple[MaterialDefinition, ...],
+    ) -> None:
+        """A legutóbbi sikeres Futtatás `Nest`-jeinek eltárolása a 2D
+        export-előnézethez, és a `show_2d_radio` engedélyezése, ha van
+        megjeleníthető lap.
+
+        Ha éppen 2D mód aktív, a nézet azonnal újrarajzolásra kerül, az
+        ELSŐ lapra visszaállva (EXPORT_PREVIEW_SPEC.md 6.4. pont). Ha 3D
+        mód aktív, a mód-választás NEM változik — csak az eltárolt adat
+        frissül, a tényleges 2D rajzolás a következő 2D-re váltáskor
+        történik meg."""
+        self._nests = nests
+        self._material_definitions = material_definitions
+        self._sheet_keys = [
+            (nest.material_id, sheet_number)
+            for nest in sorted(nests, key=lambda n: n.material_id)
+            for sheet_number in range(1, nest.sheet_count + 1)
+        ]
+        self._current_sheet_index = 0
+
+        has_sheets = len(self._sheet_keys) > 0
+        self.show_2d_radio.setEnabled(has_sheets)
+        self.show_2d_radio.setToolTip(
+            "" if has_sheets else "Nincs még Futtatás eredménye."
+        )
+
+        if self.show_2d_radio.isChecked():
+            self._render_current_sheet()
+
+    def _on_nesting_prev_clicked(self) -> None:
+        if self._current_sheet_index > 0:
+            self._current_sheet_index -= 1
+            self._render_current_sheet()
+
+    def _on_nesting_next_clicked(self) -> None:
+        if self._current_sheet_index < len(self._sheet_keys) - 1:
+            self._current_sheet_index += 1
+            self._render_current_sheet()
+
+    def _render_current_sheet(self) -> None:
+        """Az aktuális lap (`self._sheet_keys[self._current_sheet_index]`)
+        2D rajzolása — szinkron, a fő szálon: a `Nest`-adat már teljesen
+        kiszámított, nincs geometria-építés, csak meglévő pontlisták
+        rajzolása (EXPORT_PREVIEW_SPEC.md korlátozás)."""
+        self._nesting_scene.clear()
+
+        if not self._sheet_keys:
+            self.nesting_sheet_label.setText("Nincs megjeleníthető lap.")
+            self.nesting_prev_button.setEnabled(False)
+            self.nesting_next_button.setEnabled(False)
+            return
+
+        material_id, sheet_number = self._sheet_keys[self._current_sheet_index]
+        nest = next(n for n in self._nests if n.material_id == material_id)
+        material = next(
+            m for m in self._material_definitions if m.material_id == material_id
+        )
+
+        sheet_rect = QRectF(
+            0.0,
+            -material.sheet_height_mm,
+            material.sheet_width_mm,
+            material.sheet_height_mm,
+        )
+        background_item = self._nesting_scene.addRect(
+            sheet_rect,
+            QPen(_PREVIEW_SHEET_BORDER_COLOR),
+            QBrush(_PREVIEW_SHEET_BACKGROUND_COLOR),
+        )
+        background_item.setZValue(-1.0)
+
+        # `setWidthF(0.0)` — kozmetikai (mindig 1px vékony) toll, a
+        # nagyítástól függetlenül, hogy a kontúrok minden zoom-szinten
+        # jól láthatók, de ne torzítsák a geometria méretarányát.
+        cut_pen = QPen(_PREVIEW_CUT_COLOR)
+        cut_pen.setWidthF(0.0)
+        engrave_pen = QPen(_PREVIEW_ENGRAVE_COLOR)
+        engrave_pen.setWidthF(0.0)
+
+        for placed_part in nest.placed_parts:
+            if placed_part.sheet_number != sheet_number:
+                continue
+            for contour in placed_part.contours:
+                self._nesting_scene.addPath(
+                    _points_to_path(contour.points, closed=True), cut_pen
+                )
+            for mark in placed_part.numbering_marks:
+                for stroke in mark.strokes:
+                    self._nesting_scene.addPath(
+                        _points_to_path(stroke, closed=False), engrave_pen
+                    )
+
+        self.nesting_view.resetTransform()
+        self.nesting_view.fitInView(
+            self._nesting_scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio
+        )
+        self.nesting_view.reset_zoom_tracking()
+
+        self.nesting_sheet_label.setText(
+            f"{material_id} — {sheet_number}/{nest.sheet_count}. lap"
+        )
+        self.nesting_prev_button.setEnabled(self._current_sheet_index > 0)
+        self.nesting_next_button.setEnabled(
+            self._current_sheet_index < len(self._sheet_keys) - 1
+        )

@@ -3,7 +3,7 @@
 Státusz: Aktív
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-07-31
-Utolsó módosítás: 2026-08-09
+Utolsó módosítás: 2026-08-13
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](PROJECT_CONSTITUTION.md), [AI_WORKFLOW.md](AI_WORKFLOW.md), [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md), [DOMAIN_MODEL.md](DOMAIN_MODEL.md)
 
 ## Cél
@@ -41,6 +41,14 @@ A ROADMAP nem backlog, nem feladatlista és nem specifikáció. A célja, hogy b
 > **Megjegyzés (2026-08-09, folytatás 12):** A Phase 6 hátralévő "dokumentáció" és "példaprojektek" tétele konkrét, 9 alpontos struktúrát kapott (6.1–6.9), a projektgazda jóváhagyásával. A dokumentáció felhasználói kézikönyvre (`USER_GUIDE.md`), workflow-leírásra (`WORKFLOW.md`), a meglévő technikai dokumentáció véglegesítésére és release dokumentációra (`RELEASE_NOTES.md`) tagolódik; a példaprojektek négy, leíró nevű mappára (`basic_example/`, `complex_example/`, `nesting_example/`, `reference_project/`) és egy validálási tételre. A Feladata-lista és a Phase 6 Kilépési feltétele ennek megfelelően frissült.
 >
 > **Megjegyzés (2026-08-09, folytatás 13):** A Phase 6 (Release Candidate) mind a 9 alpontja (6.1–6.9) elkészült, review-n átment és a projektgazda jóváhagyta: felhasználói kézikönyv (`USER_GUIDE.md`), workflow-leírás (`WORKFLOW.md`), technikai dokumentáció audit és javítás (README/ARCHITECTURE/PROJECT_STRUCTURE + 3 specifikáció, 6 elavult hivatkozás/dátum javítva), release dokumentáció (`RELEASE_NOTES.md`), négy ténylegesen generált és futtatott példaprojekt (`examples/basic_example/`, `complex_example/`, `nesting_example/`, `reference_project/` — mindegyik saját `generate_example.py`-jal reprodukálható), és ezek összesített validálása (törlés utáni friss újragenerálás, mind a négynél hibátlan, dokumentumhű eredménnyel). A Kilépési feltétel teljesült. A Phase 6 ezért ✅ Approved-ra került — ezzel a ROADMAP mind a hét fázisa (Phase 0–6) lezárult.
+>
+> **Megjegyzés (2026-08-13, folytatás 14):** A projektgazdával lezajlott backlog-áttekintés nyomán a `BACKLOG.md` mindhárom tétele lezárásra került: a `[project.scripts]` bejegyzés (2. tétel) törölve, nem valósul meg; a 2D export-előnézet (1. tétel) és a Dedikált "Példák megnyitása" GUI-funkció (3. tétel) átkerült az újonnan megnyitott Phase 7-be. A projektgazda emellett két új tételt vett fel Phase 7-be: a Nesting true-shape elrendezését (a korábban elfogadott ADR-0008 felülvizsgálatával) és egy GUI-átalakítást (lapozható, fülsávos paraméter-kártyák; önálló, állítható magasságú log-panel; Futtatás/Export gombok áthelyezése). A Phase 7 ezért 🟡 In Progress állapotban megnyílt.
+>
+> **Megjegyzés (2026-08-13, folytatás 15):** A Phase 7 7.1 tételéhez (2D export-előnézet) elkészült és a projektgazda jóváhagyta a specifikációt (`docs/specifications/EXPORT_PREVIEW_SPEC.md`) — a `PreviewPanel` új, nagyítható/mozgatható 3D/2D nézet-váltása, a legutóbbi sikeres Futtatás `Nest`-jeinek laponkénti megjelenítésével, a lap fizikai méretét háttérként megjelenítve. A tétel implementációja még hátravan.
+>
+> **Megjegyzés (2026-08-13, folytatás 16):** A Phase 7 7.1 tétele (2D export-előnézet) elkészült, review-n átment és élő teszttel megerősítve a projektgazda jóváhagyta: a `PreviewPanel` új 3D/2D nézet-váltóval, laponkénti navigációval, nagyítható/mozgatható `QGraphicsView`-alapú rajzolással bővült (`preview_panel.py`), a `MainWindow._on_pipeline_succeeded()` a `Nest`-eket és az anyag-lapméreteket adja át neki (`main_window.py`). 10 új teszt a `test_preview_panel.py`-ban, bővült esetek a `test_main_window.py`-ban; `ruff format`/`ruff check`/`mypy` hibamentes; a teljes csomag (256 teszt) regresszió nélkül zöld.
+>
+> **Megjegyzés (2026-08-13, folytatás 17):** A Phase 7 7.2 tételéhez (Példák megnyitása) elkészült és a projektgazda jóváhagyta a specifikációt (`docs/specifications/EXAMPLES_LAUNCHER_SPEC.md`) — a "Fájl" menü új "Példák megnyitása..." akciója egy listázó dialógust nyit, majd a kiválasztott példa `generate_example.py`-ját háttérben újrafuttatva ("regenerálás + megnyitás", a példaprojektek dokumentáltan gépfüggő útvonalai miatt) tölti be a friss projektfájlt, a meglévő "Projekt megnyitása" logikájával. A tétel implementációja még hátravan.
 
 ## Állapotjelölések
 
@@ -265,6 +273,21 @@ def _glyph_point_rect(gx, gy, upright, anchor_x, anchor_y, height_mm):
 * **GUI-előnézet (ADR-0011, ADR-0012)** — a 3D-előnézet geometria-építése a fő szálon, szinkron futott, UI-fagyasztó módon — mind a Futtatás utáni első megjelenítésnél, mind a kiemelés-/nézet-váltásnál. Javítás: a geometria-építés (tiszta, Qt-független `render_geometry.py`-hívások) háttérszálra vitele; a kiemelés-/nézet-váltásnál egy könnyű generáció-számláló védi ki az elavult eredmények felülírását, publikus jelzés-elkülönítéssel a `MainWindow`-tól (elkerülve egy Futtatás-közbeni interakcióból eredő korrektségi hibát).
 
 Mindhárom élő teszttel megerősítve. Összesített hatás a diagnosztikai forgatókönyveken: "Egyszerű, TIPIKUS" 1911 ms → 368 ms; "Komplex, TIPIKUS" 21 462 ms → 3299 ms.
+
+---
+
+### Phase 7 – Kiegészítő funkciók és felhasználói felület fejlesztése
+
+Állapot: 🟡 In Progress
+
+Feladata:
+
+* ~~7.1 – 2D export-előnézet: a Nesting Engine kimenetének (exportra kerülő vektorok) 2D megjelenítése ellenőrzés céljából, futtatás/export előtt. Önálló specifikáció + implementáció.~~ — kész (`EXPORT_PREVIEW_SPEC.md`; `preview_panel.py`/`main_window.py`; 10+ új teszt; élő teszttel megerősítve)
+* 7.2 – Dedikált "Példák megnyitása" GUI-funkció: az `examples/` mappa tartalmának közvetlen elérése, a jelenlegi általános "Fájl → Projekt megnyitása..." dialógus mellett/helyett. Önálló specifikáció + implementáció. *(Specifikáció elkészült: `EXAMPLES_LAUNCHER_SPEC.md`. Implementáció hátravan.)*
+* 7.3 – Nesting — true-shape elrendezés: a jelenlegi, tengelyfüggő befoglaló téglalapokkal dolgozó csomagolási algoritmus (ADR-0008) lecserélése a tényleges alkatrész-kontúrt figyelembe vevő elrendezésre. ADR-0008-at felváltó/módosító új ADR + `NESTING_SPEC.md` módosítás + implementáció.
+* 7.4 – GUI-átalakítás: a `ParameterPanel` 7 funkciócsoportjának átalakítása fenti fülsávos (tab), lapozható kártyákká (a Dowel/Gap/Backplate be-/kikapcsolók a saját kártyájukon belül maradnak); a log/állapot-terület kiemelése a `RunPanel`-ból önálló, húzással állítható magasságú `QSplitter`-panelbe; a Futtatás/DXF Export gombok áthelyezése a `ParameterPanel` oszlop aljára.
+
+Kilépési feltétel: mind a négy tételhez jóváhagyott dokumentáció (7.1–7.2: specifikáció; 7.3: ADR + specifikáció-frissítés; 7.4: ARCHITECTURE.md GUI-réteg szakaszának frissítése) és automatizált teszttel lefedett, élőben megerősített implementáció készül.
 
 ---
 

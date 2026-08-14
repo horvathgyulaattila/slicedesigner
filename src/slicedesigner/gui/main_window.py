@@ -4,15 +4,24 @@ futtatás/export/állapot-panel (prompt 2.1 szakasz)."""
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QThread, Signal
 from PySide6.QtGui import QAction, QCloseEvent
-from PySide6.QtWidgets import QFileDialog, QMainWindow, QSplitter, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QDialog,
+    QFileDialog,
+    QMainWindow,
+    QSplitter,
+    QVBoxLayout,
+    QWidget,
+)
 
 from slicedesigner.engines.backplate_engine import BackplateNormalAxis
 from slicedesigner.engines.exceptions import SliceDesignerError
-from slicedesigner.engines.nesting_engine import Nest
+from slicedesigner.engines.nesting_engine import MaterialDefinition, Nest
 from slicedesigner.gui import app_settings, config_builder, config_loader
+from slicedesigner.gui.examples_dialog import ExampleGenerationWorker, ExamplesDialog
 from slicedesigner.gui.parameter_panel import ParameterPanel
 from slicedesigner.gui.preview_panel import PreviewPanel
 from slicedesigner.gui.run_panel import RunPanel
@@ -87,6 +96,10 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
         self.setWindowTitle("Slice Designer")
         self._worker: _PipelineWorker | None = None
+        # A "Példák megnyitása" háttérszála (EXAMPLES_LAUNCHER_SPEC.md) —
+        # a `closeEvent()` ugyanúgy védi a bezárást, amíg ez fut, mint
+        # `self._worker` esetén.
+        self._examples_worker: ExampleGenerationWorker | None = None
         # A legutóbbi sikeres Futtatás Nest-jei — a "DXF Export" gomb
         # (ADR-0009) ezeket exportálja; új Futtatás indításakor `None`-ra
         # áll vissza, és a gomb újra letiltásra kerül.
@@ -137,13 +150,15 @@ class MainWindow(QMainWindow):
         szál widget-hozzáférés nélkül, de befejezetlenül maradna hátra.
         `self._worker` a `_finish_run()`-ig (amit a 3D-előnézet befejezése
         indít el, l. `__init__`) nem `None`, ezért ez az egyetlen
-        ellenőrzés mindkét szakaszt lefedi.
+        ellenőrzés mindkét szakaszt lefedi. Ugyanez a védelem vonatkozik
+        a "Példák megnyitása" háttérszálára (`self._examples_worker`,
+        EXAMPLES_LAUNCHER_SPEC.md 6.5. pont).
 
-        Ha a szál nem fut, a mentés kimenetelétől függetlenül mindig
+        Ha egyik szál sem fut, a mentés kimenetelétől függetlenül mindig
         engedélyezi a bezárást (`app_settings.save_current_config()` sosem
         dob kivételt).
         """
-        if self._worker is not None:
+        if self._worker is not None or self._examples_worker is not None:
             self.run_panel.status_log.append(
                 "Futtatás folyamatban — kérem várja meg, amíg befejeződik, "
                 "mielőtt bezárja az alkalmazást."
@@ -163,6 +178,10 @@ class MainWindow(QMainWindow):
         self._open_action = QAction("Projekt megnyitása...", self)
         self._open_action.triggered.connect(self._on_open_project_clicked)
         file_menu.addAction(self._open_action)
+
+        self._open_examples_action = QAction("Példák megnyitása...", self)
+        self._open_examples_action.triggered.connect(self._on_open_examples_clicked)
+        file_menu.addAction(self._open_examples_action)
 
     def _on_save_project_clicked(self) -> None:
         """A jelenlegi (akár részleges) widget-állapot mentése projektfájlba.
@@ -222,6 +241,101 @@ class MainWindow(QMainWindow):
                     f"Figyelem: {override_count} kézi felülbírálás van a "
                     "fájlban, amit a felület jelenleg nem jelenít meg."
                 )
+
+    def _on_open_examples_clicked(self) -> None:
+        """A "Példák megnyitása..." akció kattintás-eseménye
+        (EXAMPLES_LAUNCHER_SPEC.md 6. szakasz).
+
+        Az `examples/` mappa gyökere a repó-struktúrához (nem a
+        `main_window.py` fájlhoz) képest rögzített, kódszintű konstans —
+        `main_window.py` a `src/slicedesigner/gui/` alatt van, így a
+        harmadik szülőkönyvtár a repó gyökere. Elutasított dialógus vagy
+        hiányzó kiválasztás esetén a metódus egyszerűen visszatér, a
+        widget-állapot változatlan marad.
+        """
+        examples_root = Path(__file__).resolve().parents[3] / "examples"
+        dialog = ExamplesDialog(examples_root, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        example = dialog.selected_example
+        if example is None:
+            return
+
+        self._set_examples_flow_enabled(False)
+        self.run_panel.status_log.append(
+            f"Példa generálása: {example.name} — kérem várjon."
+        )
+
+        self._examples_worker = ExampleGenerationWorker(example, self)
+        self._examples_worker.succeeded.connect(self._on_example_generation_succeeded)
+        self._examples_worker.failed.connect(self._on_example_generation_failed)
+        self._examples_worker.finished.connect(self._examples_worker.deleteLater)
+        self._examples_worker.start()
+
+    def _set_examples_flow_enabled(self, enabled: bool) -> None:
+        """A "Fájl" menü mindhárom akciójának és a `run_button`-nak közös
+        be-/kikapcsolása a "Példa generálása" háttérszála körül.
+
+        A `run_button` letiltása nem szerepel explicit az
+        EXAMPLES_LAUNCHER_SPEC.md-ben, de szükséges a konkurens
+        háttérműveletek (Futtatás + példa-generálás egyszerre,
+        mindkettő a widget-állapotot módosítaná) elkerüléséhez — a
+        projekt Futtatás alatti, hasonlóan konzervatív mintáját követve
+        (l. `_on_run_clicked()`).
+        """
+        self._save_action.setEnabled(enabled)
+        self._open_action.setEnabled(enabled)
+        self._open_examples_action.setEnabled(enabled)
+        self.run_panel.run_button.setEnabled(enabled)
+
+    def _on_example_generation_succeeded(self, project_path: Path) -> None:
+        """Az `ExampleGenerationWorker.succeeded` jelzésre kötött slot (fő
+        szál) — a frissen regenerált projektfájl betöltése SZÓ SZERINT
+        ugyanazzal a logikával, mint `_on_open_project_clicked()`
+        (EXAMPLES_LAUNCHER_SPEC.md 6.6. pont); kizárólag a bevezető
+        `status_log`-üzenet más ("Példa betöltve: ..." "Projekt
+        betöltve." helyett).
+
+        A folyamat végén — a kimenettől függetlenül — a "Fájl" menü és a
+        `run_button` újra engedélyezésre kerül.
+        """
+        example_name = (
+            self._examples_worker.example.name
+            if self._examples_worker is not None
+            else project_path.stem
+        )
+        try:
+            config = persistence.load_project_config(str(project_path))
+            override_count = config_loader.apply_pipeline_config(
+                config, self.parameter_panel, self.run_panel
+            )
+        except PipelineConfigurationError as error:
+            logger.warning("Példa-betöltési konfigurációs hiba: %s", error)
+            self.run_panel.status_log.append(f"Konfigurációs hiba: {error}")
+        except SliceDesignerError as error:
+            logger.exception("Hiba a példa betöltése során.")
+            self.run_panel.status_log.append(f"Hiba a betöltés során: {error}")
+        else:
+            self.run_panel.status_log.append(f"Példa betöltve: {example_name}.")
+            if override_count > 0:
+                self.run_panel.status_log.append(
+                    f"Figyelem: {override_count} kézi felülbírálás van a "
+                    "fájlban, amit a felület jelenleg nem jelenít meg."
+                )
+        finally:
+            self._examples_worker = None
+            self._set_examples_flow_enabled(True)
+
+    def _on_example_generation_failed(self, error: Exception) -> None:
+        """Az `ExampleGenerationWorker.failed` jelzésre kötött slot (fő
+        szál) — a `generate_example.py` sikertelen lefutása vagy az
+        indítás maga hibázott. A betöltés NEM történik meg, a jelenlegi
+        widget-állapot változatlan marad (EXAMPLES_LAUNCHER_SPEC.md 7.
+        szakasz)."""
+        logger.warning("Hiba a példa generálása során: %s", error)
+        self.run_panel.status_log.append(f"Hiba a példa generálása során: {error}")
+        self._examples_worker = None
+        self._set_examples_flow_enabled(True)
 
     def _on_mesh_file_selected(self, file_path: str) -> None:
         """Automatikus 3D-előnézet betöltése egy sikeres mesh-fájl-választás után.
@@ -331,11 +445,20 @@ class MainWindow(QMainWindow):
         self._last_nests = result.nests
         self.run_panel.export_dxf_button.setEnabled(True)
 
+        # A `PipelineResult` maga nem tartalmazza sem a
+        # `backplate_normal_axis`-t, sem a `MaterialDefinition`-öket
+        # (a 2D export-előnézethez, `PreviewPanel.show_nests()`) — mindkettő
+        # a ténylegesen lefutott `PipelineConfig`-ból (`self._worker.config`)
+        # kerül kiolvasásra.
         backplate_normal_axis: BackplateNormalAxis | None = None
-        if result.backplate is not None and self._worker is not None:
-            backplate_params = self._worker.config.backplate
-            if backplate_params is not None:
-                backplate_normal_axis = backplate_params.backplate_normal_axis
+        material_definitions: tuple[MaterialDefinition, ...] = ()
+        if self._worker is not None:
+            worker_config = self._worker.config
+            material_definitions = worker_config.nesting.material_definitions
+            if result.backplate is not None:
+                backplate_params = worker_config.backplate
+                if backplate_params is not None:
+                    backplate_normal_axis = backplate_params.backplate_normal_axis
 
         self.preview_panel.show_sliced_assembly(
             result.slice_set,
@@ -344,6 +467,7 @@ class MainWindow(QMainWindow):
             result.backplate,
             backplate_normal_axis,
         )
+        self.preview_panel.show_nests(result.nests, material_definitions)
 
     def _on_preview_render_failed(self, error: Exception) -> None:
         """A `PreviewPanel.assembly_render_failed` jelzésre kötött slot (fő

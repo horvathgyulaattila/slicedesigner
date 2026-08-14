@@ -25,8 +25,16 @@ from slicedesigner.engines.backplate_engine import (  # noqa: E402
 from slicedesigner.engines.dowel_engine import DowelPosition  # noqa: E402
 from slicedesigner.engines.gap_engine import Spacer  # noqa: E402
 from slicedesigner.engines.mesh_import import BoundingBox, Mesh  # noqa: E402
+from slicedesigner.engines.nesting_engine import (  # noqa: E402
+    MaterialDefinition,
+    Nest,
+    PartKind,
+    PartReference,
+    PlacedPart,
+)
 from slicedesigner.engines.slice_engine import (  # noqa: E402
     Contour,
+    EngravingMark,
     HoleKind,
     Slice,
     SliceAxis,
@@ -139,6 +147,47 @@ def _backplate() -> Backplate:
         thickness_mm=2.0,
         common_plane_mm=0.0,
         material_reference=None,
+    )
+
+
+def _material_definition(
+    material_id: str, *, width_mm: float = 100.0, height_mm: float = 50.0
+) -> MaterialDefinition:
+    return MaterialDefinition(
+        material_id=material_id,
+        thickness_mm=3.0,
+        sheet_width_mm=width_mm,
+        sheet_height_mm=height_mm,
+        kerf_mm=0.1,
+    )
+
+
+def _placed_part(sheet_number: int) -> PlacedPart:
+    return PlacedPart(
+        reference=PartReference(
+            kind=PartKind.SLICE_ISLAND, slice_index=1, island_index=0
+        ),
+        sheet_number=sheet_number,
+        position=(0.0, 0.0),
+        rotation_deg=0.0,
+        contours=(_square_contour(cx=5.0, cy=5.0, half=2.0),),
+        numbering_marks=(
+            EngravingMark(
+                text="1",
+                strokes=(((0.0, 0.0), (1.0, 1.0)),),
+                height_mm=5.0,
+                island_index=0,
+            ),
+        ),
+    )
+
+
+def _nest(material_id: str, sheet_count: int) -> Nest:
+    return Nest(
+        material_id=material_id,
+        sheet_count=sheet_count,
+        placed_parts=tuple(_placed_part(n) for n in range(1, sheet_count + 1)),
+        seams=(),
     )
 
 
@@ -817,3 +866,149 @@ def test_enable_depth_peeling_failure_does_not_prevent_panel_construction(
     )
 
     panel.plotter.close()
+
+
+# --- 2D export-előnézet (EXPORT_PREVIEW_SPEC.md, prompt 8. szakasz) ---
+
+
+def test_show_2d_radio_initially_disabled(preview_panel: PreviewPanel) -> None:
+    assert not preview_panel.show_2d_radio.isEnabled()
+    assert preview_panel.show_3d_radio.isChecked()
+
+
+def test_show_nests_enables_2d_radio(preview_panel: PreviewPanel) -> None:
+    preview_panel.show_nests((_nest("wood", 1),), (_material_definition("wood"),))
+
+    assert preview_panel.show_2d_radio.isEnabled()
+
+
+def test_show_nests_does_not_switch_mode_while_3d_active(
+    preview_panel: PreviewPanel,
+) -> None:
+    preview_panel.show_nests((_nest("wood", 1),), (_material_definition("wood"),))
+
+    assert preview_panel.show_3d_radio.isChecked()
+    assert not preview_panel.show_2d_radio.isChecked()
+
+
+def test_show_nests_builds_deterministic_sheet_order(
+    preview_panel: PreviewPanel,
+) -> None:
+    nests = (_nest("b_wood", 2), _nest("a_wood", 1))
+    materials = (_material_definition("b_wood"), _material_definition("a_wood"))
+
+    preview_panel.show_nests(nests, materials)
+
+    assert preview_panel._sheet_keys == [
+        ("a_wood", 1),
+        ("b_wood", 1),
+        ("b_wood", 2),
+    ]
+
+
+def test_switching_to_2d_hides_3d_widgets_and_shows_2d_widget(
+    preview_panel: PreviewPanel, qtbot: QtBot
+) -> None:
+    _show_sliced_assembly_sync(qtbot, preview_panel, _slice_set(3))
+    preview_panel.show_nests((_nest("wood", 2),), (_material_definition("wood"),))
+
+    assert not preview_panel._nesting_2d_widget.isVisible()
+    assert preview_panel._switch_widget.isVisible()
+
+    preview_panel.show_2d_radio.setChecked(True)
+
+    assert preview_panel._nesting_2d_widget.isVisible()
+    assert not preview_panel._switch_widget.isVisible()
+    assert not preview_panel._highlight_widget.isVisible()
+    assert not preview_panel.plotter.isVisible()
+
+    preview_panel.show_3d_radio.setChecked(True)
+
+    assert not preview_panel._nesting_2d_widget.isVisible()
+    assert preview_panel._switch_widget.isVisible()
+    assert preview_panel.plotter.isVisible()
+
+
+def test_navigation_buttons_disabled_for_single_sheet(
+    preview_panel: PreviewPanel,
+) -> None:
+    preview_panel.show_nests((_nest("wood", 1),), (_material_definition("wood"),))
+    preview_panel.show_2d_radio.setChecked(True)
+
+    assert not preview_panel.nesting_prev_button.isEnabled()
+    assert not preview_panel.nesting_next_button.isEnabled()
+
+
+def test_navigation_buttons_enabled_at_boundaries_for_multiple_sheets(
+    preview_panel: PreviewPanel,
+) -> None:
+    preview_panel.show_nests((_nest("wood", 3),), (_material_definition("wood"),))
+    preview_panel.show_2d_radio.setChecked(True)
+
+    assert not preview_panel.nesting_prev_button.isEnabled()
+    assert preview_panel.nesting_next_button.isEnabled()
+
+    preview_panel.nesting_next_button.click()
+    assert preview_panel._current_sheet_index == 1
+    assert preview_panel.nesting_prev_button.isEnabled()
+    assert preview_panel.nesting_next_button.isEnabled()
+
+    preview_panel.nesting_next_button.click()
+    assert preview_panel._current_sheet_index == 2
+    assert preview_panel.nesting_prev_button.isEnabled()
+    assert not preview_panel.nesting_next_button.isEnabled()
+
+    preview_panel.nesting_prev_button.click()
+    assert preview_panel._current_sheet_index == 1
+    assert preview_panel.nesting_prev_button.isEnabled()
+    assert preview_panel.nesting_next_button.isEnabled()
+
+
+def test_show_nests_resets_to_first_sheet_when_2d_mode_active(
+    preview_panel: PreviewPanel,
+) -> None:
+    preview_panel.show_nests((_nest("wood", 3),), (_material_definition("wood"),))
+    preview_panel.show_2d_radio.setChecked(True)
+    preview_panel.nesting_next_button.click()
+    assert preview_panel._current_sheet_index == 1
+
+    preview_panel.show_nests((_nest("wood", 2),), (_material_definition("wood"),))
+
+    assert preview_panel._current_sheet_index == 0
+
+
+def test_render_current_sheet_draws_distinguishable_cut_and_engrave_paths(
+    preview_panel: PreviewPanel,
+) -> None:
+    preview_panel.show_nests((_nest("wood", 1),), (_material_definition("wood"),))
+    preview_panel.show_2d_radio.setChecked(True)
+
+    pens = [
+        item.pen()
+        for item in preview_panel._nesting_scene.items()
+        if hasattr(item, "pen")
+    ]
+    cut_pens = [
+        pen for pen in pens if pen.color() == preview_panel_module._PREVIEW_CUT_COLOR
+    ]
+    engrave_pens = [
+        pen
+        for pen in pens
+        if pen.color() == preview_panel_module._PREVIEW_ENGRAVE_COLOR
+    ]
+
+    assert len(cut_pens) >= 1
+    assert len(engrave_pens) >= 1
+
+
+def test_render_current_sheet_shows_material_and_sheet_position(
+    preview_panel: PreviewPanel,
+) -> None:
+    preview_panel.show_nests((_nest("wood3", 2),), (_material_definition("wood3"),))
+    preview_panel.show_2d_radio.setChecked(True)
+
+    assert preview_panel.nesting_sheet_label.text() == "wood3 — 1/2. lap"
+
+    preview_panel.nesting_next_button.click()
+
+    assert preview_panel.nesting_sheet_label.text() == "wood3 — 2/2. lap"
