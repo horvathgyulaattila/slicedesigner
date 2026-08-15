@@ -1,6 +1,10 @@
 # IMPLEMENTATION_PLAN.md
 
-**Státusz:** Tervezet
+Státusz: Elfogadva
+Tulajdonos: Horváth Gyula Attila
+Létrehozva: 2026-08-12
+Utolsó módosítás: 2026-08-15
+Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](../../PROJECT_CONSTITUTION.md), [RELIEF_GENERATOR_DOMAIN.md](RELIEF_GENERATOR_DOMAIN.md), [WAVE_FUNCTION_MODEL.md](WAVE_FUNCTION_MODEL.md), [PARAMETRIC_RELIEF_GENERATOR.md](PARAMETRIC_RELIEF_GENERATOR.md), [RELIEF_GEOMETRY_MODEL.md](RELIEF_GEOMETRY_MODEL.md), [MESH_GENERATION_MODEL.md](MESH_GENERATION_MODEL.md), [0014-meshsource-abstraction.md](../../adr/0014-meshsource-abstraction.md), [0015-optional-meshsource-plugin-architecture.md](../../adr/0015-optional-meshsource-plugin-architecture.md), [0016-plugin-repository-structure.md](../../adr/0016-plugin-repository-structure.md)
 
 ## 1. Cél
 
@@ -716,13 +720,17 @@ Az első implementáció akkor tekinthető funkcionálisan késznek, ha:
 Az implementáció az alábbi elfogadott dokumentumokra támaszkodik:
 
 ```text
-MESH_SOURCE.md
+ADR-0014 (MeshSource abstrakció)
        ↓
-ADR_MESH_SOURCE.md
+ADR-0015 (opcionális plugin architektúra)
        ↓
-plugin architecture
+ADR-0016 (plugin repository-struktúra)
        ↓
 RELIEF_GENERATOR_DOMAIN.md
+       ↓
+WAVE_FUNCTION_MODEL.md
+       ↓
+PARAMETRIC_RELIEF_GENERATOR.md
        ↓
 RELIEF_GEOMETRY_MODEL.md
        ↓
@@ -731,7 +739,7 @@ MESH_GENERATION_MODEL.md
 IMPLEMENTATION_PLAN.md
 ```
 
-A `MeshSource` contract már rögzíti, hogy a plugin saját domain logikája nem kerülhet a core-ba, és a relief-generátor első opcionális MeshSource lesz. 
+A `MeshSource` contract (ADR-0014) már rögzíti, hogy a plugin saját domain logikája nem kerülhet a core-ba, és a relief-generátor első opcionális MeshSource lesz. 
 
 ---
 
@@ -800,8 +808,8 @@ A plugin belső felépítése a SliceDesigner downstream engine-jeitől függetl
 
 # 28. Státusz
 
-**Tervezet — implementáció előtt jóváhagyásra vár.**
+**Elfogadva.**
 
-A dokumentum nem tartalmaz új architekturális döntést; az eddig elfogadott `MeshSource`, relief domain, geometry és mesh-generation döntésekből vezeti le a végrehajtás sorrendjét.
+A dokumentum nem tartalmaz új architekturális döntést; az eddig elfogadott `MeshSource` (ADR-0014), plugin-architektúra (ADR-0015), repository-struktúra (ADR-0016), valamint a relief domain, geometry és mesh-generation döntésekből vezeti le a végrehajtás sorrendjét.
 
-**Ezzel a dokumentummal a tervezési szakasz lényegében eljutott az első implementálható ponthoz.** A következő projektgazdai döntés már ennek a tervnek az elfogadása, utána pedig jöhet az implementációs munka.
+Ezzel a dokumentummal a tervezési szakasz lezárult, és az implementáció megkezdhető.
