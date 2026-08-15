@@ -675,15 +675,13 @@ Ezek technikai implementációs kérdések.
 
 A domainmodell az alábbi dokumentációkra támaszkodik:
 
-* `MESH_SOURCE.md`
-* `ADR_MESH_SOURCE.md`
-* `PLUGIN_ARCHITECTURE.md`
-* `ADR_PLUGIN_ARCHITECTURE.md`
-* `DOMAIN_MODEL.md`
-* `ARCHITECTURE.md`
-* `ENGINEERING_PRINCIPLES.md`
+* `../../adr/0014-meshsource-abstraction.md`
+* `../../adr/0015-optional-meshsource-plugin-architecture.md`
+* `../../DOMAIN_MODEL.md`
+* `../../ARCHITECTURE.md`
+* `../../ENGINEERING_PRINCIPLES.md`
 
-A `MeshSource` contract már rögzíti a determinisztikus és fail-fast működés követelményeit, valamint a Relief Generatorhoz kapcsolódó watertight kimeneti elvárást.
+A `MeshSource` contract (ADR-0014) már rögzíti a determinisztikus és fail-fast működés követelményeit, valamint a Relief Generatorhoz kapcsolódó watertight kimeneti elvárást. A `PLUGIN_ARCHITECTURE.md` plugin belső felépítését leíró dokumentum jelenleg még a `docs/drafts/relief_generator_plugin/` alatt van, véglegesítése külön Phase 8 tétel — a jelen dokumentum ezért ide egyelőre nem hivatkozik.
 
 ---
 
@@ -831,6 +829,6 @@ A második diagram **jövőbeli irány**, nem az első implementáció célarchi
 
 # 32. Státusz
 
-**Tervezet — projektgazdai jóváhagyásra vár.**
+**Elfogadva.**
 
-A dokumentum az első Relief Generator domainjének alapjait rögzíti, de nem véglegesíti a konkrét matematikai függvényt, a teljes paraméterkészletet, a mintavételi algoritmust vagy a Mesh-generálás konkrét technikai megoldását.
+A dokumentum az első Relief Generator domainjének alapjait rögzíti; a konkrét matematikai függvényt, a teljes paraméterkészletet és a mintavételi algoritmust a kapcsolódó, szintén elfogadott `WAVE_FUNCTION_MODEL.md`, `PARAMETRIC_RELIEF_GENERATOR.md`, `RELIEF_GEOMETRY_MODEL.md` és `MESH_GENERATION_MODEL.md` dokumentumok részletezik.

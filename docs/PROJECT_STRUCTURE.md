@@ -19,12 +19,15 @@ slicedesigner/                    # repo gyökér
 │       ├── engines/               # Domain réteg — 8 engine
 │       ├── project/               # Koordinációs réteg
 │       └── gui/                   # Prezentációs réteg (PySide)
+├── plugins/                       # opcionális pluginok (pl. relief_generator/)
 ├── tests/                         # a src/ struktúráját tükrözi
 ├── examples/                      # minta STL-ek, minta mentett Project-ek
 ├── assets/                        # GUI ikonok, statikus erőforrások
 ├── docs/
 │   ├── adr/                       # architekturális döntések
-│   └── specifications/            # Phase 2 funkcionális specifikációk
+│   ├── specifications/            # Phase 2 funkcionális specifikációk
+│   ├── drafts/                    # ideiglenes tervezetek
+│   └── plugins/                   # plugin-specifikus dokumentáció
 ├── README.md
 └── pyproject.toml                 # Python csomag-manifeszt
 ```
@@ -86,7 +89,19 @@ A `docs/plugins/<plugin_neve>/` alatti dokumentumok a `docs/` többi részével 
 
 A plugin core-tól független, saját architektúráját, domain modelljét és plugin-specifikus döntéseit ez a mappa tartalmazza — a core-t érintő architekturális döntések (pl. a `MeshSource` bővítési pont) továbbra is a `docs/adr/` és a projekt fő dokumentumaiban (`ARCHITECTURE.md`, `DOMAIN_MODEL.md`) maradnak.
 
-## 11. Konvenciók új fájlok/mappák hozzáadásához
+## 11. `plugins/` – opcionális pluginok kódja
+
+A `plugins/` a SliceDesigner opcionális, külön telepíthető pluginjainak forráskódját tartalmazza, pluginonként külön almappában (pl. `plugins/relief_generator/`), a `src/slicedesigner/` mellett, azzal azonos szinten a repo gyökerében.
+
+A pluginok kizárólag a `MeshSource` contracton (ADR-0014) keresztül kapcsolódnak a core-hoz — a core nem függ egyetlen plugintól sem, és nem tartalmazhat plugin-specifikus logikát (pl. `if relief_generator_installed: ...`). A függőség iránya egyirányú: Plugin → Core, fordítva nem.
+
+Egy plugin belső felépítése a saját domain-határait tükrözi (pl. `domain/`, `generators/`, `geometry/`, `mesh/`, `source/` — lásd a plugin saját dokumentációját a `docs/plugins/<plugin_neve>/` alatt).
+
+A pluginok tesztjei a `tests/plugins/<plugin_neve>/` alatt kapnak helyet, a meglévő `tests/engines/`, `tests/project/`, `tests/gui/` mellett — a core tesztjeinek plugin nélkül is futniuk kell.
+
+A repository-struktúra és a plugin-architektúra teljes indoklását és a mérlegelt alternatívákat az [ADR-0016](adr/0016-plugin-repository-structure.md) rögzíti.
+
+## 12. Konvenciók új fájlok/mappák hozzáadásához
 
 * Új domain fogalom → először a `DOMAIN_MODEL.md`-ben rögzítendő, csak utána kaphat kódbeli megfelelőt.
 * Új engine → a `docs/specifications/` alatt specifikáció, majd az `ARCHITECTURE.md` 2. szakaszának bővítése, csak ezután `src/slicedesigner/engines/` alatt modul.
