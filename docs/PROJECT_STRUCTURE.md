@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos:
 Létrehozva: 2026-07-30
-Utolsó módosítás: 2026-08-09
+Utolsó módosítás: 2026-08-15
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](PROJECT_CONSTITUTION.md), [ARCHITECTURE.md](ARCHITECTURE.md), [README.md](../README.md)
 
 ## Cél
@@ -68,7 +68,17 @@ Minden alkönyvtár tartalma reprodukálható (Phase 6, 6.9 tétel).
 
 A GUI-hoz tartozó statikus fájlok (ikonok, stílusok). Nem tartalmaz logikát vagy konfigurációt.
 
-## 9. Konvenciók új fájlok/mappák hozzáadásához
+## 9. `docs/drafts/` – ideiglenes tervezetek
+
+A `docs/drafts/` egy adott, még nem véglegesített funkció vagy komponens (jellemzően egy plugin) kezdeti, közösen kialakított tervezési dokumentumainak ideiglenes gyűjtőhelye, témánként elkülönítve (pl. `docs/drafts/relief_generator_plugin/`).
+
+**Az itt elhelyezett dokumentumok nem tekinthetők elfogadott specifikációnak vagy architekturális döntésnek**, függetlenül attól, hogy tartalmuk mennyire részletes vagy kész hatású. A `docs/` többi részével ellentétben a `docs/drafts/` alatti tartalom nem minősül hivatalos igazságforrásnak (Constitution 2. elv) — kizárólag a Szoftverarchitekt és a Projektgazda közös tervezési munkájának bemeneteként, illetve a végleges dokumentáció és a Claude Code-nak szánt promptok elkészítésének alapjaként szolgál.
+
+Minden `docs/drafts/` alatti dokumentumnak tartalmaznia kell a `Státusz: Tervezet` fejlécmezőt.
+
+**Kilépési szabály:** amint egy `docs/drafts/<téma>/` alatti tartalom a szokásos munkafolyamaton (Döntési javaslat → Hatásvizsgálat → Projektgazdai jóváhagyás → Dokumentáció módosítása) átment, a végleges tartalom a megfelelő végleges helyre kerül (pl. `docs/plugins/<plugin_neve>/`, `docs/adr/`, illetve a `DOMAIN_MODEL.md`/`ARCHITECTURE.md` megfelelő szakasza) — a `docs/drafts/<téma>/` mappa ezután törlésre kerül.
+
+## 10. Konvenciók új fájlok/mappák hozzáadásához
 
 * Új domain fogalom → először a `DOMAIN_MODEL.md`-ben rögzítendő, csak utána kaphat kódbeli megfelelőt.
 * Új engine → a `docs/specifications/` alatt specifikáció, majd az `ARCHITECTURE.md` 2. szakaszának bővítése, csak ezután `src/slicedesigner/engines/` alatt modul.
