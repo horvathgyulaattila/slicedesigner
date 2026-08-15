@@ -1,0 +1,24 @@
+# Python bytecode / cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# Tool caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Build / packaging
+*.egg-info/
+dist/
+build/
+
+# Generated example outputs (regenerate by running the app)
+examples/**/*.dxf
+
+# OS junk
+.DS_Store
+Thumbs.db
