@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-08-01
-Utolsó módosítás: 2026-08-01
+Utolsó módosítás: 2026-08-13
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](../PROJECT_CONSTITUTION.md), [ARCHITECTURE.md](../ARCHITECTURE.md), [DOMAIN_MODEL.md](../DOMAIN_MODEL.md), [SPECIFICATION_STANDARD.md](../SPECIFICATION_STANDARD.md), [ENGINEERING_PRINCIPLES.md](../ENGINEERING_PRINCIPLES.md)
 
 ## 1. Kontextus
@@ -38,7 +38,7 @@ Mesh domain objektum:
 
 | Név | Alapérték | Érvényességi tartomány | Jelentés |
 |---|---|---|---|
-| `origin_alignment` | `none` | `{none}` (egyelőre egyetlen érvényes érték) | Origó kezelése betöltéskor — a forrásfájl koordinátái változatlanok maradnak. |
+| `origin_alignment` | `none` | `{none, min_corner}` | Origó kezelése betöltéskor. `none`: a forrásfájl koordinátái változatlanok maradnak. `min_corner`: a betöltött geometria eltolása úgy, hogy a bounding box minimum sarka a (0, 0, 0) origóba kerüljön — a test mindhárom tengely mentén pozitív irányba terjed ki. |
 | `min_plausible_size_mm` | `1.0` | `> 0`, `< max_plausible_size_mm` | A bounding box legkisebb elfogadott mérete (mm) az egység-plauzibilitási figyelmeztetéshez. |
 | `max_plausible_size_mm` | `3000.0` | `> min_plausible_size_mm` | A bounding box legnagyobb elfogadott mérete (mm) az egység-plauzibilitási figyelmeztetéshez. |
 
@@ -49,7 +49,7 @@ Mesh domain objektum:
 3. Bounding box számítása mm-ben.
 4. Geometriai validálás: nem-manifold/nem-vízzáró geometria észlelése esetén figyelmeztetés rögzítése — nem blokkolja a betöltést.
 5. Egység-plauzibilitás ellenőrzése: ha a bounding box bármely mérete a `[min_plausible_size_mm, max_plausible_size_mm]` tartományon kívül esik, figyelmeztetés rögzítése — szintén nem blokkoló.
-6. `origin_alignment` paraméter alkalmazása (jelenleg: nincs koordináta-módosítás).
+6. `origin_alignment` paraméter alkalmazása: `none` esetén nincs koordináta-módosítás; `min_corner` esetén minden csúcspont eltolása `-bounding_box.min`-nel (a 3. lépésben, az eredeti koordinátákon számított bounding box alapján), majd a bounding box újraszámítása az eltolt koordinátákból — a visszaadott Mesh önmagával konzisztens: a `bounding_box` mindig a ténylegesen visszaadott csúcspontokat írja le (`min_corner` esetén ez pontosan `(0, 0, 0)` minimum sarkot jelent).
 7. Mesh objektum előállítása és visszaadása a Project felé.
 
 ## 7. Hibakezelés

@@ -9,6 +9,7 @@ import math
 from dataclasses import dataclass, replace
 from enum import Enum
 
+from shapely import affinity
 from shapely.geometry import LineString, Polygon
 from shapely.geometry.base import BaseGeometry
 from shapely.geometry.polygon import orient
@@ -785,38 +786,98 @@ def _transform_mark(
     return replace(mark, strokes=new_strokes)
 
 
-def _orientation_dimensions(
-    geometry: BaseGeometry, rotation_mode: NestingRotationMode
-) -> tuple[float, float, float]:
-    """(szélesség, magasság, forgatás fok) a csomagoláshoz választott tájolásban.
+# Bottom-Left Fill (BLF) csomagolás — ADR-0013. A lap szélétől nem követel
+# kerf-nyi margót (a kerf kizárólag alkatrészek között érvényesül), de a
+# lánc-szerűen felhalmozódó lebegőpontos kerekítési hibák miatt egy apró
+# tűréssel dolgozik a lap-határ és a kerf ellenőrzésekor is.
+_BOUNDS_EPSILON_MM = 1e-9
 
-    `ORTHOGONAL` módban azt a tájolást választja, amelyik KISEBB
-    magasságot ad (jobb polc-kihasználtság).
-    """
-    min_x, min_y, max_x, max_y = geometry.bounds
-    width, height = max_x - min_x, max_y - min_y
 
+def _rotation_angles(rotation_mode: NestingRotationMode) -> tuple[float, ...]:
+    """ADR-0013 szerinti szögkészlet: NONE={0}, ORTHOGONAL={0,90},
+    FREE={0,45,90,135,180,225,270,315} — ebben a sorrendben (a sorrend
+    maga determinálja a keresés bejárási sorrendjét)."""
     if rotation_mode == NestingRotationMode.NONE:
-        return width, height, 0.0
-
+        return (0.0,)
     if rotation_mode == NestingRotationMode.ORTHOGONAL:
-        if width < height:
-            return height, width, 90.0
-        return width, height, 0.0
+        return (0.0, 90.0)
+    return (0.0, 45.0, 90.0, 135.0, 180.0, 225.0, 270.0, 315.0)
 
-    # FREE: minimális területű befoglaló téglalap (Shapely beépített eszközével).
-    min_rect = geometry.minimum_rotated_rectangle
-    coords = list(min_rect.exterior.coords)[:-1]
-    edge_vectors = [
-        (coords[(i + 1) % 4][0] - coords[i][0], coords[(i + 1) % 4][1] - coords[i][1])
-        for i in range(4)
+
+def _rotated_bounds(
+    geometry: BaseGeometry, origin: tuple[float, float], angle_deg: float
+) -> tuple[float, float]:
+    """(szélesség, magasság) — a geometria `origin` körüli `angle_deg`-os
+    elforgatása utáni befoglaló téglalap mérete."""
+    rotated = affinity.rotate(geometry, angle_deg, origin=origin, use_radians=False)
+    min_x, min_y, max_x, max_y = rotated.bounds
+    return (max_x - min_x, max_y - min_y)
+
+
+def _candidate_positions(
+    placed: list[BaseGeometry],
+    sheet_width: float,
+    sheet_height: float,
+    kerf_mm: float,
+) -> list[tuple[float, float]]:
+    """A lapon már elhelyezett geometriák befoglaló téglalap-sarkaiból képzett
+    jelölt-rács, kiegészítve a lap (0, 0) sarkával — determinisztikusan
+    dedupolva és (y, x) szerint növekvő sorrendbe rendezve (bottom-left
+    bejárás). Ha `placed` üres, kizárólag `[(0.0, 0.0)]`-t ad vissza.
+
+    A jobbra/fölé/átlósan eső ("kifelé néző") sarkak `kerf_mm`-mel eltolva
+    szerepelnek a rácsban — enélkül egy új alkatrész bal-alsó sarka pontosan
+    az őt generáló alkatrész szélén ülne (0 távolság), ami `kerf_mm > 0`
+    mellett `_fits_at()`-ban SOHA nem teljesülne, azaz a szomszédos
+    elhelyezés elvi lehetetlenné válna. A bal-alsó sarok (a generáló
+    alkatrész saját origója) eltolás nélkül is szerepel — ütközés miatt úgyis
+    érvénytelen lesz, de ez ártalmatlan, a teljesség kedvéért benne marad.
+
+    A lapon kívül eső sarokpontok (egy korábban elhelyezett alkatrész a lap
+    szélén túlnyúló sarka nem lehet, de kerekítési hiba miatt előfordulhat)
+    kiszűrésre kerülnek."""
+    if not placed:
+        return [(0.0, 0.0)]
+
+    positions: set[tuple[float, float]] = {(0.0, 0.0)}
+    for geometry in placed:
+        min_x, min_y, max_x, max_y = geometry.bounds
+        positions.add((min_x, min_y))
+        positions.add((max_x + kerf_mm, min_y))
+        positions.add((min_x, max_y + kerf_mm))
+        positions.add((max_x + kerf_mm, max_y + kerf_mm))
+
+    in_bounds = [
+        (x, y)
+        for x, y in positions
+        if -_BOUNDS_EPSILON_MM <= x <= sheet_width + _BOUNDS_EPSILON_MM
+        and -_BOUNDS_EPSILON_MM <= y <= sheet_height + _BOUNDS_EPSILON_MM
     ]
-    edge_lengths = [(dx**2 + dy**2) ** 0.5 for dx, dy in edge_vectors]
-    rect_width, rect_height = edge_lengths[0], edge_lengths[1]
-    angle_deg = math.degrees(math.atan2(edge_vectors[0][1], edge_vectors[0][0]))
-    if rect_width < rect_height:
-        return rect_height, rect_width, angle_deg + 90.0
-    return rect_width, rect_height, angle_deg
+    return sorted(in_bounds, key=lambda p: (p[1], p[0]))
+
+
+def _fits_at(
+    rotated_translated_geometry: BaseGeometry,
+    sheet_width: float,
+    sheet_height: float,
+    placed: list[BaseGeometry],
+    kerf_mm: float,
+) -> bool:
+    """Igaz, ha a geometria (a) teljes egészében a [0, sheet_width] x
+    [0, sheet_height] tartományon belül esik, ÉS (b) minden `placed`-beli
+    geometriától `distance()` szerint legalább `kerf_mm` távolságra van."""
+    min_x, min_y, max_x, max_y = rotated_translated_geometry.bounds
+    if (
+        min_x < -_BOUNDS_EPSILON_MM
+        or min_y < -_BOUNDS_EPSILON_MM
+        or max_x > sheet_width + _BOUNDS_EPSILON_MM
+        or max_y > sheet_height + _BOUNDS_EPSILON_MM
+    ):
+        return False
+    return all(
+        rotated_translated_geometry.distance(other) >= kerf_mm - _BOUNDS_EPSILON_MM
+        for other in placed
+    )
 
 
 def _place_part(
@@ -856,56 +917,90 @@ def _place_part(
     )
 
 
+def _find_placement(
+    geometry: BaseGeometry,
+    origin: tuple[float, float],
+    angles: tuple[float, ...],
+    sheets: list[list[BaseGeometry]],
+    sheet_w: float,
+    sheet_h: float,
+    kerf: float,
+) -> tuple[int, BaseGeometry, float, float, float] | None:
+    """Az első illeszkedő (lap-index, elforgatott+eltolt geometria, szög,
+    x, y) ötös megkeresése a megadott lap-listán — laponként, azon belül
+    szögönként (mindkettő a bejárási sorrendjükben), azon belül bottom-left
+    sorrendben bejárt jelölt-pozíciónként. `None`, ha egyetlen lapon,
+    szögben, pozícióban sem illeszkedik."""
+    for sheet_index, sheet_geoms in enumerate(sheets):
+        for angle_deg in angles:
+            width, height = _rotated_bounds(geometry, origin, angle_deg)
+            if width > sheet_w or height > sheet_h:
+                continue
+            for target_x, target_y in _candidate_positions(
+                sheet_geoms, sheet_w, sheet_h, kerf
+            ):
+                if target_x + width > sheet_w or target_y + height > sheet_h:
+                    continue
+                rotated = affinity.rotate(geometry, angle_deg, origin=origin)
+                min_x, min_y = rotated.bounds[0], rotated.bounds[1]
+                translated = affinity.translate(
+                    rotated, target_x - min_x, target_y - min_y
+                )
+                if _fits_at(translated, sheet_w, sheet_h, sheet_geoms, kerf):
+                    return sheet_index, translated, angle_deg, target_x, target_y
+    return None
+
+
 def _pack_material_group(
     parts: list[NestablePart],
     material: MaterialDefinition,
     rotation_mode: NestingRotationMode,
 ) -> tuple[list[PlacedPart], int]:
-    """Egy anyagcsoport alkatrészeinek polc-alapú (shelf) elrendezése lapokra."""
-    kerf = material.kerf_mm
+    """Egy anyagcsoport alkatrészeinek Bottom-Left Fill (BLF) elrendezése
+    lapokra, valódi Shapely-kontúr-ütközéssel (ADR-0013)."""
+    angles = _rotation_angles(rotation_mode)
     sheet_w, sheet_h = material.sheet_width_mm, material.sheet_height_mm
+    kerf = material.kerf_mm
 
-    entries = []
-    for part in parts:
-        geometry = _contours_to_geometry(part.contours)
-        width, height, rotation_deg = _orientation_dimensions(geometry, rotation_mode)
-        entries.append((part, geometry, width, height, rotation_deg))
+    entries = [(part, _contours_to_geometry(part.contours)) for part in parts]
+    entries.sort(key=lambda entry: entry[1].area, reverse=True)
 
-    entries.sort(key=lambda e: e[3], reverse=True)
+    sheets: list[list[BaseGeometry]] = [[]]
+    placed_parts: list[PlacedPart] = []
 
-    placed: list[PlacedPart] = []
-    sheet_number = 1
-    cursor_x = 0.0
-    cursor_y = 0.0
-    shelf_height = 0.0
+    for part, geometry in entries:
+        centroid = geometry.centroid
+        origin = (centroid.x, centroid.y)
 
-    for part, geometry, width, height, rotation_deg in entries:
-        if width > sheet_w or height > sheet_h:
-            raise InvalidNestingError(
-                f"Egy alkatrész ({width:.2f}x{height:.2f} mm) a felosztás után sem "
-                f"fér el a(z) '{material.material_id}' anyag lapméretén "
-                f"({sheet_w}x{sheet_h} mm) belül."
-            )
-
-        if cursor_x + width > sheet_w:
-            cursor_x = 0.0
-            cursor_y += shelf_height + kerf
-            shelf_height = 0.0
-
-        if cursor_y + height > sheet_h:
-            sheet_number += 1
-            cursor_x = 0.0
-            cursor_y = 0.0
-            shelf_height = 0.0
-
-        placed.append(
-            _place_part(part, geometry, rotation_deg, cursor_x, cursor_y, sheet_number)
+        placement = _find_placement(
+            geometry, origin, angles, sheets, sheet_w, sheet_h, kerf
         )
+        if placement is None:
+            # Egyetlen meglévő lapon sem fér el — nyiss egy újat, és próbáld
+            # KIZÁRÓLAG azon. Ha az is sikertelen, az alkatrész (a Phase 6
+            # felosztás után is) elférhetetlen ebben az anyagban.
+            sheets.append([])
+            placement = _find_placement(
+                geometry, origin, angles, sheets[-1:], sheet_w, sheet_h, kerf
+            )
+            if placement is None:
+                min_x, min_y, max_x, max_y = geometry.bounds
+                raise InvalidNestingError(
+                    f"Egy alkatrész ({max_x - min_x:.2f}x{max_y - min_y:.2f} mm) a "
+                    f"felosztás után sem fér el a(z) '{material.material_id}' anyag "
+                    f"lapméretén ({sheet_w}x{sheet_h} mm) belül."
+                )
+            sheet_index = len(sheets) - 1
+            _, translated, angle_deg, target_x, target_y = placement
+        else:
+            sheet_index, translated, angle_deg, target_x, target_y = placement
 
-        cursor_x += width + kerf
-        shelf_height = max(shelf_height, height)
+        placed_parts.append(
+            _place_part(part, geometry, angle_deg, target_x, target_y, sheet_index + 1)
+        )
+        sheets[sheet_index].append(translated)
 
-    return placed, sheet_number
+    return placed_parts, len(sheets)
 
 
 def _original_reference_key(

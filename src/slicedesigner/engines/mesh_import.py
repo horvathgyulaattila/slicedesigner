@@ -56,7 +56,7 @@ class Mesh:
 
 def import_mesh(
     file_path: str,
-    origin_alignment: Literal["none"] = "none",
+    origin_alignment: Literal["none", "min_corner"] = "none",
     min_plausible_size_mm: float = 1.0,
     max_plausible_size_mm: float = 3000.0,
 ) -> Mesh:
@@ -65,9 +65,10 @@ def import_mesh(
     Args:
         file_path: A betöltendő STL fájl elérési útja (ASCII vagy bináris,
             automatikus felismeréssel).
-        origin_alignment: Origókezelés betöltéskor. Jelenleg kizárólag
-            ``"none"`` érvényes érték (a forrásfájl koordinátái
-            változatlanok maradnak) — MESH_IMPORT_SPEC.md 5. szakasz.
+        origin_alignment: Origókezelés betöltéskor — MESH_IMPORT_SPEC.md 5.
+            szakasz. ``"none"``: a forrásfájl koordinátái változatlanok
+            maradnak. ``"min_corner"``: a betöltött geometria eltolása úgy,
+            hogy a bounding box minimum sarka a (0, 0, 0) origóba kerüljön.
         min_plausible_size_mm: A bounding box legkisebb elfogadott mérete
             (mm) az egység-plauzibilitási figyelmeztetéshez.
         max_plausible_size_mm: A bounding box legnagyobb elfogadott mérete
@@ -137,13 +138,23 @@ def import_mesh(
     for warning in warnings:
         logger.warning("%s: %s", warning.kind.value, warning.message)
 
-    # origin_alignment jelenleg nem módosítja a koordinátákat
-    # (MESH_IMPORT_SPEC.md 6. szakasz, 6. lépés).
+    # origin_alignment alkalmazása (MESH_IMPORT_SPEC.md 6. szakasz, 6. lépés):
+    # "none" esetén nincs koordináta-módosítás; "min_corner" esetén minden
+    # csúcspont eltolása -bounding_box.min-nel, a bounding box pedig
+    # újraszámítva az eltolt koordinátákból, hogy a visszaadott Mesh
+    # önmagával konzisztens maradjon.
+    vertices = loaded_mesh.vertices
+    if origin_alignment == "min_corner":
+        vertices = vertices - bounds[0]
+        bounding_box = BoundingBox(
+            min=(0.0, 0.0, 0.0),
+            max=(float(size[0]), float(size[1]), float(size[2])),
+        )
 
     return Mesh(
         vertices=tuple(
             (float(vertex[0]), float(vertex[1]), float(vertex[2]))
-            for vertex in loaded_mesh.vertices
+            for vertex in vertices
         ),
         triangles=tuple(
             (int(face[0]), int(face[1]), int(face[2])) for face in loaded_mesh.faces

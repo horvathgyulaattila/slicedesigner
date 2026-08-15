@@ -1,10 +1,20 @@
-"""Futtatás / DXF Export / állapot-panel (prompt 2.4 szakasz).
+"""Futtatás / DXF Export / állapot-widgetek (prompt 2.3 szakasz, 7.4 GUI-átalakítás).
 
-A DXF Export paraméter-widgetek itt, nem a bal paraméter-panelen
-jelennek meg: az export logikailag a pipeline-futtatás kimeneti
-lépéséhez tartozik (nem a bemeneti geometriai/összeépítési
-paraméterekhez), így egy panelen belül olvasható a "Futtatás" gombbal
-és az azt követő állapot-naplóval együtt.
+A `RunPanel` továbbra is felelős mindazon widgetek létrehozásáért, amiket
+korábban is létrehozott (ugyanazokkal az attribútumnevekkel), de már nem
+rakja mindet egyetlen közös, saját layoutba: három, logikailag
+elkülönített, publikusan elérhető konténer-widgetet épít fel és tesz
+elérhetővé a `MainWindow` számára.
+
+* `export_settings_widget` — a DXF Export paraméterek `QGroupBox`-a; a
+  `MainWindow` ezt illeszti be a `ParameterPanel` Export fülébe
+  (`ParameterPanel.set_export_tab_content()`), mert az export
+  logikailag a bemeneti geometriai/összeépítési paraméterekkel egy
+  szinten, a fülsávban jelenik meg — nem a `RunPanel`-en belül.
+* `action_container` — a `run_button`/`export_dxf_button`/`progress_bar`;
+  a `MainWindow` a `ParameterPanel` oszlop aljára helyezi.
+* `status_log` — önálló, húzással állítható magasságú `QSplitter`-panelbe
+  kerül a `MainWindow`-ban.
 """
 
 from __future__ import annotations
@@ -72,7 +82,10 @@ class _CollapsibleSection(QWidget):
 
 
 class RunPanel(QWidget):
-    """Futtatás-gomb, DXF Export paraméterek és állapot-/log-terület.
+    """Futtatás-gomb, DXF Export paraméterek és állapot-/log-terület
+    widgetjeinek felépítője — vizuálisan három, elkülönített konténerbe
+    szét vannak választva (l. modul-docstring), de mindegyik widget
+    ugyanazzal az attribútumnévvel érhető el, mint korábban.
 
     A "Futtatás" gomb kattintás-eseményét a `MainWindow` köti a tényleges
     `run_pipeline()`-végrehajtáshoz (`MainWindow._on_run_clicked`) — e
@@ -82,18 +95,42 @@ class RunPanel(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
-        layout = QVBoxLayout(self)
-        layout.addWidget(self._build_dxf_export_group())
+        # 1. Export-beállítások konténer — a `MainWindow` illeszti be a
+        # `ParameterPanel` Export fülébe.
+        self.export_settings_widget = self._build_dxf_export_group()
+
+        # 2. Akció-konténer — a `MainWindow` a `ParameterPanel` oszlop
+        # aljára helyezi.
+        self.action_container = QWidget(self)
+        action_layout = QVBoxLayout(self.action_container)
+        action_layout.setContentsMargins(0, 0, 0, 0)
 
         self.run_button = QPushButton("Futtatás")
-        layout.addWidget(self.run_button)
+        # Vizuálisan kiemelt (zöld) stílus — a projektgazda élő
+        # tesztelés utáni visszajelzése alapján, hogy a fő cselekvés-gomb
+        # megkülönböztethető legyen a többitől. `:disabled` egy tompított
+        # zöld változatot ad, hogy a letiltott állapot (Futtatás/példa-
+        # generálás alatt) is egyértelműen megkülönböztethető maradjon.
+        self.run_button.setStyleSheet(
+            "QPushButton {"
+            "  background-color: #4CAF50;"
+            "  color: white;"
+            "  font-weight: bold;"
+            "  padding: 4px;"
+            "}"
+            "QPushButton:disabled {"
+            "  background-color: #A5D6A7;"
+            "  color: #F0F0F0;"
+            "}"
+        )
+        action_layout.addWidget(self.run_button)
 
         # A legutóbbi sikeres Futtatás Nest-jein indítható DXF Export
         # (ADR-0009) — kezdetben, és minden új Futtatás indításakor
         # letiltva; a `MainWindow` engedélyezi sikeres Futtatás után.
         self.export_dxf_button = QPushButton("DXF Export")
         self.export_dxf_button.setEnabled(False)
-        layout.addWidget(self.export_dxf_button)
+        action_layout.addWidget(self.export_dxf_button)
 
         # Határozatlan (0/0) módú sáv — a `run_pipeline()` nem ad
         # köztes/lépésenkénti előrehaladást, ezért csak azt jelzi, hogy a
@@ -101,12 +138,14 @@ class RunPanel(QWidget):
         self.progress_bar = QProgressBar(self)
         self.progress_bar.setRange(0, 0)
         self.progress_bar.setVisible(False)
-        layout.addWidget(self.progress_bar)
+        action_layout.addWidget(self.progress_bar)
 
+        # 3. Állapot-/log-terület — a `MainWindow` önálló, húzással
+        # állítható magasságú `QSplitter`-panelbe helyezi.
         self.status_log = QTextEdit(self)
         self.status_log.setReadOnly(True)
         self.status_log.setPlaceholderText("Állapot- és hibaüzenetek...")
-        layout.addWidget(self.status_log)
+
         logger.debug("RunPanel felépítve.")
 
     def _build_dxf_export_group(self) -> QGroupBox:

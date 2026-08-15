@@ -13,13 +13,27 @@ from types import SimpleNamespace
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
+from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtGui import QAction  # noqa: E402
-from PySide6.QtWidgets import QMenu  # noqa: E402
+from PySide6.QtWidgets import QMenu, QSplitter  # noqa: E402
 from pytestqt.qtbot import QtBot  # noqa: E402
 
 from slicedesigner.gui.examples_dialog import ExampleInfo  # noqa: E402
 from slicedesigner.gui.main_window import MainWindow  # noqa: E402
 from slicedesigner.project.exceptions import PipelineConfigurationError  # noqa: E402
+
+
+def _select_tab(panel: object, title: str) -> None:
+    """A Dowel/Gap/Backplate fülek show/hide-viselkedése csak akkor
+    figyelhető meg `isVisible()`-lel, ha a fülük a `QTabWidget` aktuális
+    (megjelenített) lapja — egy nem-aktuális fülön lévő widget mindig
+    láthatatlan, függetlenül a saját `setVisible()`-állapotától (prompt
+    7.4 GUI-átalakítás)."""
+    for index in range(panel.count()):
+        if panel.tabText(index) == title:
+            panel.setCurrentIndex(index)
+            return
+    raise AssertionError(f"Fül nem található: {title!r}")
 
 
 def _get_file_menu(main_window: MainWindow) -> QMenu:
@@ -137,6 +151,49 @@ def test_main_window_builds_three_areas(main_window: MainWindow) -> None:
     assert hasattr(main_window.run_panel, "export_dxf_button")
 
 
+def test_parameter_panel_export_tab_contains_run_panel_export_widget(
+    main_window: MainWindow,
+) -> None:
+    """A `RunPanel.export_settings_widget` ténylegesen a `ParameterPanel`
+    Export fülébe kerül (prompt 2.4 szakasz, konstrukciós sorrend)."""
+    panel = main_window.parameter_panel
+    _select_tab(panel, "Export")
+    export_scroll_area = panel.currentWidget()
+    assert export_scroll_area.isAncestorOf(main_window.run_panel.export_settings_widget)
+
+
+def test_action_container_is_at_the_bottom_of_the_parameter_panel_column(
+    main_window: MainWindow,
+) -> None:
+    """A Futtatás/DXF Export gombok és a folyamatjelző a `ParameterPanel`
+    oszlop aljára kerülnek."""
+    action_container = main_window.run_panel.action_container
+    left_column = action_container.parentWidget()
+    assert left_column is not None
+
+    layout = left_column.layout()
+    assert layout is not None
+    assert layout.indexOf(main_window.parameter_panel) < layout.indexOf(
+        action_container
+    )
+
+
+def test_status_log_is_in_its_own_resizable_splitter_pane(
+    main_window: MainWindow,
+) -> None:
+    """A log/állapot-terület (`status_log`) egy önálló, húzással
+    állítható magasságú `QSplitter`-panelben jelenik meg, a `MainWindow`
+    teljes szélességében (nem a bal oszlopban)."""
+    status_log = main_window.run_panel.status_log
+    outer_splitter = status_log.parentWidget()
+    assert isinstance(outer_splitter, QSplitter)
+    assert outer_splitter.orientation() == Qt.Orientation.Vertical
+    assert outer_splitter.indexOf(status_log) >= 0
+
+    # A `status_log` nincs a bal (paraméter-panel) oszlop leszármazottja.
+    assert not main_window.parameter_panel.isAncestorOf(status_log)
+
+
 def test_export_dxf_button_initially_disabled(main_window: MainWindow) -> None:
     assert main_window._last_nests is None
     assert not main_window.run_panel.export_dxf_button.isEnabled()
@@ -144,6 +201,7 @@ def test_export_dxf_button_initially_disabled(main_window: MainWindow) -> None:
 
 def test_dowel_switch_toggles_group_visibility(main_window: MainWindow) -> None:
     panel = main_window.parameter_panel
+    _select_tab(panel, "Dowel")
     assert not panel.dowel_group.isVisible()
 
     panel.use_dowels_checkbox.setChecked(True)
@@ -155,6 +213,7 @@ def test_dowel_switch_toggles_group_visibility(main_window: MainWindow) -> None:
 
 def test_spacer_switch_toggles_group_visibility(main_window: MainWindow) -> None:
     panel = main_window.parameter_panel
+    _select_tab(panel, "Gap")
     assert not panel.gap_group.isVisible()
 
     panel.use_spacers_checkbox.setChecked(True)
@@ -163,6 +222,7 @@ def test_spacer_switch_toggles_group_visibility(main_window: MainWindow) -> None
 
 def test_backplate_switch_toggles_group_visibility(main_window: MainWindow) -> None:
     panel = main_window.parameter_panel
+    _select_tab(panel, "Backplate")
     assert not panel.backplate_group.isVisible()
 
     panel.use_backplate_checkbox.setChecked(True)

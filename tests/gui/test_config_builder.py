@@ -103,6 +103,37 @@ def test_all_switches_on_produce_params(qtbot: QtBot) -> None:
     assert config.backplate is not None
 
 
+def test_full_pipeline_config_builds_with_new_tabbed_layout(qtbot: QtBot) -> None:
+    """A `ParameterPanel`/`RunPanel` fülsávos, szétválasztott elrendezése
+    (ROADMAP Phase 7 7.4 tétele) mellett is helyesen épül fel egy teljes
+    `PipelineConfig` — a `RunPanel.export_settings_widget`-et ténylegesen
+    beillesztve a `ParameterPanel` Export fülébe (a `MainWindow`-beli
+    vezetékezést tükrözve), bizonyítva, hogy az áthelyezés (reparent egy
+    fülönkénti `QScrollArea`-ba) nem változtat a `config_builder.py`-ból
+    elért widget-attribútumok azonosságán/értékén — ez az invariáns teszi
+    lehetővé, hogy `config_builder.py`/`config_loader.py` egyáltalán ne
+    kelljen módosítani."""
+    parameter_panel, run_panel = _make_panels(qtbot)
+    parameter_panel.set_export_tab_content(run_panel.export_settings_widget)
+    _fill_required_paths(parameter_panel, run_panel)
+    _fill_materials_table(parameter_panel)
+    parameter_panel.use_dowels_checkbox.setChecked(True)
+    parameter_panel.use_spacers_checkbox.setChecked(True)
+    parameter_panel.use_backplate_checkbox.setChecked(True)
+
+    config = build_pipeline_config(parameter_panel, run_panel)
+
+    assert config.use_dowels is True
+    assert config.dowel is not None
+    assert config.use_spacers is True
+    assert config.gap is not None
+    assert config.use_backplate is True
+    assert config.backplate is not None
+    assert config.mesh_import.file_path == "C:/models/example.stl"
+    assert config.dxf_export.output_directory == "C:/exports"
+    assert config.nesting.material_definitions != ()
+
+
 def test_material_definitions_table_is_read_correctly(qtbot: QtBot) -> None:
     parameter_panel, run_panel = _make_panels(qtbot)
     _fill_required_paths(parameter_panel, run_panel)

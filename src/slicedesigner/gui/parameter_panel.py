@@ -1,5 +1,6 @@
-"""Bal oldali paraméter-panel: a nyolc engine-paraméter dataclass szerinti,
-görgethető, csoportosított beviteli felület (prompt 2.2 szakasz).
+"""Bal oldali paraméter-panel: a nyolc funkciócsoport (7 engine-paraméter
+dataclass + DXF Export) fenti fülsávos (tab), lapozható kártyás beviteli
+felülete (prompt 7.4 GUI-átalakítás, ROADMAP Phase 7 7.4 tétele).
 
 Kizárólag elrendezés és widget-választás — a widgetek jelenlegi
 állapotban nincsenek `PipelineConfig`-ba gyűjtve, ez a "teljes workflow"
@@ -28,6 +29,7 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -212,14 +214,23 @@ def _build_placeholder_table(columns: list[str]) -> tuple[QWidget, QTableWidget]
     return container, table
 
 
-class ParameterPanel(QScrollArea):
-    """A nyolc engine-paraméter dataclass szerint csoportosított, görgethető
-    bal panel.
+class ParameterPanel(QTabWidget):
+    """A nyolc funkciócsoport (7 engine-paraméter dataclass + DXF Export)
+    fenti fülsávos (tab), lapozható kártyás bal panelje.
+
+    Minden fül saját `QScrollArea`-ba csomagolva (nem egy közös, teljes
+    panelt átfogó görgető), hogy a hosszabb kártyák (pl. Backplate) kis
+    ablakméretnél is önállóan görgethetők legyenek.
 
     A három kapcsoló (`use_dowels_checkbox`, `use_spacers_checkbox`,
     `use_backplate_checkbox`) a hozzájuk tartozó (Dowel/Gap/Backplate)
-    `QGroupBox` show/hide állapotát vezérli — tisztán UI-viselkedés, nem
-    pipeline-logika.
+    `QGroupBox` show/hide állapotát vezérli, a saját fülükön belül —
+    tisztán UI-viselkedés, nem pipeline-logika.
+
+    Az Export fül kezdetben üres — a `RunPanel` DXF Export widgetjeit
+    (`export_settings_widget`) a `MainWindow` illeszti be
+    `set_export_tab_content()`-tel, mert a `RunPanel`-nek a
+    `ParameterPanel` előtt kell létrejönnie (l. `main_window.py`).
 
     A `mesh_file_selected` signal kizárólag sikeres mesh-fájl-választás
     esetén (nem "Mégse") emittálódik, a kiválasztott útvonallal — a
@@ -230,42 +241,70 @@ class ParameterPanel(QScrollArea):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWidgetResizable(True)
 
-        content = QWidget(self)
-        layout = QVBoxLayout(content)
-
-        layout.addWidget(self._build_mesh_import_group())
-        layout.addWidget(self._build_slicing_group())
+        self._add_tab("Mesh Import", self._build_mesh_import_group())
+        self._add_tab("Slicing", self._build_slicing_group())
 
         self.use_dowels_checkbox = QCheckBox("Dowel rendszer használata")
         self.dowel_group = self._build_dowel_group()
         self.dowel_group.setVisible(False)
         self.use_dowels_checkbox.toggled.connect(self.dowel_group.setVisible)
+        self._add_tab(
+            "Dowel", self._build_toggle_tab(self.use_dowels_checkbox, self.dowel_group)
+        )
 
         self.use_spacers_checkbox = QCheckBox("Gap / Spacer rendszer használata")
         self.gap_group = self._build_gap_group()
         self.gap_group.setVisible(False)
         self.use_spacers_checkbox.toggled.connect(self.gap_group.setVisible)
+        self._add_tab(
+            "Gap", self._build_toggle_tab(self.use_spacers_checkbox, self.gap_group)
+        )
 
         self.use_backplate_checkbox = QCheckBox("Backplate használata")
         self.backplate_group = self._build_backplate_group()
         self.backplate_group.setVisible(False)
         self.use_backplate_checkbox.toggled.connect(self.backplate_group.setVisible)
+        self._add_tab(
+            "Backplate",
+            self._build_toggle_tab(self.use_backplate_checkbox, self.backplate_group),
+        )
 
-        layout.addWidget(self.use_dowels_checkbox)
-        layout.addWidget(self.dowel_group)
-        layout.addWidget(self.use_spacers_checkbox)
-        layout.addWidget(self.gap_group)
-        layout.addWidget(self.use_backplate_checkbox)
-        layout.addWidget(self.backplate_group)
+        self._add_tab("Numbering", self._build_numbering_group())
+        self._add_tab("Nesting", self._build_nesting_group())
 
-        layout.addWidget(self._build_numbering_group())
-        layout.addWidget(self._build_nesting_group())
-        layout.addStretch()
+        self._export_tab_layout = QVBoxLayout()
+        self._export_tab_layout.addStretch()
+        export_content = QWidget()
+        export_content.setLayout(self._export_tab_layout)
+        self._add_tab("Export", export_content)
 
-        self.setWidget(content)
         logger.debug("ParameterPanel felépítve.")
+
+    def _add_tab(self, title: str, content: QWidget) -> None:
+        """Egy fül hozzáadása, saját `QScrollArea`-ba csomagolt tartalommal."""
+        scroll_area = QScrollArea(self)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(content)
+        self.addTab(scroll_area, title)
+
+    @staticmethod
+    def _build_toggle_tab(checkbox: QCheckBox, group: QGroupBox) -> QWidget:
+        """Dowel/Gap/Backplate fül tartalma: kapcsoló + a hozzá tartozó,
+        show/hide-olt `QGroupBox` — a korábbi, közös oszlopbeli mintázat
+        VÁLTOZATLAN belső logikával, csak egy önálló fül tartalmaként."""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.addWidget(checkbox)
+        layout.addWidget(group)
+        layout.addStretch()
+        return container
+
+    def set_export_tab_content(self, widget: QWidget) -> None:
+        """A `RunPanel` export-beállítás konténerének beillesztése az
+        Export fülbe — a `MainWindow` hívja, miután mindkét panel
+        létrejött (l. `main_window.py`, 2.4 szakasz)."""
+        self._export_tab_layout.insertWidget(0, widget)
 
     def _build_mesh_import_group(self) -> QGroupBox:
         group = QGroupBox("Mesh Import")
@@ -282,6 +321,7 @@ class ParameterPanel(QScrollArea):
 
         self.origin_alignment_combo = QComboBox()
         self.origin_alignment_combo.addItem("none", "none")
+        self.origin_alignment_combo.addItem("min_corner", "min_corner")
         advanced.content_layout.addRow("Origó igazítás:", self.origin_alignment_combo)
 
         self.min_plausible_size_spin = _make_mm_spinbox(default=1.0)

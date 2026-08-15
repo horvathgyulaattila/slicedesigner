@@ -164,7 +164,9 @@ A build backend és a Domain réteg alapkönyvtárainak (mesh-kezelés, DXF-ír�
 
 A kontúr körüljárási irányának mint szolid/lyuk megkülönböztetésnek a konvenciója (CCW = szilárd anyag, CW = lyuk) az [ADR-0007](adr/0007-contour-winding-convention.md) dokumentumban került rögzítésre.
 
-A Nesting Engine csomagolási algoritmusának megválasztása (befoglaló-téglalap alapú polc-csomagolás a specifikáció "valódi alak" megfogalmazása helyett) az [ADR-0008](adr/0008-nesting-bounding-box-packing.md) dokumentumban került rögzítésre.
+A Nesting Engine csomagolási algoritmusának megválasztása (befoglaló-téglalap alapú polc-csomagolás a specifikáció "valódi alak" megfogalmazása helyett) az [ADR-0008](adr/0008-nesting-bounding-box-packing.md) dokumentumban került rögzítésre — ezt a döntést az [ADR-0013](adr/0013-nesting-true-shape-packing.md) felváltotta.
+
+A Nesting Engine csomagolási algoritmusának valódi alak (true-shape) szerinti elrendezésre váltása (Bottom-Left Fill heurisztika, valódi kontúr-ütközéssel) az [ADR-0013](adr/0013-nesting-true-shape-packing.md) dokumentumban került rögzítésre.
 
 A DXF Export leválasztása a Futtatásról (önálló, explicit felhasználói interakció a kimenet-panel "DXF Export" gombjával) az [ADR-0009](adr/0009-decoupled-dxf-export.md) dokumentumban került rögzítésre.
 

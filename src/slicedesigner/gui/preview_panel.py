@@ -761,8 +761,9 @@ class PreviewPanel(QWidget):
 
         self._add_solid_with_edges(
             bundle.main_polydata,
-            color="lightgray",
+            color="#7E4B26",
             opacity=bundle.other_layers_opacity,
+            edge_color="#1A1719",
         )
         if bundle.highlight_polydata is not None:
             self._add_solid_with_edges(bundle.highlight_polydata, color="navy")
@@ -828,7 +829,12 @@ class PreviewPanel(QWidget):
         self.plotter.add_mesh(plane, color="gainsboro", opacity=0.15)
 
     def _add_solid_with_edges(
-        self, polydata: pv.PolyData, *, color: str, opacity: float = 1.0
+        self,
+        polydata: pv.PolyData,
+        *,
+        color: str,
+        opacity: float = 1.0,
+        edge_color: str = "dimgray",
     ) -> None:
         """Egy szolid test hozzáadása, valódi (nem háromszögesítési-
         diagonál) kontúréleivel.
@@ -859,7 +865,7 @@ class PreviewPanel(QWidget):
             manifold_edges=False,
         )
         if edges.n_points > 0:
-            self.plotter.add_mesh(edges, color="dimgray", opacity=opacity)
+            self.plotter.add_mesh(edges, color=edge_color, opacity=opacity)
 
     def _render_mesh(self, mesh: Mesh) -> None:
         self.plotter.clear()

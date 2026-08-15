@@ -9,7 +9,6 @@ import logging
 import os
 import threading
 from collections.abc import Iterator
-from typing import cast
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -632,8 +631,8 @@ def test_no_highlight_layers_are_fully_opaque_with_base_colors(
 
     grouped = _group_calls_by_color(calls)
     assert grouped.keys() == {
-        "lightgray",
-        "dimgray",
+        "#7E4B26",
+        "#1A1719",
         "red",
         "black",
         "blue",
@@ -645,17 +644,17 @@ def test_no_highlight_layers_are_fully_opaque_with_base_colors(
     }
 
     # A test réteg sosem kap `show_edges`/`edge_color`-t — a valódi
-    # kontúrélek külön "dimgray" rétegként érkeznek
+    # kontúrélek külön, "#1A1719" (RAL 8022) színű rétegként érkeznek
     # (`_add_solid_with_edges()`).
-    base_kwargs = grouped["lightgray"][0]
+    base_kwargs = grouped["#7E4B26"][0]
     assert "show_edges" not in base_kwargs
     assert "edge_color" not in base_kwargs
     assert base_kwargs["opacity"] == 1.0
 
-    # Egyetlen "dimgray" él-réteg: az alap-összeállításé, ugyanazzal az
+    # Egyetlen "#1A1719" él-réteg: az alap-összeállításé, ugyanazzal az
     # opacity-vel, mint a hozzá tartozó test.
-    assert len(grouped["dimgray"]) == 1
-    assert grouped["dimgray"][0]["opacity"] == 1.0
+    assert len(grouped["#1A1719"]) == 1
+    assert grouped["#1A1719"][0]["opacity"] == 1.0
 
     assert grouped["red"][0]["opacity"] == 1.0
     assert grouped["blue"][0]["opacity"] == 1.0
@@ -713,8 +712,9 @@ def test_highlight_dims_other_layers_keeps_highlight_and_holes_opaque(
 
     grouped = _group_calls_by_color(calls)
     assert grouped.keys() == {
-        "lightgray",
+        "#7E4B26",
         "navy",
+        "#1A1719",
         "dimgray",
         "red",
         "black",
@@ -726,7 +726,7 @@ def test_highlight_dims_other_layers_keeps_highlight_and_holes_opaque(
         "gainsboro",
     }
 
-    base_kwargs = grouped["lightgray"][0]
+    base_kwargs = grouped["#7E4B26"][0]
     assert "show_edges" not in base_kwargs
     assert base_kwargs["opacity"] == 0.15
 
@@ -734,14 +734,13 @@ def test_highlight_dims_other_layers_keeps_highlight_and_holes_opaque(
     assert "show_edges" not in highlight_kwargs
     assert highlight_kwargs["opacity"] == 1.0
 
-    # Két külön "dimgray" él-réteg: az elhalványuló alap-összeállításé
-    # (0.15) és a mindig teljesen átlátszatlan kiemelt szeleté (1.0) —
-    # mindkettő a hozzá tartozó test opacity-jét követi.
-    assert len(grouped["dimgray"]) == 2
-    dimgray_opacities = sorted(
-        cast(float, kwargs["opacity"]) for kwargs in grouped["dimgray"]
-    )
-    assert dimgray_opacities == [0.15, 1.0]
+    # Az elhalványuló alap-összeállítás éle a testéhez igazított "#1A1719"
+    # (RAL 8022) színt kapja (opacity 0.15); a mindig teljesen
+    # átlátszatlan kiemelt szelet éle az alapértelmezett "dimgray"-t
+    # (opacity 1.0) — a `highlight_polydata` hívása nem ad át
+    # `edge_color`-t.
+    assert grouped["#1A1719"][0]["opacity"] == 0.15
+    assert grouped["dimgray"][0]["opacity"] == 1.0
 
     assert grouped["red"][0]["opacity"] == 0.15
     assert grouped["blue"][0]["opacity"] == 0.15

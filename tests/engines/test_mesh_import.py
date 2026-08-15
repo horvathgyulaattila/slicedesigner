@@ -90,3 +90,44 @@ def test_import_mesh_default_origin_alignment_is_none(tmp_path: Path) -> None:
     # (MESH_IMPORT_SPEC.md 5-6. szakasz).
     assert mesh.bounding_box.min == pytest.approx((-5.0, -5.0, -5.0))
     assert mesh.bounding_box.max == pytest.approx((5.0, 5.0, 5.0))
+
+
+def test_import_mesh_min_corner_shifts_bounding_box_to_origin(tmp_path: Path) -> None:
+    # Nem origó-központú doboz: alap doboz explicit eltolással.
+    box = trimesh.creation.box(extents=(10.0, 20.0, 30.0))
+    box.apply_translation((7.0, -3.0, 100.0))
+    stl_path = _export_stl(tmp_path, box, "offset_box.stl")
+
+    mesh = import_mesh(stl_path, origin_alignment="min_corner")
+
+    assert mesh.bounding_box.min == pytest.approx((0.0, 0.0, 0.0))
+    # A méret (max - min) változatlan az eredeti bounding boxhoz képest.
+    assert mesh.bounding_box.max == pytest.approx((10.0, 20.0, 30.0))
+
+
+def test_import_mesh_min_corner_non_watertight_warns(tmp_path: Path) -> None:
+    box = trimesh.creation.box(extents=(10.0, 10.0, 10.0))
+    box.faces = box.faces[:-1]  # egy lap eltávolítása -> nem vízzáró geometria
+    stl_path = _export_stl(tmp_path, box, "non_watertight_min_corner.stl")
+
+    mesh = import_mesh(stl_path, origin_alignment="min_corner")
+
+    assert mesh.is_valid is False
+    assert any(w.kind is MeshWarningKind.NON_MANIFOLD for w in mesh.warnings)
+    assert mesh.bounding_box.min == pytest.approx((0.0, 0.0, 0.0))
+
+
+def test_import_mesh_min_corner_implausible_size_warns(tmp_path: Path) -> None:
+    tiny_box = trimesh.creation.box(extents=(0.1, 0.1, 0.1))
+    stl_path = _export_stl(tmp_path, tiny_box, "tiny_min_corner.stl")
+
+    mesh = import_mesh(
+        stl_path,
+        origin_alignment="min_corner",
+        min_plausible_size_mm=1.0,
+        max_plausible_size_mm=3000.0,
+    )
+
+    assert mesh.is_valid is False
+    assert any(w.kind is MeshWarningKind.UNIT_PLAUSIBILITY for w in mesh.warnings)
+    assert mesh.bounding_box.min == pytest.approx((0.0, 0.0, 0.0))

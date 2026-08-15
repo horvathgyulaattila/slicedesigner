@@ -1,5 +1,7 @@
 """Tesztek a Nesting Engine 1. köréhez (NESTING_SPEC.md 6. szakasz, 1-5. lépés)."""
 
+import itertools
+
 import pytest
 import trimesh
 
@@ -9,9 +11,13 @@ from slicedesigner.engines.gap_engine import Spacer
 from slicedesigner.engines.mesh_import import BoundingBox, Mesh
 from slicedesigner.engines.nesting_engine import (
     MaterialDefinition,
+    NestablePart,
     NestingRotationMode,
     PartKind,
+    PartReference,
     _build_text_strokes_rect,
+    _candidate_positions,
+    _contours_to_geometry,
     _spacer_to_discs,
     create_nests,
     prepare_nesting_parts,
@@ -20,7 +26,12 @@ from slicedesigner.engines.numbering_engine import (
     NumberingDirectionSign,
     apply_numbering,
 )
-from slicedesigner.engines.slice_engine import SliceSet, create_slice_set, is_ccw
+from slicedesigner.engines.slice_engine import (
+    Contour,
+    SliceSet,
+    create_slice_set,
+    is_ccw,
+)
 
 
 def _mesh_from_trimesh(tm: trimesh.Trimesh, source_path: str = "test.stl") -> Mesh:
@@ -436,14 +447,15 @@ def test_create_nests_uses_multiple_sheets_when_needed() -> None:
 
 
 def test_create_nests_orthogonal_rotation_minimizes_height() -> None:
-    # A _TO_2D_ROTATION szándékos tükrözése miatt a Z-tengelyű szeletek
-    # kontúr-sorrendje (Y, X)-re változott (ld. ADR-0010) — az itt
-    # szeletelt doboz (X=10, Y=40) kontúrjának 0. koordinátája immár Y
-    # (40 mm), az 1. X (10 mm), azaz a nyers kontúr már eleve a
-    # (szélesebb, alacsonyabb) tájolásban áll — az ORTHOGONAL mód emiatt
-    # NEM forgat (0°), mert a forgatás nélküli magasság (10 mm) már
-    # minimális; korábban (X, Y) sorrenddel a 90°-os forgatás volt
-    # szükséges ugyanehhez az eredményhez.
+    # ADR-0013 (Bottom-Left Fill) óta a csomagolás nem a "legjobb"
+    # (legkisebb magasságú) tájolást keresi, hanem az ORTHOGONAL szögkészlet
+    # ({0°, 90°}) sorrendjében az ELSŐ illeszkedőt fogadja el — egy ekkora
+    # (1000x1000 mm) üres lapon mindkét szög ütközésmentesen elfér, ezért
+    # mindig a felsorolásban ELSŐ szög (0°) kerül kiválasztásra, függetlenül
+    # attól, hogy az minimalizálja-e a magasságot. Ez a konkrét eset
+    # (X=10, Y=40 doboz, ADR-0010 szerinti (Y, X) kontúr-sorrenddel) 0°-nál
+    # egyébként is a kisebb magasságú tájolás — ez csak egybeesés, nem az
+    # algoritmus szándékolt viselkedése.
     numbered = _numbered_box(extents=(10.0, 40.0, 15.0), slice_thickness_mm=3.0)
     materials = (
         MaterialDefinition(
@@ -558,3 +570,172 @@ def test_build_text_strokes_rect_seven_not_mirrored_both_orientations() -> None:
     assert stem_upper_stroke[1] == pytest.approx((-5.0, 0.0))
     assert stem_lower_stroke[0] == pytest.approx((-5.0, 0.0))
     assert stem_lower_stroke[1] == pytest.approx((0.0, 0.0))
+
+
+def _rect_part(
+    island_index: int,
+    points: tuple[tuple[float, float], ...],
+    material_id: str = "wood3",
+) -> NestablePart:
+    return NestablePart(
+        reference=PartReference(
+            kind=PartKind.SLICE_ISLAND, slice_index=0, island_index=island_index
+        ),
+        contours=(Contour(points=points),),
+        numbering_marks=(),
+        material_id=material_id,
+    )
+
+
+def test_candidate_positions_dedup_sorted_and_kerf_offset() -> None:
+    """ADR-0013: a jelölt-pozíciók a lapon elhelyezett geometriák befoglaló
+    téglalap-sarkaiból származnak — a "kifelé néző" (jobb/felső/átlós)
+    sarkak `kerf_mm`-mel eltolva (l. `_candidate_positions()` docstringje:
+    enélkül a szomszédos elhelyezés `kerf_mm > 0` mellett sosem teljesülne,
+    mert a nyers sarokpont pontosan az elhelyezett alkatrész szélén ülne,
+    azaz 0 távolságra lenne tőle). Két AZONOS elhelyezésű (duplikált)
+    geometria nem duplázza meg a jelölt-listát, és a kimenet mindig
+    (y, x) szerint növekvő sorrendben, dedupolva érkezik."""
+    square = _contours_to_geometry(
+        (Contour(points=((0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0))),)
+    )
+
+    positions = _candidate_positions(
+        [square, square], sheet_width=100.0, sheet_height=100.0, kerf_mm=1.0
+    )
+
+    assert positions == [(0.0, 0.0), (11.0, 0.0), (0.0, 11.0), (11.0, 11.0)]
+    assert _candidate_positions(
+        [], sheet_width=100.0, sheet_height=100.0, kerf_mm=1.0
+    ) == [(0.0, 0.0)]
+
+
+def test_candidate_positions_filters_out_of_bounds_corners() -> None:
+    """A lap határán túlnyúló (kerf-eltolt) sarokpontok kiszűrésre kerülnek —
+    nem kerülnek be érvénytelen, garantáltan elutasított jelöltként a
+    listába."""
+    square = _contours_to_geometry(
+        (Contour(points=((90.0, 90.0), (100.0, 90.0), (100.0, 100.0), (90.0, 100.0))),)
+    )
+
+    positions = _candidate_positions(
+        [square], sheet_width=100.0, sheet_height=100.0, kerf_mm=1.0
+    )
+
+    # A (101, 90), (90, 101) és (101, 101) sarkak a lapon (100x100) kívülre
+    # esnek — csak a lap (0, 0) sarka és a geometria saját (90, 90) sarka
+    # marad érvényes jelölt.
+    assert positions == [(0.0, 0.0), (90.0, 90.0)]
+
+
+def test_create_nests_true_shape_fits_tighter_than_bounding_box() -> None:
+    """ADR-0013 true-shape-előny: két, valós kontúrjuk mentén "egymásba
+    kulcsolódó" háromszög (befoglaló téglalapjuk 10x10, ill. 12x12 mm)
+    egyetlen 12.5x12.5 mm-es lapon fér el, mert a valódi kontúrjuk a
+    kerf_mm-nél (0.2 mm) nagyobb távolságot tart (a metsző élek kb.
+    1.41 mm-re vannak egymástól — l. lent), miközben a befoglaló
+    téglalapjaik (10x10 + 12x12) egy régi, polc-alapú (ADR-0008)
+    algoritmussal SOHA nem férnének el egymás mellett/fölött egyetlen
+    12.5x12.5 mm-es lapon (10+0.2+12=22.2 mm > 12.5 mm mindkét
+    irányban) — az a lecserélt algoritmus emiatt KÉT lapra osztaná ezt
+    a két alkatrészt.
+
+    A: háromszög (0,0)-(10,0)-(0,10) — az origó-közeli sarkot elfoglalja.
+    B: háromszög (12,0)-(12,12)-(0,12) — a (0,0) sarkot ÜRESEN hagyja (a
+    hozzá legközelebbi pontja a (12,0)-(0,12) átló, kb. 8.49 mm-re az
+    origótól), így B ugyanarra a (0, 0) jelölt-pozícióra helyezhető, mint
+    A, anélkül, hogy a valódi kontúrjuk átfedne vagy kerf_mm-nél
+    közelebb kerülne egymáshoz (a két átló — x+y=10 és x+y=12 — közötti
+    merőleges távolság 2/sqrt(2) ≈ 1.41 mm).
+    """
+    part_a = _rect_part(0, ((0.0, 0.0), (10.0, 0.0), (0.0, 10.0)))
+    part_b = _rect_part(1, ((12.0, 0.0), (12.0, 12.0), (0.0, 12.0)))
+    material = MaterialDefinition(
+        material_id="wood3",
+        thickness_mm=3.0,
+        sheet_width_mm=12.5,
+        sheet_height_mm=12.5,
+        kerf_mm=0.2,
+    )
+
+    nests = create_nests(
+        {"wood3": [part_a, part_b]},
+        (material,),
+        nesting_rotation_mode=NestingRotationMode.NONE,
+    )
+
+    assert len(nests) == 1
+    assert nests[0].sheet_count == 1
+    assert len(nests[0].placed_parts) == 2
+
+    geom_a, geom_b = (_contours_to_geometry(p.contours) for p in nests[0].placed_parts)
+    assert not geom_a.intersects(geom_b)
+    assert geom_a.distance(geom_b) >= material.kerf_mm
+
+
+def test_create_nests_respects_kerf_between_all_placed_parts_on_same_sheet() -> None:
+    """ADR-0013: a `kerf_mm` a BLF-ben kizárólag alkatrészek közötti
+    minimális távolságként érvényesül — minden lapon, minden elhelyezett
+    alkatrész-pár valódi (Shapely `distance()`) távolsága legalább
+    `kerf_mm`, és két alkatrész `kerf_mm`-nél kisebb távolságra nem
+    kerülhet egyetlen érvényes elhelyezésben sem."""
+    parts = [
+        _rect_part(i, ((0.0, 0.0), (5.0, 0.0), (5.0, 5.0), (0.0, 5.0)))
+        for i in range(6)
+    ]
+    material = MaterialDefinition(
+        material_id="wood3",
+        thickness_mm=3.0,
+        sheet_width_mm=12.0,
+        sheet_height_mm=12.0,
+        kerf_mm=1.0,
+    )
+
+    nests = create_nests(
+        {"wood3": parts},
+        (material,),
+        nesting_rotation_mode=NestingRotationMode.ORTHOGONAL,
+    )
+
+    geometries_by_sheet: dict[int, list[object]] = {}
+    for placed in nests[0].placed_parts:
+        geometries_by_sheet.setdefault(placed.sheet_number, []).append(
+            _contours_to_geometry(placed.contours)
+        )
+
+    checked_pairs = 0
+    for sheet_geoms in geometries_by_sheet.values():
+        for geom_a, geom_b in itertools.combinations(sheet_geoms, 2):
+            assert geom_a.distance(geom_b) >= material.kerf_mm - 1e-6
+            checked_pairs += 1
+    assert checked_pairs > 0  # legalább egy lapon 2+ alkatrész volt.
+
+
+def test_create_nests_free_rotation_tries_non_axis_aligned_angles() -> None:
+    """ADR-0013: a `FREE` szögkészlet mind a 8 szöget ({0°, 45°, ..., 315°})
+    kipróbálja, ha szükséges — egy 14x2 mm-es, keskeny alkatrész egy
+    12x12 mm-es lapon sem tengelyirányban (0°/90°), sem 12.5x12.5-nél
+    kisebb lapon nem fér el, de 45°-ban (befoglaló téglalapja ekkor kb.
+    11.31x11.31 mm) igen."""
+    part = _rect_part(0, ((0.0, 0.0), (14.0, 0.0), (14.0, 2.0), (0.0, 2.0)))
+    material = MaterialDefinition(
+        material_id="wood3",
+        thickness_mm=3.0,
+        sheet_width_mm=12.0,
+        sheet_height_mm=12.0,
+        kerf_mm=0.2,
+    )
+
+    with pytest.raises(InvalidNestingError):
+        create_nests(
+            {"wood3": [part]},
+            (material,),
+            nesting_rotation_mode=NestingRotationMode.ORTHOGONAL,
+        )
+
+    nests = create_nests(
+        {"wood3": [part]}, (material,), nesting_rotation_mode=NestingRotationMode.FREE
+    )
+
+    placed = nests[0].placed_parts[0]
+    assert placed.rotation_deg in (45.0, 135.0, 225.0, 315.0)

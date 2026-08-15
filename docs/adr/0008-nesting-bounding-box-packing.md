@@ -1,7 +1,7 @@
 # ADR-0008: Nesting Engine — befoglaló-téglalap alapú csomagolás a "valódi alak" helyett
 
 Dátum: 2026-08-03
-Státusz: Elfogadva
+Státusz: Felváltva — ld. ADR-0013
 Döntéshozó: Horváth Gyula Attila (projektgazda)
 
 ## Kontextus

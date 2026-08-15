@@ -1,5 +1,7 @@
-"""Fő alkalmazásablak: bal paraméter-panel, középső 3D előnézet, alsó
-futtatás/export/állapot-panel (prompt 2.1 szakasz)."""
+"""Fő alkalmazásablak: bal paraméter-panel (fülsávos, Futtatás/Export
+gombokkal az alján), középső 3D előnézet, alul önálló, húzással
+állítható magasságú log-panel (prompt 7.4 GUI-átalakítás, ROADMAP
+Phase 7 7.4 tétele)."""
 
 from __future__ import annotations
 
@@ -105,9 +107,15 @@ class MainWindow(QMainWindow):
         # áll vissza, és a gomb újra letiltásra kerül.
         self._last_nests: tuple[Nest, ...] | None = None
 
-        self.parameter_panel = ParameterPanel(self)
-        self.preview_panel = PreviewPanel(self)
+        # A `RunPanel`-nek a `ParameterPanel` ELŐTT kell létrejönnie: az
+        # Export fülnek szüksége van a `RunPanel.export_settings_widget`-re
+        # (l. `ParameterPanel.set_export_tab_content()` lent).
         self.run_panel = RunPanel(self)
+        self.parameter_panel = ParameterPanel(self)
+        self.parameter_panel.set_export_tab_content(
+            self.run_panel.export_settings_widget
+        )
+        self.preview_panel = PreviewPanel(self)
         self.run_panel.run_button.clicked.connect(self._on_run_clicked)
         self.run_panel.export_dxf_button.clicked.connect(self._on_export_dxf_clicked)
         self.parameter_panel.mesh_file_selected.connect(self._on_mesh_file_selected)
@@ -122,16 +130,37 @@ class MainWindow(QMainWindow):
         )
         self._build_menu_bar()
 
-        splitter = QSplitter(Qt.Orientation.Horizontal, self)
-        splitter.addWidget(self.parameter_panel)
-        splitter.addWidget(self.preview_panel)
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
+        # Bal oszlop: fülsávos paraméter-panel + Futtatás/Export gombok az
+        # alján (prompt 2.4 szakasz).
+        left_column = QWidget(self)
+        left_layout = QVBoxLayout(left_column)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.addWidget(self.parameter_panel)
+        left_layout.addWidget(self.run_panel.action_container)
+
+        # Felső, vízszintes splitter: bal oszlop + 3D előnézet.
+        top_splitter = QSplitter(Qt.Orientation.Horizontal, self)
+        top_splitter.addWidget(left_column)
+        top_splitter.addWidget(self.preview_panel)
+        top_splitter.setStretchFactor(0, 0)
+        top_splitter.setStretchFactor(1, 1)
+
+        # Külső, függőleges splitter: a fenti sáv + önálló, húzással
+        # állítható magasságú log-panel, a teljes ablak szélességében.
+        outer_splitter = QSplitter(Qt.Orientation.Vertical, self)
+        outer_splitter.addWidget(top_splitter)
+        outer_splitter.addWidget(self.run_panel.status_log)
+        outer_splitter.setStretchFactor(0, 1)
+        outer_splitter.setStretchFactor(1, 0)
+        # Kezdő méretarány: a log-panel induláskor a teljes ablakmagasság
+        # kb. 15-20%-át foglalja el, a bal oszlop pedig nem szélesebb a
+        # tartalma minimálisan szükséges szélességénél.
+        outer_splitter.setSizes([800, 170])
+        top_splitter.setSizes([320, 900])
 
         central_widget = QWidget(self)
         central_layout = QVBoxLayout(central_widget)
-        central_layout.addWidget(splitter)
-        central_layout.addWidget(self.run_panel)
+        central_layout.addWidget(outer_splitter)
 
         self.setCentralWidget(central_widget)
         logger.debug("MainWindow felépítve.")
