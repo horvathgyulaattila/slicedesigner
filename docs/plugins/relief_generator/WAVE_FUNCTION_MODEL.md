@@ -1,4 +1,10 @@
-# Wave Function Model
+# WAVE_FUNCTION_MODEL.md
+
+Státusz: Elfogadva
+Tulajdonos: Horváth Gyula Attila
+Létrehozva: 2026-08-11
+Utolsó módosítás: 2026-08-15
+Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](../../PROJECT_CONSTITUTION.md), [RELIEF_GENERATOR_DOMAIN.md](RELIEF_GENERATOR_DOMAIN.md), [PARAMETRIC_RELIEF_GENERATOR.md](PARAMETRIC_RELIEF_GENERATOR.md)
 
 ## 1. Cél
 

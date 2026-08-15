@@ -1,5 +1,11 @@
 # RELIEF_GEOMETRY_MODEL.md
 
+Státusz: Elfogadva
+Tulajdonos: Horváth Gyula Attila
+Létrehozva: 2026-08-12
+Utolsó módosítás: 2026-08-15
+Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](../../PROJECT_CONSTITUTION.md), [RELIEF_GENERATOR_DOMAIN.md](RELIEF_GENERATOR_DOMAIN.md), [MESH_GENERATION_MODEL.md](MESH_GENERATION_MODEL.md)
+
 ## 1. Cél
 
 A Relief Geometry Layer feladata, hogy egy felületgenerátor által előállított, normalizált Height Fieldből fizikai méretekkel rendelkező, zárt relief-geometria leírást hozzon létre.

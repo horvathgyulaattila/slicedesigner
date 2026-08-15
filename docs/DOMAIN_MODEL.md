@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-08-01
-Utolsó módosítás: 2026-08-09
+Utolsó módosítás: 2026-08-15
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](PROJECT_CONSTITUTION.md), [ROADMAP.md](ROADMAP.md), [PROJECT_VISION.md](PROJECT_VISION.md)
 
 ## A dokumentum célja
@@ -55,11 +55,11 @@ Minden fogalom azonos szerkezetben szerepel: Definíció, Szerepe, Attribútumok
 
 ### Mesh
 
-**Definíció:** A felhasználó által importált háromdimenziós modell.
+**Definíció:** A SliceDesigner által feldolgozandó háromdimenziós geometria domain reprezentációja, függetlenül attól, hogy importból vagy generálásból származik.
 
 **Szerepe:** A szeletelési folyamat kiindulási alapja.
 
-**Attribútumok (felsorolás szinten):** geometriai reprezentáció jellege (pl. háromszögháló), forrásfájl-hivatkozás, méret/bounding box, validáltsági állapot.
+**Attribútumok (felsorolás szinten):** geometriai reprezentáció jellege (pl. háromszögháló), opcionális forrásfájl-hivatkozás (fájlból importált Mesh esetén a forrásfájl elérési útja; generált Mesh esetén nincs forrásfájl), méret/bounding box, validáltsági állapot.
 
 **Kapcsolódó fogalmak:** Project, Slice Set
 

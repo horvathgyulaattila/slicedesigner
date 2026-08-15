@@ -3,7 +3,7 @@
 Státusz: Aktív
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-07-31
-Utolsó módosítás: 2026-08-13
+Utolsó módosítás: 2026-08-15
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](PROJECT_CONSTITUTION.md), [AI_WORKFLOW.md](AI_WORKFLOW.md), [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md), [DOMAIN_MODEL.md](DOMAIN_MODEL.md)
 
 ## Cél
@@ -300,6 +300,23 @@ Feladata:
 * ~~7.4 – GUI-átalakítás: a `ParameterPanel` 7 funkciócsoportja és a `RunPanel`-ból kiemelt DXF Export paraméterek együtt 8, fenti fülsávos (tab), lapozható kártyává alakulnak (a Dowel/Gap/Backplate be-/kikapcsolók a saját kártyájukon belül maradnak); a log/állapot-terület kiemelése a `RunPanel`-ból önálló, húzással állítható magasságú `QSplitter`-panelbe; a Futtatás/DXF Export gombok áthelyezése a `ParameterPanel` oszlop aljára.~~ — kész (`parameter_panel.py`/`run_panel.py`/`main_window.py` átalakítása; a Futtatás gomb, a szeletelt összeállítás alap-teste és élszíne vizuálisan finomítva; élő teszttel megerősítve)
 
 Kilépési feltétel: mind a négy tételhez jóváhagyott dokumentáció (7.1–7.2: specifikáció; 7.3: ADR, a `NESTING_SPEC.md` módosítása nélkül; 7.4: nincs önálló dokumentum, a terv a ROADMAP-ban, a "folytatás 21" megjegyzésben rögzítve) és automatizált teszttel lefedett, élőben megerősített implementáció készül.
+
+---
+
+### Phase 8 – Relief Generator Plugin (opcionális MeshSource plugin)
+
+Állapot: 🟡 In Progress
+
+Feladata:
+
+* MeshSource architekturális döntés véglegesítése (a jelenleg `docs/drafts/relief_generator_plugin/` alatti `ADR_MESH_SOURCE.md`, `MESH_SOURCE.md`, `ARCHITECTURE_MESH_SOURCE_CHANGE_PLAN.md`, `DOMAIN_MODEL_CHANGE_PLAN.md` tartalmának átvezetése a végleges `docs/adr/`, `ARCHITECTURE.md`, `DOMAIN_MODEL.md` dokumentumokba);
+* az opcionális plugin-architektúra ADR-ben rögzítése (`ADR_OPTIONAL_MESHSOURCE_PLUGIN.md` alapján);
+* a Relief Generator plugin domain-, geometria- és mesh-generálási modelljének véglegesítése (`RELIEF_GENERATOR_DOMAIN.md`, `Wave Function Model.md`, `RELIEF_GEOMETRY_MODEL.md`, `MESH_GENERATION_MODEL.md`, `PARAMETRIC_RELIEF_GENERATOR.md` alapján), a végleges `docs/plugins/relief_generator/` alá;
+* a plugin repository- és package-struktúrájának véglegesítése (`PLUGIN_REPOSITORY_STRUCTURE_PROPOSAL.md` alapján) és a `plugins/relief_generator/` könyvtár létrehozása;
+* az első implementáció (`IMPLEMENTATION_PLAN.md` alapján): Wave Generator → Height Field → ReliefGeometry → Mesh Generator → Mesh → MeshSource, automatizált teszttel lefedve;
+* élő tesztelés a SliceDesigner meglévő pipeline-jával.
+
+Kilépési feltétel: a Relief Generator plugin end-to-end működik (Wave Generator-től a SliceDesigner Slice Engine-jéig), automatizált teszttel lefedve, élő teszttel megerősítve, és minden érintett, korábban `docs/drafts/` alatti dokumentum a végleges helyére került, `Tervezet` helyett `Elfogadva` státusszal.
 
 ---
 

@@ -1,5 +1,7 @@
 # IMPLEMENTATION_PLAN.md
 
+**Státusz:** Tervezet
+
 ## 1. Cél
 
 A dokumentum célja a parametrikus relief-generátor első implementációjának végrehajtható tervvé alakítása.
@@ -113,12 +115,15 @@ A plugin hiánya nem okozhat hibát a SliceDesigner működésében.
 
 # 5. Implementációs rétegek
 
-Az első implementáció négy fő belső részből áll.
+Az első implementáció öt fő belső részből áll.
 
 ```text
 relief plugin
 │
-├── surface
+├── domain
+│   └── Relief domain model
+│
+├── generators
 │   └── Wave Generator
 │
 ├── geometry
@@ -151,7 +156,7 @@ F(x,y)=
 A_i
 \sin
 \left(
-\lambda_i 2\pi
+\frac{2\pi}{\lambda_i}
 (x\cos\theta_i+y\sin\theta_i)
 +\phi_i
 \right)
@@ -160,7 +165,7 @@ A_i
 ahol:
 
 * (A_i) — amplitúdó;
-* (\lambda_i) — hullámhosszhez kapcsolódó frekvenciaparaméter;
+* (\lambda_i) — az i. komponens hullámhossza;
 * (\theta_i) — hullám iránya;
 * (\phi_i) — fázis;
 * (n) — komponensek száma.
@@ -343,11 +348,7 @@ A fizikai lépésköz:
 \Delta y=\frac{height}{N_y-1}
 ]
 
-A fizikai méret és a resolution egymástól független.
-
-Ez különösen fontos nagy falpanelek esetében.
-
-Egy nagy fizikai méretű modell nem kell automatikusan nagyobb mesh-sűrűséget jelentsen.
+A fizikai méret és a sampling density külön paraméterek. A fizikai méret nem határozza meg önmagában a mesh térbeli sűrűségét; azt a `sampling_distance` adja meg. Ugyanakkor azonos `sampling_distance` mellett a nagyobb fizikai méretű modell nagyobb `Nx × Ny` mintapontszámot eredményez. A rendszer ezért a fizikai méretből és a sampling distance-ből számítja a mesh felbontását, majd ellenőrzi, hogy a kapott mintapontszám nem haladja-e meg a statikus `MAX_SAMPLE_COUNT` korlátot.
 
 ---
 

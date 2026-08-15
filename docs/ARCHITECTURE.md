@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos:
 Létrehozva: 2026-07-30
-Utolsó módosítás: 2026-08-09
+Utolsó módosítás: 2026-08-15
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](PROJECT_CONSTITUTION.md), [PROJECT_VISION.md](PROJECT_VISION.md), [ENGINEERING_PRINCIPLES.md](ENGINEERING_PRINCIPLES.md), [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md), [adr/](adr/)
 
 ## Cél
@@ -18,11 +18,11 @@ A rétegek szigorúan egyirányban függenek: GUI → Project → Engine-ek. For
 
 ## 2. Fő komponensek
 
-### Mesh Import
+### MeshSource
 
 **Réteg:** Domain
 
-**Felelősség:** STL formátumú modell betöltése, validálása, Mesh domain objektum előállítása.
+**Felelősség:** Modellforrásból feldolgozható Mesh domain objektum előállítása. A jelenlegi STL-import egy konkrét MeshSource-megvalósítás; a MeshSource contract emellett opcionális, külön telepíthető pluginok (pl. parametrikus modellgenerátorok) csatlakozását is lehetővé teszi. A SliceDesigner core nem függ opcionális MeshSource pluginoktól — hiányuk esetén is teljes értékű marad. A pontos contract-részleteket a MESH_SOURCE.md és az ADR-0014 rögzíti.
 
 **Domain Model kapcsolat:** Mesh
 
@@ -118,15 +118,15 @@ A rétegek szigorúan egyirányban függenek: GUI → Project → Engine-ek. For
 
 ## 3. Adatfolyam / munkafolyamat a rendszeren belül
 
-A feldolgozási folyamat lineáris pipeline-t követ, amelyet a Project koordinál. A Mesh Import-tól a Nesting Engine-ig terjedő szakasz a "Futtatás" részeként automatikusan lefut; a DXF Export Engine ezzel szemben önálló, explicit felhasználói interakcióra (a kimenet-panel "DXF Export" gombjára) fut le, kizárólag a legutóbbi sikeres Futtatás Nest-jein (ADR-0009):
+A feldolgozási folyamat lineáris pipeline-t követ, amelyet a Project koordinál. A MeshSource-tól a Nesting Engine-ig terjedő szakasz a "Futtatás" részeként automatikusan lefut; a DXF Export Engine ezzel szemben önálló, explicit felhasználói interakcióra (a kimenet-panel "DXF Export" gombjára) fut le, kizárólag a legutóbbi sikeres Futtatás Nest-jein (ADR-0009):
 
 ```
-Mesh Import → Slice Engine → Dowel Engine → Gap Engine → Backplate Engine
+MeshSource → Slice Engine → Dowel Engine → Gap Engine → Backplate Engine
      → Numbering Engine → Nesting Engine   ⇢   DXF Export Engine
      └──────────── automatikus (Futtatás) ────────────┘   (explicit interakció)
 ```
 
-* A **Mesh Import** állítja elő a Mesh-t, amely a **Slice Engine** bemenete.
+* A **MeshSource** állítja elő a Mesh-t (konkrét megvalósításként pl. az STL-import), amely a **Slice Engine** bemenete.
 * A **Slice Engine** a Mesh-ből, a Gap paraméter figyelembevételével, már helyesen pozicionált Slice Set-et állít elő.
 * A **Dowel Engine** a pozicionált Slice Set-hez számítja az illesztőelemeket, a modell külső palástján belül maradva.
 * A **Gap Engine** a Dowel Engine által már meghatározott Dowel-pozíciók figyelembevételével és előnyben részesítésével állítja elő a Spacer elemeket; a Spacer-lista a Backplate Engine-t és a Numbering Engine-t megkerülve, közvetlenül a Nesting Engine bemenete.
@@ -145,6 +145,7 @@ Minden nyíl adatátadást jelent, nem közvetlen függőséget — az engine-ek
 * Az engine-ek egymástól függetlenek: nem hívják egymást közvetlenül, kizárólag a Project által továbbított, jól definiált adatszerkezeteken keresztül érintkeznek.
 * Minden engine a GUI-tól függetlenül, önállóan futtatható és tesztelhető, és determinisztikusan működik (Engineering Principles).
 * Hibakezelés fail-fast elven történik: egy engine érvénytelen vagy hiányos bemenet esetén explicit hibát jelez a Project felé, amely azt továbbítja a GUI-nak megjelenítésre — csendes alapértelmezés vagy automatikus javítás egyetlen rétegben sem történik.
+* Az opcionális MeshSource pluginok (pl. a Relief Generator Plugin) kizárólag a `MeshSource` bővítési ponton keresztül kapcsolódnak a SliceDesignerhez — nem kapnak jogot a Domain Model, a slicing szabályok, a core konfiguráció vagy a pipeline sorrendjének módosítására, sem más MeshSource megvalósítás befolyásolására. Egy plugin hibája vagy inkompatibilitása nem akadályozhatja a SliceDesigner indulását vagy a többi MeshSource működését (ADR-0015).
 
 ## 5. Kapcsolódó architekturális döntések (hivatkozás az ADR-ekre)
 
@@ -175,3 +176,7 @@ A Slice Engine vetítésének gyökérokig visszavezetett tükrözési hibája, 
 A 3D-előnézet geometria-építésének háttérszálra vitele a Futtatás utáni első megjelenítésnél az [ADR-0011](adr/0011-preview-geometry-background-thread.md) dokumentumban került rögzítésre.
 
 A kiemelés-/nézet-váltás interaktív újraépítésének háttérszálra vitele, generáció-számlálóval védve az elavult eredmények felülírása ellen, az [ADR-0012](adr/0012-interactive-preview-render-background-thread.md) dokumentumban került rögzítésre.
+
+A modellforrások egységes MeshSource-absztrakciójának bevezetése, amely lehetővé teszi opcionális, külön telepíthető modellgenerátor-pluginok (elsőként a Relief Generator Plugin) csatlakozását, az [ADR-0014](adr/0014-meshsource-abstraction.md) dokumentumban került rögzítésre.
+
+Az opcionális, külön telepíthető MeshSource pluginok architektúrája (a plugin kizárólagos MeshSource bővítési pontja, a core/plugin felelősségi határ és a plugin izolációja) az [ADR-0015](adr/0015-optional-meshsource-plugin-architecture.md) dokumentumban került rögzítésre.

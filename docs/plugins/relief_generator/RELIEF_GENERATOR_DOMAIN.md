@@ -1,6 +1,11 @@
 # RELIEF_GENERATOR_DOMAIN.md
 
-**Státusz:** Tervezet
+Státusz: Elfogadva
+Tulajdonos: Horváth Gyula Attila
+Létrehozva: 2026-08-09
+Utolsó módosítás: 2026-08-15
+Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](../../PROJECT_CONSTITUTION.md), [DOMAIN_MODEL.md](../../DOMAIN_MODEL.md), [ARCHITECTURE.md](../../ARCHITECTURE.md), [0014-meshsource-abstraction.md](../../adr/0014-meshsource-abstraction.md), [0015-optional-meshsource-plugin-architecture.md](../../adr/0015-optional-meshsource-plugin-architecture.md)
+
 **Cél:** A parametrikus Relief Generator első generációjának domainmodellje
 **Típus:** opcionális `MeshSource` plugin
 **Első generátor:** matematikai függvény alapú parametrikus felület

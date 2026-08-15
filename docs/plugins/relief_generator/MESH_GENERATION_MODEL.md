@@ -1,5 +1,11 @@
 # MESH_GENERATION_MODEL.md
 
+Státusz: Elfogadva
+Tulajdonos: Horváth Gyula Attila
+Létrehozva: 2026-08-12
+Utolsó módosítás: 2026-08-15
+Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](../../PROJECT_CONSTITUTION.md), [RELIEF_GEOMETRY_MODEL.md](RELIEF_GEOMETRY_MODEL.md)
+
 ## 1. Cél
 
 A Mesh Generation Layer feladata a `ReliefGeometry` domainmodellből egy, a SliceDesigner által közvetlenül felhasználható, érvényes háromdimenziós mesh előállítása.
@@ -512,6 +518,31 @@ Ezért a resolution növelése jelentősen növeli:
 * későbbi szeletelési költséget.
 
 Az első implementáció nem alkalmaz automatikus adaptív optimalizálást.
+
+## 23.1. `sampling_distance` paraméter
+
+Az első implementáció a mesh felbontását nem közvetlen `Nx`/`Ny` értékként kapja, hanem egy fizikai `sampling_distance` paraméterből (mm) számítja:
+
+```text
+Nx = ceil(width / sampling_distance)
+Ny = ceil(height / sampling_distance)
+```
+
+## 23.2. Erőforráskorlát
+
+A számított mintapontszámra statikus felső korlát vonatkozik:
+
+```text
+Nx × Ny > MAX_SAMPLE_COUNT → hiba
+```
+
+Kezdeti érték: `MAX_SAMPLE_COUNT = 2 000 000` — nagyságrendi becslés, implementáció közbeni méréssel felülvizsgálandó és a review során véglegesítendő.
+
+A rendszer túllépés esetén nem csökkenti automatikusan a felbontást, hanem egyértelmű hibát jelez (fail-fast elv, `PROJECT_CONSTITUTION.md` 7. elve).
+
+## 23.3. Későbbi bővítés
+
+Automatikus/adaptív sampling, a legkisebb hullámhossz alapján számított felbontás, illetve dinamikus erőforráskorlát nem része az első implementációnak — ezek későbbi backlog-tételek.
 
 ---
 

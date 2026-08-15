@@ -1,4 +1,10 @@
-# Parametric Relief Generator
+# PARAMETRIC_RELIEF_GENERATOR.md
+
+Státusz: Elfogadva
+Tulajdonos: Horváth Gyula Attila
+Létrehozva: 2026-08-12
+Utolsó módosítás: 2026-08-15
+Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](../../PROJECT_CONSTITUTION.md), [WAVE_FUNCTION_MODEL.md](WAVE_FUNCTION_MODEL.md), [RELIEF_GENERATOR_DOMAIN.md](RELIEF_GENERATOR_DOMAIN.md), [RELIEF_GEOMETRY_MODEL.md](RELIEF_GEOMETRY_MODEL.md)
 
 ## 1. Cél
 

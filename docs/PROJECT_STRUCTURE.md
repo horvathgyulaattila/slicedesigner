@@ -78,7 +78,15 @@ Minden `docs/drafts/` alatti dokumentumnak tartalmaznia kell a `Státusz: Tervez
 
 **Kilépési szabály:** amint egy `docs/drafts/<téma>/` alatti tartalom a szokásos munkafolyamaton (Döntési javaslat → Hatásvizsgálat → Projektgazdai jóváhagyás → Dokumentáció módosítása) átment, a végleges tartalom a megfelelő végleges helyre kerül (pl. `docs/plugins/<plugin_neve>/`, `docs/adr/`, illetve a `DOMAIN_MODEL.md`/`ARCHITECTURE.md` megfelelő szakasza) — a `docs/drafts/<téma>/` mappa ezután törlésre kerül.
 
-## 10. Konvenciók új fájlok/mappák hozzáadásához
+## 10. `docs/plugins/` – plugin-specifikus dokumentáció
+
+A `docs/plugins/` az egyes opcionális SliceDesigner-pluginok véglegesített, elfogadott dokumentációjának gyűjtőhelye, pluginonként külön almappában (pl. `docs/plugins/relief_generator/`).
+
+A `docs/plugins/<plugin_neve>/` alatti dokumentumok a `docs/` többi részével azonos módon hivatalos igazságforrásnak számítanak (Constitution 2. elv) — ezzel szemben a `docs/drafts/<téma>/` alatti tartalom (9. szakasz) nem az. Egy dokumentum a `docs/drafts/` alól a szokásos munkafolyamaton (Döntési javaslat → Hatásvizsgálat → Projektgazdai jóváhagyás → Dokumentáció módosítása) átesve kerül át a `docs/plugins/<plugin_neve>/` alá, `Tervezet` helyett `Elfogadva` státusszal.
+
+A plugin core-tól független, saját architektúráját, domain modelljét és plugin-specifikus döntéseit ez a mappa tartalmazza — a core-t érintő architekturális döntések (pl. a `MeshSource` bővítési pont) továbbra is a `docs/adr/` és a projekt fő dokumentumaiban (`ARCHITECTURE.md`, `DOMAIN_MODEL.md`) maradnak.
+
+## 11. Konvenciók új fájlok/mappák hozzáadásához
 
 * Új domain fogalom → először a `DOMAIN_MODEL.md`-ben rögzítendő, csak utána kaphat kódbeli megfelelőt.
 * Új engine → a `docs/specifications/` alatt specifikáció, majd az `ARCHITECTURE.md` 2. szakaszának bővítése, csak ezután `src/slicedesigner/engines/` alatt modul.
