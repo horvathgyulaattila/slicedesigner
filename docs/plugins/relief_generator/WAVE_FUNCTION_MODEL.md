@@ -500,3 +500,67 @@ Directional Wave Generator
 ```
 
 Ez a modell elegendő az első célként meghatározott természetesebb hullám- és dűneszerű reliefek előállításához, miközben nem zárja ki a későbbi radiális, képi, heightmap- vagy vektoralapú generátorok bevezetését.
+
+---
+
+## 22. Determinisztikus komponens-előállítási szabály (első implementáció)
+
+A 10–11. szakasz, valamint a `PARAMETRIC_RELIEF_GENERATOR.md` 11. szakasza nyitva hagyja a `complexity`/`irregularity` → konkrét komponensszám/amplitúdó/hullámhossz/fázis leképezés pontos szabályát. Az első implementációhoz tartozó, jóváhagyott szabály a következő.
+
+### Komponensszám
+
+[
+n = MIN\_COMPONENTS + \mathrm{round}\big(complexity \cdot (MAX\_COMPONENTS - MIN\_COMPONENTS)\big)
+]
+
+ahol `MIN_COMPONENTS = 1`, `MAX_COMPONENTS = 5`.
+
+### Determinisztikus perturbációs segédfüggvény
+
+Egy `random`-mentes, tisztán az `i` komponensindextől (és egy `salt` értéktől) függő, `[-1,1]` tartományba eső, jól szóródó sorozat:
+
+[
+\rho(i, salt) = 2 \cdot \mathrm{frac}\big((i+1+salt)\cdot\varphi\big) - 1
+]
+
+ahol (\varphi \approx 1.618033988749895) (aranymetszés-arány).
+
+### Komponensenkénti paraméterek (`i = 0..n-1`)
+
+[
+A_i = amplitude \cdot PERSISTENCE^i \cdot \big(1 + irregularity \cdot A\_JITTER \cdot \rho(i,0)\big)
+]
+
+[
+\lambda_i = \frac{wavelength}{LACUNARITY^i} \cdot \big(1 + irregularity \cdot \lambda\_JITTER \cdot \rho(i,1)\big)
+]
+
+[
+\theta_i =
+\begin{cases}
+direction & n=1 \\
+(direction - S) + i\cdot\dfrac{2S}{n-1} & n>1
+\end{cases}
+]
+
+ahol `S = direction_spread` (fokban; a képlet a `WaveGenerator` implementációjában radiánra váltva alkalmazandó).
+
+[
+\phi_i = \big(i \cdot \Gamma + irregularity \cdot \phi\_JITTER \cdot \rho(i,2)\cdot 2\pi\big) \bmod 2\pi
+]
+
+ahol (\Gamma \approx 2.399963229728653) radián (aranyszög) — determinisztikus, jól szóródó fázis-elosztást biztosít a komponensek között.
+
+Konstansok: `PERSISTENCE = 0.5`, `LACUNARITY = 2.0`, `A_JITTER = 0.5`, `λ_JITTER = 0.3`, `φ_JITTER = 1.0`.
+
+A `PERSISTENCE`/`LACUNARITY` biztosítja a 8. szakaszban leírt "több léptékű komponensek" viselkedést (a domináns, `i=0` komponens a legnagyobb amplitúdójú és leghosszabb hullámhosszú). A `θ_i` képlet garantálja, hogy `direction` a komponensirányok középértéke maradjon (5. szakasz), tetszőleges `n`-re. A `JITTER` konstansok `irregularity=1.0` mellett sem tehetik `A_i`-t vagy `λ_i`-t nem-pozitívvá (a szorzótényezők alsó korlátja rendre `1 - A_JITTER = 0.5` és `1 - λ_JITTER = 0.7`, mindkettő pozitív).
+
+---
+
+## 23. Normalizálási mintavételezés (első implementáció)
+
+A 12. szakasz szerinti, a felület tényleges minimum-/maximumértékein alapuló normalizálás megvalósításához az első implementáció egy belső, felhasználó számára nem elérhető, fix `65×65` rácson mintavételezi a nyers `F(x,y)` függvényt a `[0,1]×[0,1]` tartományon, és az így becsült `F_min`/`F_max` alapján normalizál. Ez a rács független a Mesh Generator későbbi, felhasználó által vezérelt mintavételi felbontásától (`IMPLEMENTATION_PLAN.md` 12. szakasza).
+
+A rácsalapú közelítésből eredő lebegőpontos szélsőérték-eltérés ellen a normalizált érték a `[0.0, 1.0]` tartományra van szorítva (`clamp`) — ez a felhasználói bemenettől független, tisztán numerikus védelem, nem hibás bemenet elfedése.
+
+Ha a becsült `F_max` és `F_min` megegyezik (elméletileg csak degenerált bemenet esetén fordulhatna elő, mivel `amplitude > 0` validált a `WaveParameters`-ben), a generálás explicit hibával áll le.
