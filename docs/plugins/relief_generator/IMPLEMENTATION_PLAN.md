@@ -425,6 +425,8 @@ A SliceDesigner felé kizárólag a contract által meghatározott Mesh jelenik 
 
 A downstream pipeline nem kap plugin-specifikus objektumokat.
 
+A plugin ezt a láncot egy `get_mesh() -> Mesh` metódust biztosító `ReliefGeneratorMeshSource` osztályon keresztül teszi elérhetővé, amely a source-specifikus paramétereket (`ReliefGeneratorParameters`) a konstruktorban kapja meg. Ez a plugin saját, dokumentált döntése a `MESH_SOURCE.md` §3 által szándékosan nyitva hagyott technikai formára — nem core-szintű `Protocol`, mert a `MESH_SOURCE.md` §10 a konkrét verziókezelési/kompatibilitási mechanizmust explicit későbbi döntésre bízza.
+
 ---
 
 # 16. Paraméterváltozás

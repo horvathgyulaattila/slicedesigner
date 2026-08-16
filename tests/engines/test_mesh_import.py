@@ -6,7 +6,12 @@ import pytest
 import trimesh
 
 from slicedesigner.engines.exceptions import InvalidMeshError
-from slicedesigner.engines.mesh_import import MeshWarningKind, import_mesh
+from slicedesigner.engines.mesh_import import (
+    BoundingBox,
+    Mesh,
+    MeshWarningKind,
+    import_mesh,
+)
 
 
 def _export_stl(
@@ -131,3 +136,15 @@ def test_import_mesh_min_corner_implausible_size_warns(tmp_path: Path) -> None:
     assert mesh.is_valid is False
     assert any(w.kind is MeshWarningKind.UNIT_PLAUSIBILITY for w in mesh.warnings)
     assert mesh.bounding_box.min == pytest.approx((0.0, 0.0, 0.0))
+
+
+def test_mesh_accepts_none_source_path_for_generated_meshes() -> None:
+    mesh = Mesh(
+        vertices=((0.0, 0.0, 0.0),),
+        triangles=(),
+        source_path=None,
+        bounding_box=BoundingBox(min=(0.0, 0.0, 0.0), max=(0.0, 0.0, 0.0)),
+        is_valid=True,
+        warnings=(),
+    )
+    assert mesh.source_path is None

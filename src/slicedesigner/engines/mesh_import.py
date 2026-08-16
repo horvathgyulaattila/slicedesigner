@@ -48,7 +48,7 @@ class Mesh:
 
     vertices: tuple[tuple[float, float, float], ...]
     triangles: tuple[tuple[int, int, int], ...]
-    source_path: str
+    source_path: str | None
     bounding_box: BoundingBox
     is_valid: bool
     warnings: tuple[MeshWarning, ...]
