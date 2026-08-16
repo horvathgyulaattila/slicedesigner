@@ -47,3 +47,21 @@ class ReliefGeometryValueError(ReliefGeneratorError):
     `height` nem szigorúan pozitív, vagy a `base_thickness`/`relief_height`
     negatív (l. `ReliefGeometry` osztály docstringje).
     """
+
+
+class MeshGenerationError(ReliefGeneratorError):
+    """Érvénytelen sampling-paraméter vagy túl nagy mintapontszám.
+
+    Akkor dobódik, ha a `MeshGenerator.generate` hívásakor a
+    `sampling_distance` nem szigorúan pozitív, az ebből számított `Nx`
+    vagy `Ny` mintaszám 2-nél kisebb, vagy a `Nx * Ny` szorzat meghaladja
+    a `MAX_SAMPLE_COUNT` korlátot.
+    """
+
+
+class MeshValidationError(ReliefGeneratorError):
+    """A generált mesh nem watertight.
+
+    Akkor dobódik, ha a `MeshValidator.validate` során legalább egy
+    (rendezetlen) él nem pontosan két háromszögben szerepel a mesh-ben.
+    """

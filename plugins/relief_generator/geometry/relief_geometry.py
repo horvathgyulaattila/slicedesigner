@@ -3,7 +3,8 @@
 Lásd: docs/plugins/relief_generator/IMPLEMENTATION_PLAN.md 21. szakasz
 (3. tétel: ReliefGeometry),
 docs/plugins/relief_generator/RELIEF_GEOMETRY_MODEL.md 4., 8–10., 14., 23.
-szakasz, docs/plugins/relief_generator/MESH_GENERATION_MODEL.md 29. szakasz.
+szakasz, docs/plugins/relief_generator/MESH_GENERATION_MODEL.md 29., 22.
+szakasz.
 """
 
 from dataclasses import dataclass
@@ -37,9 +38,13 @@ class ReliefGeometry:
         width: a test fizikai X-kiterjedése. Szigorúan pozitív.
         height: a test fizikai Y-kiterjedése. Szigorúan pozitív.
         base_thickness: az alaptest vastagsága (az alap felső síkjának
-            `Z`-koordinátája). Nem lehet negatív, a `0.0` érvényes.
+            `Z`-koordinátája). Nem lehet negatív, önmagában a `0.0`
+            érvényes — de `relief_height`-tal együtt nem lehet mindkettő
+            nulla (l. lent).
         relief_height: a felső relief-felület maximális, az alaphoz
-            viszonyított magassága. Nem lehet negatív, a `0.0` érvényes.
+            viszonyított magassága. Nem lehet negatív, önmagában a `0.0`
+            érvényes — de `base_thickness`-szel együtt nem lehet mindkettő
+            nulla.
         top_surface: a relief felső felületét leíró, normalizált
             `HeightField`.
     """
@@ -58,8 +63,11 @@ class ReliefGeometry:
 
         Raises:
             ReliefGeometryValueError: ha a `width` vagy `height` nem
-                szigorúan pozitív, vagy a `base_thickness`/`relief_height`
-                negatív.
+                szigorúan pozitív, ha a `base_thickness`/`relief_height`
+                negatív, vagy ha mindkettő pontosan `0.0` (ez a teljes
+                testet laposra, nulla térfogatúra degenerálná, és minden
+                oldalfal-háromszöget nulla területűvé tenné — l.
+                MESH_GENERATION_MODEL.md 22. szakasz).
         """
         if not self.width > 0.0:
             raise ReliefGeometryValueError(
@@ -80,6 +88,13 @@ class ReliefGeometry:
             raise ReliefGeometryValueError(
                 "A relief_height-nak nem-negatívnak kell lennie, "
                 f"kapott érték: {self.relief_height}"
+            )
+        if not self.base_thickness + self.relief_height > 0.0:
+            raise ReliefGeometryValueError(
+                "A base_thickness és a relief_height nem lehet egyszerre "
+                "nulla (nulla térfogatú, degenerált testet eredményezne), "
+                f"kapott base_thickness={self.base_thickness}, "
+                f"relief_height={self.relief_height}"
             )
 
     def top_z(self, x: float, y: float) -> float:

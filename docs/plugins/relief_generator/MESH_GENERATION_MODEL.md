@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-08-12
-Utolsó módosítás: 2026-08-15
+Utolsó módosítás: 2026-08-16
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](../../PROJECT_CONSTITUTION.md), [RELIEF_GEOMETRY_MODEL.md](RELIEF_GEOMETRY_MODEL.md)
 
 ## 1. Cél
@@ -857,3 +857,86 @@ Ebben kell majd meghatározni:
 * és pontosan milyen minimális első implementációt kell elkészíteni.
 
 A jelen dokumentum célja ezzel lezárul: **a `ReliefGeometry → Mesh` szerződés és a mesh-előállítás alapmodellje rögzítve van.**
+
+---
+
+# 36. Determinisztikus vertex- és trianguláció-index séma (első implementáció)
+
+A §12–18 nyitva hagyta a pontos vertex-indexelést és háromszög-sorrendet. Az első implementációhoz tartozó, jóváhagyott séma a következő — numerikusan verifikálva: mind a hat logikai felület (Top, Bottom, 4 oldalfal) minden háromszöge kifelé mutató normállal rendelkezik, és a teljes mesh minden éle pontosan két háromszögben szerepel (watertight).
+
+### Rács és vertex-indexelés
+
+`Nx`, `Ny` mintaszám mellett (§23.1), `Δx = width/(Nx-1)`, `Δy = height/(Ny-1)`:
+
+```text
+top_index(i, j)    = j·Nx + i
+bottom_index(i, j) = Nx·Ny + j·Nx + i
+```
+
+A teljes vertexszám `2·Nx·Ny` — a top és bottom felület **külön** vertexkészletet kap (§11).
+
+Egy `(i, j)` rácspont koordinátái:
+
+```text
+X_i = i·Δx
+Y_j = j·Δy
+Z_top    = ReliefGeometry.top_z(X_i/width, Y_j/height)
+Z_bottom = ReliefGeometry.BOTTOM_Z
+```
+
+### Top Surface trianguláció
+
+Minden `(i, j)` cellára, `i ∈ [0, Nx-2]`, `j ∈ [0, Ny-2]`, a négy sarokvertex:
+
+```text
+v00 = top_index(i, j)      v10 = top_index(i+1, j)
+v01 = top_index(i, j+1)    v11 = top_index(i+1, j+1)
+```
+
+Két háromszög: **`(v00, v10, v11)`**, **`(v00, v11, v01)`**.
+
+### Bottom Surface trianguláció
+
+Ugyanaz a cellafelosztás, `bottom_index`-szel, **fordított sorrendben** (a lefelé mutató normál miatt):
+
+Két háromszög: **`(v00, v11, v10)`**, **`(v00, v01, v11)`**.
+
+### Oldalfalak trianguláció
+
+Minden oldalfal a megfelelő perem mentén, `ta`/`tb` szomszédos top-vertexek, `ba`/`bb` a hozzájuk tartozó bottom-vertexek:
+
+```text
+X- fal (i=0),      j ∈ [0, Ny-2]: ta=top_index(0,j),    tb=top_index(0,j+1)
+                                   ba=bottom_index(0,j), bb=bottom_index(0,j+1)
+    háromszögek: (ba, ta, bb), (bb, ta, tb)
+
+X+ fal (i=Nx-1),   j ∈ [0, Ny-2]: ta=top_index(Nx-1,j),    tb=top_index(Nx-1,j+1)
+                                   ba=bottom_index(Nx-1,j), bb=bottom_index(Nx-1,j+1)
+    háromszögek: (ba, bb, ta), (bb, tb, ta)
+
+Y- fal (j=0),      i ∈ [0, Nx-2]: ta=top_index(i,0),    tb=top_index(i+1,0)
+                                   ba=bottom_index(i,0), bb=bottom_index(i+1,0)
+    háromszögek: (ba, bb, ta), (bb, tb, ta)
+
+Y+ fal (j=Ny-1),   i ∈ [0, Nx-2]: ta=top_index(i,Ny-1),    tb=top_index(i+1,Ny-1)
+                                   ba=bottom_index(i,Ny-1), bb=bottom_index(i+1,Ny-1)
+    háromszögek: (ba, ta, bb), (bb, ta, tb)
+```
+
+Ez a séma garantálja a §19 szerinti kifelé mutató normálokat (Top: `+Z`, Bottom: `-Z`, X-: `-X`, X+: `+X`, Y-: `-Y`, Y+: `+Y`) és a §20 szerinti watertight zártságot, **konstrukciós tulajdonságként** (§20: *"a zártság konstrukciós tulajdonság legyen"*).
+
+---
+
+# 37. Hibakezelés — pontos exception-kontraktus (első implementáció)
+
+A §29 nyitva hagyott hibakontraktusa az első implementációhoz:
+
+* `sampling_distance ≤ 0` → hiba.
+* `Nx = ⌈width / sampling_distance⌉ < 2` → hiba.
+* `Ny = ⌈height / sampling_distance⌉ < 2` → hiba.
+* `Nx · Ny > MAX_SAMPLE_COUNT` (kezdeti érték: `2 000 000`, §23.2) → hiba.
+* A generált mesh watertight-ellenőrzése (minden rendezetlen él pontosan két háromszögben szerepel-e) sikertelen → hiba. Helyes konstrukció mellett ez elméletileg nem fordulhat elő — fail-fast védőháló, nem várt üzemi eset.
+
+A `width ≤ 0`, `height ≤ 0`, `relief_height < 0`, `base_thickness < 0` eseteket a `ReliefGeometry` már fail-fast validálja saját konstrukciójakor (RELIEF_GEOMETRY_MODEL.md 3. lépés) — a Mesh Generatornak ezeket nem kell újra ellenőriznie.
+
+A §28 által felsorolt további Validator-ellenőrzések (degenerált face-ek, self-intersection) a §21–22 szerint az első implementációban *"normál működés mellett nem várhatók"*, ezért ezekhez ebben a lépésben nem tartozik külön ellenőrzés vagy kivétel — ez tudatos hatókör-döntés, nem hiányosság.
