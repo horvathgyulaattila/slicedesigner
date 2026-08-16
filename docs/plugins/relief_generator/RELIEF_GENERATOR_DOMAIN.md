@@ -696,7 +696,7 @@ A `MeshSource` contract (ADR-0014) már rögzíti a determinisztikus és fail-fa
 ### Kapcsolódó
 
 * `MESH_SOURCE.md`
-* `PLUGIN_ARCHITECTURE.md`
+* `adr/0015-optional-meshsource-plugin-architecture.md`
 * `DOMAIN_MODEL.md`
 * `ARCHITECTURE.md`
 
@@ -765,7 +765,7 @@ A dokumentum akkor tekinthető késznek, ha:
 15. lehetővé teszi a későbbi kép-, heightmap- és vektoralapú generátorok bevezetését;
 16. a hosszú távú általános felületgeneráló motor célját backlogként kezeli;
 17. nem módosítja a meglévő slicing pipeline architektúráját;
-18. összhangban van a `MESH_SOURCE.md`, `PLUGIN_ARCHITECTURE.md` és a kapcsolódó ADR-ek döntéseivel.
+18. összhangban van a `MESH_SOURCE.md`-vel és a kapcsolódó ADR-ekkel (ADR-0014, ADR-0015).
 
 ---
 
