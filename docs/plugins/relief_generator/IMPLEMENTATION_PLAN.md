@@ -623,11 +623,15 @@ A létrejövő mesh alapvető érvényességének ellenőrzése.
 
 A plugin csatlakoztatása a SliceDesigner contractjához.
 
-### 7. Minimális GUI-integráció
+### 7. Plugin discovery + Parameter Schema regisztráció
 
-A generátor kiválasztása és paramétereinek megadása.
+A core-oldali discovery-mechanizmus (entry-point alapú felismerés) és a generikus `MeshSourceDescriptor`/`ParameterSpec` bevezetése, valamint a plugin oldali regisztráció — az [ADR-0017](../../adr/0017-plugin-discovery-and-parameter-schema.md) szerint.
 
-### 8. End-to-end teszt
+### 8. Minimális GUI-integráció
+
+A generátor kiválasztása és paramétereinek megadása, a core `ParameterPanel`-ban, a 7. tételben bevezetett generikus form-builderrel felépítve — nem szkript, nem különálló mockup.
+
+### 9. End-to-end teszt
 
 A teljes pipeline ellenőrzése.
 
@@ -637,7 +641,7 @@ A teljes pipeline ellenőrzése.
 
 Az első GUI nem célja a teljes generátor-rendszer kialakítása.
 
-A minimális felület csak a szükséges paramétereket tegye elérhetővé.
+A minimális felület csak a szükséges paramétereket tegye elérhetővé. A felület ténylegesen a 7. tételben bevezetett generikus form-builderrel épül fel a plugin `MeshSourceDescriptor`-jának `ParameterSpec` listájából (ADR-0017) — az alábbi vázlat a megjelenítendő mezőket illusztrálja, nem a felület implementációs módját.
 
 Például:
 

@@ -1,0 +1,69 @@
+# ADR-0017: Plugin discovery mechanizmus és GUI paraméter-séma
+
+Dátum: 2026-08-16
+Státusz: Elfogadva
+Döntéshozó: Horváth Gyula Attila (projektgazda)
+
+## Kontextus
+
+Az ADR-0015 és az ADR-0016 egyaránt explicit módon későbbi döntésre halasztotta a MeshSource pluginok discovery-mechanizmusának konkrét technikai megvalósítását ("a discovery és a plugin-kompatibilitás konkrét technikai mechanizmusa jelen ADR hatókörén kívül esik, későbbi implementációs döntés tárgya" — ADR-0015; "a plugin discovery... konkrét technikai mechanizmusa jelen ADR hatókörén kívül esik" — ADR-0016).
+
+A Relief Generator Plugin implementációja (`docs/plugins/relief_generator/IMPLEMENTATION_PLAN.md` §21) az 1-6. tételig elkészült; a 7. tétel ("Minimális GUI-integráció") tervezésekor kiderült, hogy egy valódi Qt-panel a SliceDesigner saját GUI-jában (`src/slicedesigner/gui/parameter_panel.py`) a jelenlegi állapotban csak úgy valósítható meg, ha a core közvetlenül importálja a `plugins.relief_generator`-t — ez sértené az ADR-0016 feltétel nélküli egyirányú függőségi szabályát (Plugin → Core).
+
+A projektgazda kifejezett döntése: a GUI-integráció valódi, élő Qt-panel legyen, szabálysértés nélkül — ehhez a korábban elhalasztott discovery-mechanizmust kell most, ezzel az ADR-rel véglegesíteni, mielőtt a GUI-panel implementációja elkezdődhet.
+
+## Döntés
+
+Két, egymásra épülő, de egymástól elkülönülő mechanizmus kerül bevezetésre, kizárólag a `MeshSource` bővítési pontra szűkítve:
+
+```text
+Plugin
+   ↓ (entry point regisztráció)
+MeshSourceDescriptor  ← ÚJ, core-oldali, generikus contract
+   ↓ (ParameterSpec lista)
+Core GUI — generikus form-builder
+   ↓ (felhasználói kitöltés)
+MeshSourceDescriptor.build(values) → MeshSource
+   ↓
+Mesh
+   ↓
+meglévő SliceDesigner pipeline
+```
+
+**1. Discovery.** A core Python `importlib.metadata.entry_points()` segítségével, egy dedikált entry-point csoporton (`slicedesigner.mesh_sources`) keresztül ismeri fel a telepített MeshSource pluginokat. Minden entry point egy hívható objektumra mutat, amely meghívva egy `MeshSourceDescriptor`-t ad vissza. Nincs telepített plugin esetén a lista üres — ez nem hiba, a core enélkül is teljes értékű marad (ADR-0015 elve).
+
+**2. Parameter Schema — `MeshSourceDescriptor`.** Egy új, core-oldali, domain-semleges adatstruktúra:
+
+* `display_name: str` — a generátor neve a GUI-választóban;
+* `parameters: tuple[ParameterSpec, ...]` — minden `ParameterSpec` név, típus (`float`/`int`/`str`/`enum`+választható értékek), alapérték, opcionális min/max, mértékegység és felirat;
+* `build(values: dict[str, Any]) -> MeshSource` — factory, amely a kitöltött értékekből egy `MeshSource` példányt állít elő.
+
+**Explicit rögzítendő, ellentmondás-elkerülés céljából:** a `MeshSourceDescriptor` **nem** módosítja és nem bővíti a `MeshSource` contractot (ADR-0014). A `MeshSource` interfész (`get_mesh() -> Mesh`) változatlan marad; ADR-0014 azon kikötése is érvényben marad, hogy "a core `MeshSource` contract [paraméterobjektumot] nem tartalmaz". A `MeshSourceDescriptor` egy különálló, kizárólag discovery-időben és GUI-építéskor használt regisztrációs csomagolás — a plugin mellett létezik, nem a `MeshSource`-on.
+
+**3. Generikus form-builder.** A core GUI oldalán egy `ParameterSpec`-listából Qt widgeteket (spinbox/combobox/lineedit, típus szerint) építő komponens jön létre. A core sosem szembesül relief-specifikus fogalommal (Wave, Width, Base thickness stb.) — kizárólag generikus `ParameterSpec`-ekkel dolgozik.
+
+A döntés további részletei:
+
+* a mechanizmus **kizárólag** a MeshSource bővítési pontra vonatkozik — nem általánosított plugin-SDK export-, post-processing- vagy GUI-pluginokhoz; ez explicit hatókör-korlátozás, hogy a döntés ne kerüljön ellentmondásba az ADR-0014/ADR-0015 "Általános plugin-framework bevezetése... elutasítva" pontjával;
+* a `MeshSourceDescriptor` és a `ParameterSpec` a SliceDesigner core-jába kerül (a pontos modul-elhelyezés az implementációs prompt feladata, l. Következmények);
+* a plugin oldalán (`plugins/relief_generator/source/`) egy regisztrációs függvény szükséges, amely a meglévő `ReliefGeneratorMeshSource`/`ReliefGeneratorParameters`-t egy `MeshSourceDescriptor` mögé csomagolja;
+* mindkét oldal (`pyproject.toml`, core és plugin) entry-point deklarációt igényel;
+* a `MeshSource` contract formális verziózási/kompatibilitási kérdését (ADR-0014, "verziózott interfész") jelen ADR sem oldja meg részletesen — a jelenlegi, egyetlen plugint (relief_generator) tartalmazó hatókörben ez továbbra is nyitott, későbbi kérdés marad, explicit jelezve.
+
+## Mérlegelt alternatívák
+
+* **Statikus, kódba égetett import a core GUI-ban** (a korábban felvázolt "2. opció", tudatos, átmeneti ADR-0016 kivétellel) — elutasítva: a projektgazda kifejezetten azt kérte, hogy szabálysértés nélküli megoldás szülessen.
+* **Konfigurációs fájl alapú discovery** (pl. egy kézzel szerkesztett `plugins.json` a core mellett) — elutasítva: felesleges kézi lépést vezetne be a felhasználó számára, miközben a Python csomagolási ökoszisztéma (`entry_points`) natívan, telepítéskor megoldja ugyanezt.
+* **A paraméter-séma közvetlenül a `MeshSource` interfészen** (nem külön `MeshSourceDescriptor`-on) — elutasítva: ez ténylegesen módosítaná/bővítené az ADR-0014-ben elfogadott core contractot, amely kifejezetten kizárja a paraméterobjektumot onnan; a különálló Descriptor-mintázat elkerüli ezt az ellentmondást.
+* **Teljes, több plugin-típusra általánosított plugin-SDK bevezetése már most** (export-, post-processing-, GUI-pluginok is) — elutasítva, az ADR-0014/ADR-0015 korábbi elutasítását megerősítve: nincs rá dokumentált igény; jelen ADR szigorúan a MeshSource bővítési pontra szűkíti a hatókört (Engineering Principles, egyszerűség elve).
+
+## Következmények
+
+* Az ADR-0015 "Következmények" szakaszának nyitott pontja ("Plugin discovery mechanizmust kell majd biztosítani... technikai megvalósításuk külön, későbbi döntés tárgya") ezzel lezárul, hivatkozással erre az ADR-re — az ADR-0015 külön prompttal frissül.
+* Az `IMPLEMENTATION_PLAN.md` §21 7. tétele ("Minimális GUI-integráció") átértelmeződik: valódi, a core `ParameterPanel`-ban generikusan felépülő Qt-panelt jelent, nem szkriptet vagy STL-exportos kerülőutat; a discovery + `MeshSourceDescriptor` bevezetése önálló, a GUI-panel elé eső implementációs lépésként kerül be a tervbe — ezt az `IMPLEMENTATION_PLAN.md` külön prompttal veszi át.
+* Új core-oldali kód szükséges (discovery loader + `MeshSourceDescriptor`/`ParameterSpec` típusok + generikus form-builder); a pontos modulhely (`src/slicedesigner/gui/` vagy egy új, dedikált modul) az implementációs promptban dől el.
+* A plugin oldalán (`plugins/relief_generator/source/`) regisztrációs kód és `pyproject.toml`-bővítés szükséges mindkét oldalon.
+* A `PROJECT_STRUCTURE.md` 11. szakasza kiegészül az entry-point konvenció rövid leírásával, erre az ADR-re hivatkozva.
+* Az `ARCHITECTURE.md` a meglévő ADR-0014/ADR-0015/ADR-0016 hivatkozások mellé egy új bekezdést kap.
+* A `ROADMAP.md` Phase 8 hatóköre bővül a discovery-mechanizmussal — ezt a projektgazda kifejezett kérése indokolja (Projekt végrehajtási szabály), nem AI-kezdeményezésű optimalizáció.
+* Jelen ADR nem dönt a `ParameterSpec` pontos mezőlistájáról, a Qt widget-típus-leképezésről, a `MeshSourceDescriptor` pontos Python-modulhelyéről, sem a `pyproject.toml` entry-point csoport pontos szintaxisáról — ezeket a rá épülő implementációs promptok rendezik.

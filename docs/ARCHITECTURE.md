@@ -180,3 +180,5 @@ A kiemelés-/nézet-váltás interaktív újraépítésének háttérszálra vit
 A modellforrások egységes MeshSource-absztrakciójának bevezetése, amely lehetővé teszi opcionális, külön telepíthető modellgenerátor-pluginok (elsőként a Relief Generator Plugin) csatlakozását, az [ADR-0014](adr/0014-meshsource-abstraction.md) dokumentumban került rögzítésre.
 
 Az opcionális, külön telepíthető MeshSource pluginok architektúrája (a plugin kizárólagos MeshSource bővítési pontja, a core/plugin felelősségi határ és a plugin izolációja) az [ADR-0015](adr/0015-optional-meshsource-plugin-architecture.md) dokumentumban került rögzítésre.
+
+A MeshSource pluginok discovery-mechanizmusa és a hozzá tartozó, core-oldali generikus GUI paraméter-séma (`MeshSourceDescriptor`) az [ADR-0017](adr/0017-plugin-discovery-and-parameter-schema.md) dokumentumban került rögzítésre.

@@ -314,6 +314,7 @@ Feladata:
 * a Relief Generator plugin domain-, geometria- és mesh-generálási modelljének véglegesítése (`RELIEF_GENERATOR_DOMAIN.md`, `Wave Function Model.md`, `RELIEF_GEOMETRY_MODEL.md`, `MESH_GENERATION_MODEL.md`, `PARAMETRIC_RELIEF_GENERATOR.md` alapján), a végleges `docs/plugins/relief_generator/` alá;
 * a plugin repository- és package-struktúrájának véglegesítése (`PLUGIN_REPOSITORY_STRUCTURE_PROPOSAL.md` alapján) és a `plugins/relief_generator/` könyvtár létrehozása;
 * az első implementáció (`IMPLEMENTATION_PLAN.md` alapján): Wave Generator → Height Field → ReliefGeometry → Mesh Generator → Mesh → MeshSource, automatizált teszttel lefedve;
+* a MeshSource pluginok discovery-mechanizmusának és a hozzá tartozó generikus GUI paraméter-sémának (`MeshSourceDescriptor`) bevezetése, a projektgazda kifejezett kérésére, a valódi Qt GUI-integráció előfeltételeként (ADR-0017);
 * élő tesztelés a SliceDesigner meglévő pipeline-jával.
 
 Kilépési feltétel: a Relief Generator plugin end-to-end működik (Wave Generator-től a SliceDesigner Slice Engine-jéig), automatizált teszttel lefedve, élő teszttel megerősítve, és minden érintett, korábban `docs/drafts/` alatti dokumentum a végleges helyére került, `Tervezet` helyett `Elfogadva` státusszal.

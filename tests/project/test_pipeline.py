@@ -7,6 +7,7 @@ import trimesh
 
 from slicedesigner.engines.backplate_engine import BackplateNormalAxis
 from slicedesigner.engines.exceptions import InvalidMeshError, InvalidSliceError
+from slicedesigner.engines.mesh_import import Mesh
 from slicedesigner.engines.nesting_engine import MaterialDefinition, PartKind
 from slicedesigner.engines.numbering_engine import NumberingDirectionSign
 from slicedesigner.project import pipeline
@@ -33,6 +34,13 @@ def _box_stl(tmp_path: Path, filename: str = "mesh.stl") -> str:
     path = tmp_path / filename
     box.export(str(path), file_type="stl")
     return str(path)
+
+
+def _box_mesh(tmp_path: Path) -> Mesh:
+    """Egy valós, importált `Mesh` — a `config.mesh`-sel közvetlenül
+    átadható, MeshSource plugin híján (ADR-0017)."""
+    stl_path = _box_stl(tmp_path)
+    return pipeline.import_mesh_preview(MeshImportParams(file_path=stl_path))
 
 
 def _materials() -> tuple[MaterialDefinition, ...]:
@@ -419,3 +427,85 @@ def test_import_mesh_preview_invalid_file_raises_invalid_mesh_error(
 
     with pytest.raises(InvalidMeshError):
         pipeline.import_mesh_preview(MeshImportParams(file_path=missing_path))
+
+
+def test_run_pipeline_mesh_import_and_mesh_both_none_raises_before_any_engine_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mesh_calls = _spy(monkeypatch, "import_mesh")
+
+    config = PipelineConfig(
+        use_dowels=True,
+        use_spacers=False,
+        use_backplate=False,
+        mesh_import=None,
+        slicing=SliceParams(slice_thickness_mm=3.0),
+        numbering=_numbering_params(),
+        nesting=NestingParams(
+            material_definitions=_materials(),
+            slice_material_id="wood3",
+            seam_marking_height_mm=2.0,
+        ),
+        dxf_export=DxfExportParams(output_directory=str(tmp_path)),
+        dowel=DowelParams(dowel_diameter_mm=4.0),
+        mesh=None,
+    )
+
+    with pytest.raises(PipelineConfigurationError):
+        run_pipeline(config)
+
+    assert mesh_calls == []
+
+
+def test_run_pipeline_mesh_import_and_mesh_both_given_raises(tmp_path: Path) -> None:
+    stl_path = _box_stl(tmp_path)
+    mesh = _box_mesh(tmp_path)
+
+    config = PipelineConfig(
+        use_dowels=True,
+        use_spacers=False,
+        use_backplate=False,
+        mesh_import=MeshImportParams(file_path=stl_path),
+        slicing=SliceParams(slice_thickness_mm=3.0),
+        numbering=_numbering_params(),
+        nesting=NestingParams(
+            material_definitions=_materials(),
+            slice_material_id="wood3",
+            seam_marking_height_mm=2.0,
+        ),
+        dxf_export=DxfExportParams(output_directory=str(tmp_path)),
+        dowel=DowelParams(dowel_diameter_mm=4.0),
+        mesh=mesh,
+    )
+
+    with pytest.raises(PipelineConfigurationError):
+        run_pipeline(config)
+
+
+def test_run_pipeline_uses_provided_mesh_without_importing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mesh = _box_mesh(tmp_path)
+    mesh_calls = _spy(monkeypatch, "import_mesh")
+
+    config = PipelineConfig(
+        use_dowels=True,
+        use_spacers=False,
+        use_backplate=False,
+        mesh_import=None,
+        slicing=SliceParams(slice_thickness_mm=3.0),
+        numbering=_numbering_params(),
+        nesting=NestingParams(
+            material_definitions=_materials(),
+            slice_material_id="wood3",
+            seam_marking_height_mm=2.0,
+        ),
+        dxf_export=DxfExportParams(output_directory=str(tmp_path)),
+        dowel=DowelParams(dowel_diameter_mm=4.0),
+        mesh=mesh,
+    )
+
+    result = run_pipeline(config)
+
+    assert mesh_calls == []
+    assert result.mesh is mesh

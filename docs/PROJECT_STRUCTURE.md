@@ -101,6 +101,8 @@ A pluginok tesztjei a `tests/plugins/<plugin_neve>/` alatt kapnak helyet, a megl
 
 A repository-struktúra és a plugin-architektúra teljes indoklását és a mérlegelt alternatívákat az [ADR-0016](adr/0016-plugin-repository-structure.md) rögzíti.
 
+A telepített MeshSource pluginok discovery-je Python `entry_points` mechanizmuson keresztül történik, egy dedikált `slicedesigner.mesh_sources` csoportban; a discovery-mechanizmus és a hozzá tartozó generikus GUI paraméter-séma (`MeshSourceDescriptor`) indoklását és részleteit az [ADR-0017](adr/0017-plugin-discovery-and-parameter-schema.md) rögzíti.
+
 ## 12. Konvenciók új fájlok/mappák hozzáadásához
 
 * Új domain fogalom → először a `DOMAIN_MODEL.md`-ben rögzítendő, csak utána kaphat kódbeli megfelelőt.

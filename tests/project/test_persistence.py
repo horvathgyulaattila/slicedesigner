@@ -1,5 +1,6 @@
 """Tesztek a `PipelineConfig` projektmentés (de)szerializálásához."""
 
+import dataclasses
 import json
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from slicedesigner.engines.backplate_engine import (
     SliceTabOverride,
 )
 from slicedesigner.engines.dowel_engine import ManualDowelPosition
+from slicedesigner.engines.mesh_import import BoundingBox, Mesh
 from slicedesigner.engines.nesting_engine import (
     MaterialDefinition,
     NestingRotationMode,
@@ -178,6 +180,20 @@ def _minimal_config() -> PipelineConfig:
     )
 
 
+def _stub_mesh() -> Mesh:
+    """Minimális, kézzel összeállított `Mesh` — egy MeshSource plugin
+    (pl. Relief Generator) által generált Mesh helyettesítője, a
+    `config.mesh`-en keresztüli mentés-korlátozás teszteléséhez."""
+    return Mesh(
+        vertices=((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+        triangles=((0, 1, 2),),
+        source_path=None,
+        bounding_box=BoundingBox(min=(0.0, 0.0, 0.0), max=(1.0, 1.0, 0.0)),
+        is_valid=True,
+        warnings=(),
+    )
+
+
 def test_round_trip_full_config_is_equal(tmp_path: Path) -> None:
     config = _full_config()
     file_path = tmp_path / "project.json"
@@ -204,7 +220,7 @@ def test_save_writes_expected_schema_root_structure(tmp_path: Path) -> None:
     save_project_config(_minimal_config(), str(file_path))
 
     payload = json.loads(file_path.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert isinstance(payload["config"], dict)
     assert payload["config"]["use_dowels"] is False
 
@@ -239,10 +255,10 @@ def test_load_unsupported_schema_version_raises_configuration_error(
 ) -> None:
     file_path = tmp_path / "project.json"
     file_path.write_text(
-        json.dumps({"schema_version": 2, "config": {}}), encoding="utf-8"
+        json.dumps({"schema_version": 3, "config": {}}), encoding="utf-8"
     )
 
-    with pytest.raises(PipelineConfigurationError):
+    with pytest.raises(PipelineConfigurationError, match="schema_version"):
         load_project_config(str(file_path))
 
 
@@ -267,4 +283,36 @@ def test_load_invalid_enum_value_raises_configuration_error(tmp_path: Path) -> N
     file_path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(PipelineConfigurationError):
+        load_project_config(str(file_path))
+
+
+def test_save_config_with_generated_mesh_raises_and_writes_no_file(
+    tmp_path: Path,
+) -> None:
+    """A `config.mesh`-sel (pl. MeshSource plugin által generált modellel)
+    rendelkező projekt mentése egyelőre nem támogatott (ADR-0017 nyomán
+    hozott projektgazdai döntés) — fail-fast hibát ad, a fájlrendszert nem
+    érintve."""
+    config = dataclasses.replace(_minimal_config(), mesh=_stub_mesh())
+    file_path = tmp_path / "project.json"
+
+    with pytest.raises(PipelineConfigurationError):
+        save_project_config(config, str(file_path))
+
+    assert not file_path.exists()
+
+
+def test_load_schema_version_1_raises_configuration_error_not_missing_field(
+    tmp_path: Path,
+) -> None:
+    """Egy korábbi (1-es) sémájú, egyébként hiánytalan projektfájl
+    betöltése explicit 'nem támogatott séma' hibát ad, nem a `config`
+    mezőinek hiányára utaló hibát."""
+    file_path = tmp_path / "project.json"
+    save_project_config(_full_config(), str(file_path))
+    payload = json.loads(file_path.read_text(encoding="utf-8"))
+    payload["schema_version"] = 1
+    file_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(PipelineConfigurationError, match="schema_version"):
         load_project_config(str(file_path))

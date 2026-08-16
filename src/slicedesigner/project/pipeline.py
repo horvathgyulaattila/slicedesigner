@@ -187,12 +187,21 @@ class PipelineConfig:
     `None`), ha a megfelelő kapcsoló (`use_dowels`/`use_spacers`/
     `use_backplate`) igaz — ellenkező esetben `run_pipeline()`
     `PipelineConfigurationError`-t dob.
+
+    A `mesh_import` és a `mesh` egymást kölcsönösen kizáró bemenetek —
+    pontosan az egyiket kell megadni (a másikat explicit `None`-nak).
+    `mesh_import` esetén a Mesh Import engine tölti be a modellt fájlból;
+    `mesh` esetén egy már kész, például egy MeshSource plugin által
+    előállított `Mesh`-t használ közvetlenül a pipeline, a fájlból való
+    importot kihagyva (ADR-0017). A `mesh`-sel megadott `PipelineConfig`
+    jelenleg NEM menthető projektfájlba — ismert korlátozás, l.
+    `persistence.py::save_project_config()`.
     """
 
     use_dowels: bool
     use_spacers: bool
     use_backplate: bool
-    mesh_import: MeshImportParams
+    mesh_import: MeshImportParams | None
     slicing: SliceParams
     numbering: NumberingParams
     nesting: NestingParams
@@ -200,6 +209,7 @@ class PipelineConfig:
     dowel: DowelParams | None = None
     gap: GapParams | None = None
     backplate: BackplateParams | None = None
+    mesh: Mesh | None = None
 
 
 @dataclass(frozen=True)
@@ -235,7 +245,22 @@ def _validate_config(config: PipelineConfig) -> None:
     paraméter-objektum meg van adva, a Dowel Engine és a Gap Engine saját
     `spacer_diameter_mm` értékének egyeznie kell (DOWEL_SYSTEM_SPEC.md és
     GAP_SYSTEM_SPEC.md 5. szakasz: "az egyeztetés a Project felelőssége").
+
+    A `mesh_import`/`mesh` kölcsönös kizárását is itt ellenőrizzük
+    (ADR-0017): pontosan az egyiknek kell megadva lennie.
     """
+    if config.mesh_import is None and config.mesh is None:
+        raise PipelineConfigurationError(
+            "A PipelineConfig-nak vagy 'mesh_import'-ot, vagy 'mesh'-t meg "
+            "kell adnia (mindkettő None nem lehet)."
+        )
+    if config.mesh_import is not None and config.mesh is not None:
+        raise PipelineConfigurationError(
+            "A PipelineConfig 'mesh_import' és 'mesh' mezője kölcsönösen "
+            "kizárja egymást — pontosan az egyiket kell megadni, a másikat "
+            "explicit None-nak."
+        )
+
     if not (config.use_dowels or config.use_spacers or config.use_backplate):
         raise PipelineConfigurationError(
             "Legalább egy összeépítési kapcsolónak (use_dowels, use_spacers, "
@@ -349,12 +374,21 @@ def run_pipeline(config: PipelineConfig) -> PipelineResult:
     """
     _validate_config(config)
 
-    mesh = import_mesh(
-        file_path=config.mesh_import.file_path,
-        origin_alignment=config.mesh_import.origin_alignment,
-        min_plausible_size_mm=config.mesh_import.min_plausible_size_mm,
-        max_plausible_size_mm=config.mesh_import.max_plausible_size_mm,
-    )
+    mesh_import_params = config.mesh_import
+    if config.mesh is not None:
+        mesh = config.mesh
+    elif mesh_import_params is not None:
+        mesh = import_mesh(
+            file_path=mesh_import_params.file_path,
+            origin_alignment=mesh_import_params.origin_alignment,
+            min_plausible_size_mm=mesh_import_params.min_plausible_size_mm,
+            max_plausible_size_mm=mesh_import_params.max_plausible_size_mm,
+        )
+    else:
+        # `_validate_config()` már biztosítja, hogy ez az ág sosem fut le.
+        raise PipelineConfigurationError(
+            "A PipelineConfig-nak vagy 'mesh_import'-ot, vagy 'mesh'-t meg kell adnia."
+        )
 
     slice_set = create_slice_set(
         mesh,

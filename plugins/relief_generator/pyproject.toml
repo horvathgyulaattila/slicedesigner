@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "slicedesigner-relief-generator"
+version = "0.1.0"
+description = "Relief Generator — opcionális, parametrikus MeshSource plugin a SliceDesignerhez."
+requires-python = ">=3.11"
+dependencies = []
+
+[project.entry-points."slicedesigner.mesh_sources"]
+relief_generator = "plugins.relief_generator.source.registration:build_mesh_source_descriptor"
+
+[tool.hatch.build.targets.wheel]
+dev-mode-dirs = ["../.."]

@@ -26,16 +26,26 @@ from pathlib import Path
 from slicedesigner.project.exceptions import PipelineConfigurationError
 from slicedesigner.project.pipeline import PipelineConfig
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 
 
 def save_project_config(config: PipelineConfig, file_path: str) -> None:
-    """A `config` JSON fájlba írása, `{"schema_version": 1, "config": {...}}`
+    """A `config` JSON fájlba írása, `{"schema_version": 2, "config": {...}}`
     gyökérszerkezettel.
 
     Raises:
-        PipelineConfigurationError: a fájl nem írható.
+        PipelineConfigurationError: a fájl nem írható, vagy a `config`
+            egy plugin (pl. Relief Generator) által generált `Mesh`-t
+            használ (`config.mesh is not None`) — a generált Mesh-es
+            projektek mentése jelenleg nem támogatott, ismert korlátozás
+            (ADR-0017 nyomán hozott projektgazdai döntés).
     """
+    if config.mesh is not None:
+        raise PipelineConfigurationError(
+            "A jelenlegi projekt egy plugin által generált modellt "
+            "(MeshSource, pl. Relief Generator) használ — az ilyen "
+            "projektek mentése egyelőre nem támogatott, ismert korlátozás."
+        )
     payload = {"schema_version": _SCHEMA_VERSION, "config": _serialize(config)}
     try:
         Path(file_path).write_text(
@@ -54,7 +64,7 @@ def load_project_config(file_path: str) -> PipelineConfig:
         PipelineConfigurationError: a fájl nem található vagy nem
             olvasható, a tartalma nem érvényes JSON, a gyökér-objektum nem
             a várt `{"schema_version": ..., "config": {...}}` szerkezetű,
-            a `schema_version` hiányzik vagy nem `1`, vagy a `config`
+            a `schema_version` hiányzik vagy nem `2`, vagy a `config`
             tartalma nem épül fel érvényes `PipelineConfig`-ként (hiányzó
             kötelező mező, érvénytelen enum-érték, típus-eltérés).
     """

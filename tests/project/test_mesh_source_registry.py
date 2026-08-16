@@ -1,0 +1,96 @@
+"""Tesztek a MeshSource plugin discovery-hez (ADR-0017)."""
+
+from typing import Any
+from unittest.mock import MagicMock
+
+import pytest
+
+from slicedesigner.project.mesh_source_registry import (
+    MeshSourceDescriptor,
+    ParameterSpec,
+    discover_mesh_sources,
+)
+
+
+def _make_entry_point(name: str, factory: Any) -> MagicMock:
+    entry_point = MagicMock()
+    entry_point.name = name
+    entry_point.load.return_value = factory
+    return entry_point
+
+
+def _make_descriptor(display_name: str = "Stub Source") -> MeshSourceDescriptor:
+    return MeshSourceDescriptor(
+        display_name=display_name,
+        parameters=(
+            ParameterSpec(name="width", label="Szélesség", type="float", default=1.0),
+        ),
+        build=lambda values: object(),
+    )
+
+
+def test_discover_mesh_sources_returns_empty_tuple_without_plugins(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "slicedesigner.project.mesh_source_registry.entry_points",
+        lambda group: [],
+    )
+
+    result = discover_mesh_sources()
+
+    assert result == ()
+
+
+def test_discover_mesh_sources_returns_descriptor_from_valid_entry_point(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    descriptor = _make_descriptor("Valid Source")
+    entry_point = _make_entry_point("valid", lambda: descriptor)
+    monkeypatch.setattr(
+        "slicedesigner.project.mesh_source_registry.entry_points",
+        lambda group: [entry_point],
+    )
+
+    result = discover_mesh_sources()
+
+    assert result == (descriptor,)
+
+
+def test_discover_mesh_sources_skips_entry_point_that_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    good_descriptor = _make_descriptor("Good Source")
+
+    def _broken_factory() -> MeshSourceDescriptor:
+        raise RuntimeError("boom")
+
+    broken_entry_point = _make_entry_point("broken", _broken_factory)
+    good_entry_point = _make_entry_point("good", lambda: good_descriptor)
+    monkeypatch.setattr(
+        "slicedesigner.project.mesh_source_registry.entry_points",
+        lambda group: [broken_entry_point, good_entry_point],
+    )
+
+    result = discover_mesh_sources()
+
+    assert result == (good_descriptor,)
+
+
+def test_discover_mesh_sources_skips_entry_point_that_fails_to_load(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    good_descriptor = _make_descriptor("Good Source")
+
+    broken_entry_point = MagicMock()
+    broken_entry_point.name = "broken-load"
+    broken_entry_point.load.side_effect = ImportError("no module")
+    good_entry_point = _make_entry_point("good", lambda: good_descriptor)
+    monkeypatch.setattr(
+        "slicedesigner.project.mesh_source_registry.entry_points",
+        lambda group: [broken_entry_point, good_entry_point],
+    )
+
+    result = discover_mesh_sources()
+
+    assert result == (good_descriptor,)
