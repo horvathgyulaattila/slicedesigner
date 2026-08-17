@@ -20,6 +20,8 @@ Mesh Import → Slice Engine → [Dowel Engine] → [Gap Engine] → [Backplate 
 
 majd külön, önálló lépésként: **DXF Export** (a Futtatástól leválasztva — tetszőlegesen sokszor exportálhatsz ugyanabból az eredményből, új Futtatás nélkül).
 
+A "Mesh Import" lépés bemenete alapesetben egy STL fájl, de lehet egy telepített, opcionális MeshSource plugin (pl. Relief Generator) generált modellje is — a pipeline többi lépése nem tesz különbséget az eredet alapján, ugyanúgy `Mesh`-ként dolgozik vele (`USER_GUIDE.md` 4.1 szakasz).
+
 Amit fontos tudni erről a sorrendről:
 
 * A **Dowel**, a **Gap** (Spacer) és a **Backplate** lépés szögletes zárójelben szerepel, mert **opcionális** — csak akkor fut le, ha a hozzá tartozó jelölőnégyzet be van kapcsolva. Legalább egyet be kell kapcsolni.

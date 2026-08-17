@@ -54,7 +54,8 @@ def apply_pipeline_config(
     parameter_panel.use_spacers_checkbox.setChecked(config.use_spacers)
     parameter_panel.use_backplate_checkbox.setChecked(config.use_backplate)
 
-    _apply_mesh_import_params(config.mesh_import, parameter_panel)
+    if config.mesh_import is not None:
+        _apply_mesh_import_params(config.mesh_import, parameter_panel)
     _apply_slice_params(config.slicing, parameter_panel)
     _apply_numbering_params(config.numbering, parameter_panel)
     _apply_nesting_params(config.nesting, parameter_panel)

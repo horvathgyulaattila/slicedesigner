@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QTableWidget
 
+from slicedesigner.engines.mesh_import import Mesh
 from slicedesigner.engines.nesting_engine import MaterialDefinition
 from slicedesigner.gui.parameter_panel import ParameterPanel, _OptionalDoubleSpinBox
 from slicedesigner.gui.run_panel import RunPanel
@@ -49,25 +50,35 @@ def build_pipeline_config(
     beolvasásra — a megfelelő `PipelineConfig`-mezők üres tuple
     alapértékkel maradnak (ROADMAP Phase 5, "teljes workflow" 1. rész).
 
+    A `ParameterPanel` "Forrás" beállítása szerint a `mesh_import`/`mesh`
+    közül pontosan az egyik kerül kitöltésre (ADR-0017): STL fájl
+    választása esetén `mesh_import`, egy telepített MeshSource plugin
+    választása esetén a `ParameterPanel.generated_mesh`-ben
+    gyorsítótárazott, korábban a "Generálás" gombbal előállított `Mesh`
+    (l. `main_window.py::_on_mesh_generation_succeeded()`) — a generálás
+    NEM ismétlődik meg itt.
+
     Args:
         require_complete: `True` esetén (a "Futtatás" gomb útvonala)
-            hiányzó mesh-fájl/kimeneti könyvtár hibát dob. `False` esetén
-            (a "Mentés" útvonala) e két ellenőrzés kimarad, és a
-            placeholder-szöveg is érvényes, elmenthető értékként kerül a
-            `PipelineConfig`-ba. A kimeneti könyvtár ellenőrzését ehhez a
+            hiányzó mesh-fájl/kimeneti könyvtár/generált-modell hibát dob.
+            `False` esetén (a "Mentés" útvonala) ezek az ellenőrzések
+            kimaradnak, és a placeholder-szöveg/hiányzó generálás is
+            érvényes, elmenthető értékként kerül a `PipelineConfig`-ba (a
+            `persistence.py::save_project_config()` a `mesh`-sel
+            rendelkező konfigurációt ettől függetlenül elutasítja, l.
+            ADR-0017). A kimeneti könyvtár ellenőrzését ehhez a
             `require_complete` értékhez igazítva a `build_dxf_export_params()`
             végzi el.
 
     Raises:
         PipelineConfigurationError: `require_complete=True` mellett a
-            mesh-fájl vagy a kimeneti könyvtár még nincs kiválasztva,
-            vagy (állapottól függetlenül) a materials-tábla egy cellája
-            nem értelmezhető a várt típusként.
+            mesh-fájl/generált-modell vagy a kimeneti könyvtár még nincs
+            kiválasztva/előállítva, vagy (állapottól függetlenül) a
+            materials-tábla egy cellája nem értelmezhető a várt típusként.
     """
-    if require_complete:
-        _require_selected_path(
-            parameter_panel.mesh_file_path_label.text(), field_name="Mesh fájl"
-        )
+    mesh_import, mesh = _build_mesh_source(
+        parameter_panel, require_complete=require_complete
+    )
 
     use_dowels = parameter_panel.use_dowels_checkbox.isChecked()
     use_spacers = parameter_panel.use_spacers_checkbox.isChecked()
@@ -77,7 +88,7 @@ def build_pipeline_config(
         use_dowels=use_dowels,
         use_spacers=use_spacers,
         use_backplate=use_backplate,
-        mesh_import=_build_mesh_import_params(parameter_panel),
+        mesh_import=mesh_import,
         slicing=_build_slice_params(parameter_panel),
         numbering=_build_numbering_params(parameter_panel),
         nesting=_build_nesting_params(parameter_panel),
@@ -87,7 +98,31 @@ def build_pipeline_config(
         dowel=_build_dowel_params(parameter_panel) if use_dowels else None,
         gap=_build_gap_params(parameter_panel) if use_spacers else None,
         backplate=(_build_backplate_params(parameter_panel) if use_backplate else None),
+        mesh=mesh,
     )
+
+
+def _build_mesh_source(
+    parameter_panel: ParameterPanel, *, require_complete: bool
+) -> tuple[MeshImportParams | None, Mesh | None]:
+    """A `PipelineConfig.mesh_import`/`mesh` (egymást kölcsönösen kizáró,
+    l. `pipeline.py::PipelineConfig`) előállítása a `ParameterPanel`
+    "Forrás" beállítása szerint (ADR-0017)."""
+    if (
+        parameter_panel.mesh_source_combo is not None
+        and parameter_panel.mesh_source_combo.currentData() is not None
+    ):
+        if require_complete and parameter_panel.generated_mesh is None:
+            raise PipelineConfigurationError(
+                "Nincs generált modell — előbb kattints a 'Generálás' gombra."
+            )
+        return None, parameter_panel.generated_mesh
+
+    if require_complete:
+        _require_selected_path(
+            parameter_panel.mesh_file_path_label.text(), field_name="Mesh fájl"
+        )
+    return _build_mesh_import_params(parameter_panel), None
 
 
 def _require_selected_path(value: str, *, field_name: str) -> None:

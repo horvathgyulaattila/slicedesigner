@@ -11,14 +11,20 @@ import pytest  # noqa: E402
 from PySide6.QtWidgets import QTableWidgetItem  # noqa: E402
 from pytestqt.qtbot import QtBot  # noqa: E402
 
+from slicedesigner.engines.mesh_import import BoundingBox, Mesh  # noqa: E402
 from slicedesigner.engines.nesting_engine import MaterialDefinition  # noqa: E402
 from slicedesigner.gui.config_builder import (  # noqa: E402
+    _build_mesh_source,
     build_dxf_export_params,
     build_pipeline_config,
 )
 from slicedesigner.gui.parameter_panel import ParameterPanel  # noqa: E402
 from slicedesigner.gui.run_panel import RunPanel  # noqa: E402
 from slicedesigner.project.exceptions import PipelineConfigurationError  # noqa: E402
+from slicedesigner.project.mesh_source_registry import (  # noqa: E402
+    MeshSourceDescriptor,
+    ParameterSpec,
+)
 
 
 def _make_panels(qtbot: QtBot) -> tuple[ParameterPanel, RunPanel]:
@@ -242,6 +248,95 @@ def test_build_dxf_export_params_require_complete_false_allows_missing_output_di
     params = build_dxf_export_params(run_panel, require_complete=False)
 
     assert params.output_directory == "(nincs kiválasztva)"
+
+
+# --- MeshSource plugin "Forrás" mellett a `mesh`/`mesh_import` leképezés ---
+
+
+def _make_stub_descriptor() -> MeshSourceDescriptor:
+    return MeshSourceDescriptor(
+        display_name="Stub Generator",
+        parameters=(
+            ParameterSpec(name="width", label="Szélesség", type="float", default=2.0),
+        ),
+        build=lambda values: None,
+    )
+
+
+def _make_stub_mesh() -> Mesh:
+    return Mesh(
+        vertices=((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+        triangles=((0, 1, 2),),
+        source_path=None,
+        bounding_box=BoundingBox(min=(0.0, 0.0, 0.0), max=(1.0, 1.0, 0.0)),
+        is_valid=True,
+        warnings=(),
+    )
+
+
+def _make_panel_with_generator_selected(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> ParameterPanel:
+    descriptor = _make_stub_descriptor()
+    monkeypatch.setattr(
+        "slicedesigner.gui.parameter_panel.discover_mesh_sources",
+        lambda: (descriptor,),
+    )
+    panel = ParameterPanel()
+    qtbot.addWidget(panel)
+    assert panel.mesh_source_combo is not None
+    panel.mesh_source_combo.setCurrentIndex(1)
+    return panel
+
+
+def test_build_mesh_source_returns_generated_mesh_when_generator_selected(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    panel = _make_panel_with_generator_selected(qtbot, monkeypatch)
+    mesh = _make_stub_mesh()
+    panel.generated_mesh = mesh
+
+    mesh_import, result_mesh = _build_mesh_source(panel, require_complete=True)
+
+    assert mesh_import is None
+    assert result_mesh is mesh
+
+
+def test_build_mesh_source_raises_without_generated_mesh_when_required(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    panel = _make_panel_with_generator_selected(qtbot, monkeypatch)
+
+    with pytest.raises(PipelineConfigurationError):
+        _build_mesh_source(panel, require_complete=True)
+
+
+def test_build_mesh_source_allows_missing_generated_mesh_when_not_required(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    panel = _make_panel_with_generator_selected(qtbot, monkeypatch)
+
+    mesh_import, result_mesh = _build_mesh_source(panel, require_complete=False)
+
+    assert mesh_import is None
+    assert result_mesh is None
+
+
+def test_build_pipeline_config_uses_generated_mesh_for_generator_source(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    panel = _make_panel_with_generator_selected(qtbot, monkeypatch)
+    run_panel = RunPanel()
+    qtbot.addWidget(run_panel)
+    run_panel.output_directory_label.setText("C:/exports")
+    _fill_materials_table(panel)
+    mesh = _make_stub_mesh()
+    panel.generated_mesh = mesh
+
+    config = build_pipeline_config(panel, run_panel)
+
+    assert config.mesh_import is None
+    assert config.mesh is mesh
 
 
 def test_build_dxf_export_params_reads_widget_values(qtbot: QtBot) -> None:

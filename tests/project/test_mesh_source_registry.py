@@ -8,6 +8,7 @@ import pytest
 from slicedesigner.project.mesh_source_registry import (
     MeshSourceDescriptor,
     ParameterSpec,
+    build_mesh,
     discover_mesh_sources,
 )
 
@@ -75,6 +76,40 @@ def test_discover_mesh_sources_skips_entry_point_that_raises(
     result = discover_mesh_sources()
 
     assert result == (good_descriptor,)
+
+
+def test_build_mesh_calls_build_then_get_mesh_with_values() -> None:
+    mesh = object()
+    mesh_source = MagicMock()
+    mesh_source.get_mesh.return_value = mesh
+    build_fn = MagicMock(return_value=mesh_source)
+    descriptor = MeshSourceDescriptor(
+        display_name="Stub Source",
+        parameters=(
+            ParameterSpec(name="width", label="Szélesség", type="float", default=1.0),
+        ),
+        build=build_fn,
+    )
+    values = {"width": 2.5}
+
+    result = build_mesh(descriptor, values)
+
+    build_fn.assert_called_once_with(values)
+    mesh_source.get_mesh.assert_called_once_with()
+    assert result is mesh
+
+
+def test_build_mesh_propagates_exception_from_get_mesh() -> None:
+    mesh_source = MagicMock()
+    mesh_source.get_mesh.side_effect = RuntimeError("boom")
+    descriptor = MeshSourceDescriptor(
+        display_name="Stub Source",
+        parameters=(),
+        build=lambda values: mesh_source,
+    )
+
+    with pytest.raises(RuntimeError, match="boom"):
+        build_mesh(descriptor, {})
 
 
 def test_discover_mesh_sources_skips_entry_point_that_fails_to_load(

@@ -96,3 +96,43 @@ def discover_mesh_sources() -> tuple[MeshSourceDescriptor, ...]:
             continue
         descriptors.append(descriptor)
     return tuple(descriptors)
+
+
+def build_mesh(descriptor: MeshSourceDescriptor, values: dict[str, Any]) -> Any:
+    """Egy `MeshSourceDescriptor` és a hozzá tartozó kitöltött paraméter-
+    értékek alapján a tényleges `Mesh` előállítása.
+
+    Kizárólag a `descriptor.build(values).get_mesh()` hívását végzi el —
+    ez a Project-rétegbeli belépési pont, amit a GUI hív (l.
+    `main_window.py`), a `pipeline.py::import_mesh_preview()` mintáját
+    követve: a GUI sosem hívja közvetlenül a `MeshSource` contractot
+    (ADR-0014, ARCHITECTURE.md 4. szakasz).
+
+    A visszatérési típus formálisan `Any`, mert a `MeshSourceDescriptor.build`
+    maga is `Any`-t ad vissza (a `MeshSource` contract jelenleg duck-typed,
+    l. `mesh_source_registry.py` modul-docstringje) — a hívó (`main_window.py`)
+    tudja, hogy ez ténylegesen egy `Mesh`-nek megfelelő objektum
+    (`get_mesh()`-en keresztül).
+
+    Args:
+        descriptor: a `discover_mesh_sources()` által visszaadott leíró.
+        values: a `descriptor.parameters` mezőihez tartozó, felhasználó
+            által kitöltött értékek (kulcs: `ParameterSpec.name`).
+
+    Returns:
+        A plugin `get_mesh()`-e által visszaadott érték — ténylegesen egy
+        `Mesh`, de a fenti okból formálisan `Any`.
+
+    Raises:
+        Exception: a plugin `build()`/`get_mesh()` hívása során felmerülő
+            bármilyen kivétel változatlanul továbbterjed — ezt a hívó
+            (`main_window.py::_MeshGenerationWorker`) fogja el, ugyanúgy,
+            ahogy a `discover_mesh_sources()` is szélesen fog el egy
+            hibás pluginnál (ADR-0015: egy plugin hibája nem
+            veszélyeztetheti a core működését, de ez itt már egy explicit,
+            felhasználó által kezdeményezett generálási kísérlet, nem
+              discovery — ezért itt a kivétel a hívóhoz kerül, nem
+            elnyelésre).
+    """
+    mesh_source = descriptor.build(values)
+    return mesh_source.get_mesh()

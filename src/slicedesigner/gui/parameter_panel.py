@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from enum import Enum
+from typing import Any
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
@@ -27,6 +28,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -36,9 +38,15 @@ from PySide6.QtWidgets import (
 )
 
 from slicedesigner.engines.backplate_engine import BackplateNormalAxis
+from slicedesigner.engines.mesh_import import Mesh
 from slicedesigner.engines.nesting_engine import NestingRotationMode
 from slicedesigner.engines.numbering_engine import NumberingDirectionSign
 from slicedesigner.engines.slice_engine import SliceAxis
+from slicedesigner.project.mesh_source_registry import (
+    MeshSourceDescriptor,
+    ParameterSpec,
+    discover_mesh_sources,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +119,83 @@ class _CollapsibleSection(QWidget):
         self._toggle_button.setArrowType(
             Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow
         )
+
+
+class _GeneratorParameterForm(QWidget):
+    """Egy `MeshSourceDescriptor.parameters` listájából generikusan épített
+    beviteli form (ADR-0017) — a `ParameterPanel` sosem szembesül
+    plugin-specifikus (pl. relief-specifikus) fogalommal, kizárólag
+    `ParameterSpec`-ekkel dolgozik."""
+
+    def __init__(
+        self,
+        parameters: tuple[ParameterSpec, ...],
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        layout = QFormLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self._float_widgets: dict[str, QDoubleSpinBox] = {}
+        self._int_widgets: dict[str, QSpinBox] = {}
+        self._str_widgets: dict[str, QLineEdit] = {}
+        self._enum_widgets: dict[str, QComboBox] = {}
+
+        for spec in parameters:
+            widget = self._build_widget(spec)
+            layout.addRow(f"{spec.label}:", widget)
+
+    def _build_widget(self, spec: ParameterSpec) -> QWidget:
+        if spec.type == "float":
+            spin_box = QDoubleSpinBox()
+            spin_box.setDecimals(4)
+            spin_box.setMinimum(
+                spec.minimum if spec.minimum is not None else -_SPINBOX_MAX_MM
+            )
+            spin_box.setMaximum(
+                spec.maximum if spec.maximum is not None else _SPINBOX_MAX_MM
+            )
+            if spec.unit:
+                spin_box.setSuffix(f" {spec.unit}")
+            spin_box.setValue(spec.default)
+            self._float_widgets[spec.name] = spin_box
+            return spin_box
+        if spec.type == "int":
+            int_spin_box = QSpinBox()
+            int_spin_box.setMinimum(
+                int(spec.minimum) if spec.minimum is not None else 0
+            )
+            int_spin_box.setMaximum(
+                int(spec.maximum) if spec.maximum is not None else 1_000_000
+            )
+            int_spin_box.setValue(spec.default)
+            self._int_widgets[spec.name] = int_spin_box
+            return int_spin_box
+        if spec.type == "str":
+            line_edit = QLineEdit(str(spec.default))
+            self._str_widgets[spec.name] = line_edit
+            return line_edit
+        combo = QComboBox()
+        for choice in spec.choices:
+            combo.addItem(choice, choice)
+        found_index = combo.findData(spec.default)
+        combo.setCurrentIndex(found_index if found_index >= 0 else 0)
+        self._enum_widgets[spec.name] = combo
+        return combo
+
+    def values(self) -> dict[str, Any]:
+        """A form jelenlegi állapota, a `MeshSourceDescriptor.build()`
+        által elvárt `values` dict alakjában."""
+        result: dict[str, Any] = {}
+        for name, float_widget in self._float_widgets.items():
+            result[name] = float_widget.value()
+        for name, int_widget in self._int_widgets.items():
+            result[name] = int_widget.value()
+        for name, str_widget in self._str_widgets.items():
+            result[name] = str_widget.text()
+        for name, combo_widget in self._enum_widgets.items():
+            result[name] = combo_widget.currentData()
+        return result
 
 
 def _make_mm_spinbox(
@@ -238,6 +323,7 @@ class ParameterPanel(QTabWidget):
     """
 
     mesh_file_selected = Signal(str)
+    generate_mesh_requested = Signal(object, dict)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -310,12 +396,35 @@ class ParameterPanel(QTabWidget):
         group = QGroupBox("Mesh Import")
         layout = QFormLayout(group)
 
+        self.mesh_source_descriptors: tuple[MeshSourceDescriptor, ...] = (
+            discover_mesh_sources()
+        )
+        self.generated_mesh: Mesh | None = None
+        self.mesh_source_combo: QComboBox | None = None
+        self.generate_mesh_button: QPushButton | None = None
+        self._generator_source_container: QWidget | None = None
+        self._generator_forms_stack: QStackedWidget | None = None
+
+        if self.mesh_source_descriptors:
+            self.mesh_source_combo = QComboBox()
+            self.mesh_source_combo.addItem("STL fájl", None)
+            for descriptor in self.mesh_source_descriptors:
+                self.mesh_source_combo.addItem(descriptor.display_name, descriptor)
+            self.mesh_source_combo.currentIndexChanged.connect(
+                self._on_mesh_source_changed
+            )
+            layout.addRow("Forrás:", self.mesh_source_combo)
+
+        self._stl_source_container = QWidget()
+        stl_layout = QFormLayout(self._stl_source_container)
+        stl_layout.setContentsMargins(0, 0, 0, 0)
+
         file_picker, self.mesh_browse_button, self.mesh_file_path_label = (
             _build_file_picker(
                 "Mesh fájl kiválasztása", on_selected=self.mesh_file_selected.emit
             )
         )
-        layout.addRow("Fájl útvonal:", file_picker)
+        stl_layout.addRow("Fájl útvonal:", file_picker)
 
         advanced = _CollapsibleSection("Speciális beállítások")
 
@@ -334,8 +443,58 @@ class ParameterPanel(QTabWidget):
             "Max. valószerű méret:", self.max_plausible_size_spin
         )
 
-        layout.addRow(advanced)
+        stl_layout.addRow(advanced)
+        layout.addRow(self._stl_source_container)
+
+        if self.mesh_source_descriptors:
+            self._generator_source_container = QWidget()
+            generator_layout = QVBoxLayout(self._generator_source_container)
+            generator_layout.setContentsMargins(0, 0, 0, 0)
+
+            self._generator_forms_stack = QStackedWidget()
+            for descriptor in self.mesh_source_descriptors:
+                self._generator_forms_stack.addWidget(
+                    _GeneratorParameterForm(descriptor.parameters)
+                )
+            generator_layout.addWidget(self._generator_forms_stack)
+
+            self.generate_mesh_button = QPushButton("Generálás")
+            self.generate_mesh_button.clicked.connect(self._on_generate_mesh_clicked)
+            generator_layout.addWidget(self.generate_mesh_button)
+
+            self._generator_source_container.setVisible(False)
+            layout.addRow(self._generator_source_container)
+
         return group
+
+    def _on_mesh_source_changed(self, index: int) -> None:
+        """A "Forrás" legördülő váltásának kezelése: STL fájl vs. egy
+        felfedezett MeshSource plugin (ADR-0017) — a megfelelő konténer
+        láthatóságát és a generátor-form-stack aktív lapját állítja be."""
+        if self.mesh_source_combo is None:
+            return
+        is_stl = self.mesh_source_combo.itemData(index) is None
+        self._stl_source_container.setVisible(is_stl)
+        if self._generator_source_container is not None:
+            self._generator_source_container.setVisible(not is_stl)
+        if not is_stl and self._generator_forms_stack is not None:
+            self._generator_forms_stack.setCurrentIndex(index - 1)
+
+    def _on_generate_mesh_clicked(self) -> None:
+        """A "Generálás" gomb kattintás-eseménye: a kiválasztott generátor
+        leírója + a generikus form aktuális értékei alapján kéri a
+        `MainWindow`-tól a tényleges generálást — a `ParameterPanel` maga
+        sosem hívja a `MeshSource` contractot (ADR-0017,
+        ARCHITECTURE.md 4. szakasz)."""
+        if self.mesh_source_combo is None or self._generator_forms_stack is None:
+            return
+        descriptor = self.mesh_source_combo.currentData()
+        if descriptor is None:
+            return
+        form = self._generator_forms_stack.currentWidget()
+        if not isinstance(form, _GeneratorParameterForm):
+            return
+        self.generate_mesh_requested.emit(descriptor, form.values())
 
     def _build_slicing_group(self) -> QGroupBox:
         group = QGroupBox("Slicing")

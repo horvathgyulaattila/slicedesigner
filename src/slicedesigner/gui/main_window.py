@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from PySide6.QtCore import QObject, Qt, QThread, Signal
 from PySide6.QtGui import QAction, QCloseEvent
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from slicedesigner.engines.backplate_engine import BackplateNormalAxis
 from slicedesigner.engines.exceptions import SliceDesignerError
+from slicedesigner.engines.mesh_import import Mesh
 from slicedesigner.engines.nesting_engine import MaterialDefinition, Nest
 from slicedesigner.gui import app_settings, config_builder, config_loader
 from slicedesigner.gui.examples_dialog import ExampleGenerationWorker, ExamplesDialog
@@ -29,6 +31,7 @@ from slicedesigner.gui.preview_panel import PreviewPanel
 from slicedesigner.gui.run_panel import RunPanel
 from slicedesigner.project import persistence
 from slicedesigner.project.exceptions import PipelineConfigurationError
+from slicedesigner.project.mesh_source_registry import MeshSourceDescriptor, build_mesh
 from slicedesigner.project.pipeline import (
     MeshImportParams,
     PipelineConfig,
@@ -84,6 +87,42 @@ class _PipelineWorker(QThread):
             self.succeeded.emit(result)
 
 
+class _MeshGenerationWorker(QThread):
+    """Háttérszál: egy MeshSource plugin `MeshSourceDescriptor.build()` +
+    `get_mesh()` hívásának elvégzése (ADR-0017), a `_PipelineWorker`
+    mintáját követve.
+
+    `run()` szigorúan **nem** ér hozzá semmilyen widget-hez. A plugin
+    kivétele nem feltétlenül `SliceDesignerError` (a plugin saját, a core
+    számára ismeretlen kivétel-hierarchiával rendelkezhet, l.
+    `plugins/relief_generator/exceptions.py`) — ezért itt, a
+    `discover_mesh_sources()` mintáját követve, szélesen, `Exception`-nel
+    fogunk el, nem csak `SliceDesignerError`-ral (ADR-0015: egy plugin
+    hibája nem veszélyeztetheti a core működését).
+    """
+
+    succeeded = Signal(object)
+    failed = Signal(object)
+
+    def __init__(
+        self,
+        descriptor: MeshSourceDescriptor,
+        values: dict[str, Any],
+        parent: QObject | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._descriptor = descriptor
+        self._values = values
+
+    def run(self) -> None:
+        try:
+            mesh = build_mesh(self._descriptor, self._values)
+        except Exception as error:
+            self.failed.emit(error)
+        else:
+            self.succeeded.emit(mesh)
+
+
 class MainWindow(QMainWindow):
     """A Slice Designer fő ablaka.
 
@@ -102,6 +141,10 @@ class MainWindow(QMainWindow):
         # a `closeEvent()` ugyanúgy védi a bezárást, amíg ez fut, mint
         # `self._worker` esetén.
         self._examples_worker: ExampleGenerationWorker | None = None
+        # A MeshSource plugin generálásának háttérszála (ADR-0017) — a
+        # `closeEvent()` ugyanúgy védi a bezárást, amíg ez fut, mint
+        # `self._worker`/`self._examples_worker` esetén.
+        self._mesh_generation_worker: _MeshGenerationWorker | None = None
         # A legutóbbi sikeres Futtatás Nest-jei — a "DXF Export" gomb
         # (ADR-0009) ezeket exportálja; új Futtatás indításakor `None`-ra
         # áll vissza, és a gomb újra letiltásra kerül.
@@ -119,6 +162,9 @@ class MainWindow(QMainWindow):
         self.run_panel.run_button.clicked.connect(self._on_run_clicked)
         self.run_panel.export_dxf_button.clicked.connect(self._on_export_dxf_clicked)
         self.parameter_panel.mesh_file_selected.connect(self._on_mesh_file_selected)
+        self.parameter_panel.generate_mesh_requested.connect(
+            self._on_generate_mesh_requested
+        )
         # A 3D-előnézet geometria-építése a Futtatás utáni első
         # megjelenítéskor háttérszálon fut (ADR-0011) — a Futtatás-állapot
         # (gomb/menü/folyamatjelző) lezárása (`_finish_run()`) ezért csak
@@ -187,7 +233,11 @@ class MainWindow(QMainWindow):
         engedélyezi a bezárást (`app_settings.save_current_config()` sosem
         dob kivételt).
         """
-        if self._worker is not None or self._examples_worker is not None:
+        if (
+            self._worker is not None
+            or self._examples_worker is not None
+            or self._mesh_generation_worker is not None
+        ):
             self.run_panel.status_log.append(
                 "Futtatás folyamatban — kérem várja meg, amíg befejeződik, "
                 "mielőtt bezárja az alkalmazást."
@@ -393,6 +443,77 @@ class MainWindow(QMainWindow):
         else:
             self.preview_panel.show_mesh(mesh)
 
+    def _on_generate_mesh_requested(
+        self, descriptor: MeshSourceDescriptor, values: dict[str, Any]
+    ) -> None:
+        """A `ParameterPanel.generate_mesh_requested` jelzésre kötött slot
+        (fő szál) — a tényleges generálás egy `_MeshGenerationWorker`
+        háttérszálon fut (ADR-0017), a `_on_run_clicked()` mintáját követve.
+
+        A "Generálás" gomb, a "Futtatás" gomb és a "Fájl" menü két akciója
+        a generálás idejére letiltásra kerül, a kimenettől függetlenül a
+        `_finish_mesh_generation()`-ben áll vissza.
+        """
+        self._set_generate_mesh_button_enabled(False)
+        self.run_panel.run_button.setEnabled(False)
+        self._save_action.setEnabled(False)
+        self._open_action.setEnabled(False)
+        self.run_panel.status_log.append(
+            f"Generálás: {descriptor.display_name} — kérem várjon."
+        )
+
+        self._mesh_generation_worker = _MeshGenerationWorker(descriptor, values, self)
+        self._mesh_generation_worker.succeeded.connect(
+            self._on_mesh_generation_succeeded
+        )
+        self._mesh_generation_worker.failed.connect(self._on_mesh_generation_failed)
+        self._mesh_generation_worker.finished.connect(
+            self._mesh_generation_worker.deleteLater
+        )
+        self._mesh_generation_worker.start()
+
+    def _on_mesh_generation_succeeded(self, mesh: Mesh) -> None:
+        """A `_MeshGenerationWorker.succeeded` jelzésre kötött slot (fő szál).
+
+        A generált `Mesh`-t a `ParameterPanel`-en gyorsítótárazza
+        (`generated_mesh`) — ezt olvassa ki a `config_builder.py` a
+        "Futtatás" gombra kattintáskor, újragenerálás nélkül (l.
+        `pipeline.py::PipelineConfig` docstringje) —, és megjeleníti a
+        3D-előnézetben, a fájl-alapú előnézettel (`_on_mesh_file_selected()`)
+        azonos módon.
+        """
+        self.parameter_panel.generated_mesh = mesh
+        self.run_panel.status_log.append("Generálás sikeres.")
+        self.preview_panel.show_mesh(mesh)
+        self._finish_mesh_generation()
+
+    def _on_mesh_generation_failed(self, error: Exception) -> None:
+        """A `_MeshGenerationWorker.failed` jelzésre kötött slot (fő szál).
+
+        A `ParameterPanel.generated_mesh` `None`-ra áll vissza — egy
+        korábbi sikeres generálás eredménye nem maradhat érvényben egy
+        azóta megváltozott, de sikertelen generálást követően.
+        """
+        self.parameter_panel.generated_mesh = None
+        logger.exception("Hiba a modell generálása során.", exc_info=error)
+        self.run_panel.status_log.append(f"Hiba a generálás során: {error}")
+        self._finish_mesh_generation()
+
+    def _finish_mesh_generation(self) -> None:
+        """A generálás-állapot (gomb, menü) visszaállítása — siker és hiba
+        ágon is ez zárja le, a `_finish_run()` mintáját követve."""
+        self._set_generate_mesh_button_enabled(True)
+        self.run_panel.run_button.setEnabled(True)
+        self._save_action.setEnabled(True)
+        self._open_action.setEnabled(True)
+        self._mesh_generation_worker = None
+
+    def _set_generate_mesh_button_enabled(self, enabled: bool) -> None:
+        """A `ParameterPanel.generate_mesh_button` (ha van telepített
+        MeshSource plugin) be-/kikapcsolása — no-op, ha nincs plugin."""
+        if self.parameter_panel.generate_mesh_button is not None:
+            self.parameter_panel.generate_mesh_button.setEnabled(enabled)
+
     def _on_run_clicked(self) -> None:
         """A teljes pipeline futtatása a jelenlegi widget-állapotokból.
 
@@ -413,6 +534,7 @@ class MainWindow(QMainWindow):
         self._last_nests = None
         self._save_action.setEnabled(False)
         self._open_action.setEnabled(False)
+        self._set_generate_mesh_button_enabled(False)
         self.run_panel.progress_bar.setVisible(True)
 
         try:
@@ -536,6 +658,7 @@ class MainWindow(QMainWindow):
         self.run_panel.run_button.setEnabled(True)
         self._save_action.setEnabled(True)
         self._open_action.setEnabled(True)
+        self._set_generate_mesh_button_enabled(True)
         self.run_panel.progress_bar.setVisible(False)
         self._worker = None
 

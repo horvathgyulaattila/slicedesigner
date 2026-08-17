@@ -12,7 +12,7 @@ A Slice Designer egy desktop alkalmazás, amely 3D modellekből (első körben S
 
 ## Jelenlegi állapot
 
-A projekt a Phase 5 (Integration) lezárásánál tart, a Phase 6 (Release Candidate) folyamatban van: mind a nyolc domain engine, a Project-réteg (pipeline-vezérlés, mentés/betöltés) és a teljes PySide6 GUI elkészült, automatizált teszttel lefedve. A Phase 6-ból a DXF export leválasztása a Futtatásról (ADR-0009), a Dowel automatikus pozíciókeresés teljesítmény-javítása (1. kör), a "végső tesztelés" tétel (valódi felhasználói modelleken, elsősorban "Wobbly Toad" és "face-in-the-brick-wall" STL végzett élő teszteléssel — a tükröződési hibaosztály, a Backplate-csapok DXF-beli szétválása és a Spacer-Dowel furat hiánya is javítva, mindegyik élő teszttel megerősítve), valamint egy második, mérés-vezérelt optimalizálási kör (Numbering Engine, Dowel Engine, GUI-előnézet szálkezelése — ld. `docs/adr/0011-preview-geometry-background-thread.md`, `docs/adr/0012-interactive-preview-render-background-thread.md`) egyaránt lezárult. Ezután a dokumentáció (felhasználói kézikönyv, workflow-leírás, technikai dokumentáció véglegesítése, release dokumentáció) és a példaprojektek (alap, összetett, nesting és teljes referencia példa, validálással) következnek, a ROADMAP Phase 6 6.1–6.9 tételei szerint.
+A projekt mind a nyolc ROADMAP-fázisát (Phase 0–8) lezárta. A nyolc domain engine, a Project-réteg (pipeline-vezérlés, mentés/betöltés) és a teljes PySide6 GUI elkészült, automatizált teszttel lefedve; a felhasználói dokumentáció, a workflow-leírás, a release dokumentáció és a négy reprodukálható példaprojekt (`examples/`) a Phase 6-ban véglegesült; a Phase 7 a GUI-t kiegészítő funkciókkal (2D export-előnézet, "Példák megnyitása", true-shape Nesting, fülsávos paraméter-panel) bővült. A Phase 8 az első opcionális MeshSource plugint, a parametrikus Relief Generatort vezette be (`plugins/relief_generator/`) — a SliceDesigner core plugin nélkül is teljes értékű marad (ADR-0014, ADR-0015), a plugin discovery entry-point alapú (ADR-0017), valódi Qt GUI-integrációval (Forrás-választó, generikus paraméter-form, "Generálás" gomb) a "Mesh Import" fülön.
 
 ## Hogyan érdemes olvasni a dokumentációt
 
@@ -33,7 +33,7 @@ Javasolt sorrend első olvasásra:
 13. `docs/DOMAIN_MODEL.md` – a projekt közös fogalomrendszere
 14. `docs/SPECIFICATION_STANDARD.md` – sablon a funkcionális specifikációkhoz
 
-A `docs/adr/` mappa a projekt architekturális döntéseit (ADR-0001–ADR-0012), a `docs/specifications/` pedig a nyolc engine részletes, jóváhagyott specifikációját tartalmazza.
+A `docs/adr/` mappa a projekt architekturális döntéseit (ADR-0001–ADR-0017), a `docs/specifications/` pedig a nyolc engine részletes, jóváhagyott specifikációját tartalmazza. A `docs/plugins/` az opcionális pluginok (elsőként a Relief Generator, `docs/plugins/relief_generator/`) saját dokumentációját gyűjti; a hozzájuk tartozó forráskód a `plugins/` könyvtárban van, a `src/slicedesigner/` mellett (PROJECT_STRUCTURE.md 10–11. szakasz).
 
 ## Filozófia
 

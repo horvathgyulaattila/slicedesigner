@@ -61,6 +61,8 @@ A ROADMAP nem backlog, nem feladatlista és nem specifikáció. A célja, hogy b
 > **Megjegyzés (2026-08-13, folytatás 22):** A Phase 7 7.4 tétele (GUI-átalakítás) elkészült és a projektgazda élő tesztelése megerősítette: a `ParameterPanel` 8 fülre tagolva (`parameter_panel.py`), a `RunPanel` három elkülönített konténerre bontva (`run_panel.py`: export-beállítások, akció-gombok, log), a `MainWindow` új, kétszintű `QSplitter`-elrendezéssel (`main_window.py`). A `config_builder.py`/`config_loader.py` érintetlen maradt, a kritikus attribútum-invariáns megtartva. Az élő tesztelés három kiegészítő vizuális finomítást hozott, mindegyiket a projektgazda jóváhagyta és élőben megerősítette: a Futtatás gomb zöld kiemelést kapott; a "Szeletelt összeállítás" nézet alap-teste RAL 8003-ra (`#7E4B26`), élkontúrja RAL 8022-re (`#1A1719`) színeződött (a nyers Mesh és a kiemelt szelet nézet változatlan). A teljes tesztkészlet minden körben zöld maradt, `ruff`/`mypy` hibamentes. **Ezzel a Phase 7 mind a négy tétele (7.1–7.4) lezárult.**
 >
 > **Megjegyzés (2026-08-13, folytatás 23):** A `MESH_IMPORT_SPEC.md` `origin_alignment` paramétere egy új értékkel bővült: `min_corner` (a bounding box minimum sarkának origóba tolása). A projektgazda kifejezett kérésére ez NEM önálló ROADMAP-fázis vagy Backlog-tétel — kis, jól körülhatárolt, egy körben lezárt kiegészítés a már meglévő, dokumentáltan nyitva hagyott paraméteren. `mesh_import.py` és `parameter_panel.py` bővült, tesztekkel lefedve.
+>
+> **Megjegyzés (2026-08-17, folytatás 24):** A Phase 8 (Relief Generator Plugin) mind a hét tétele elkészült, review-n átment és a projektgazda élő tesztelésével megerősítve: a MeshSource architekturális döntés (ADR-0014), az opcionális plugin-architektúra (ADR-0015) és a repository-struktúra (ADR-0016) a tervezési szakaszban lezárult; a plugin domain-, geometria- és mesh-generálási modellje (`docs/plugins/relief_generator/`) mind Elfogadva státuszban véglegesítve; az első implementáció (Wave Generator → Height Field → ReliefGeometry → Mesh Generator → Mesh → MeshSource) automatizált teszttel lefedve elkészült; a plugin discovery-mechanizmusa és a hozzá tartozó generikus GUI paraméter-séma (`MeshSourceDescriptor`, ADR-0017) a projektgazda kifejezett kérésére bevezetésre került, ezzel a valódi, szabálysértés nélküli Qt GUI-integráció (Forrás-választó a "Mesh Import" fülön, generikus `ParameterSpec`-form, háttérszálas generálás) megvalósult a `ParameterPanel`/`MainWindow`-ban. A projektgazda élő tesztelése megerősítette, hogy a generált modell hibátlanul végigfut a teljes downstream pipeline-on (Slice Engine-től a Nesting Engine-ig). A Kilépési feltétel teljesült — minden korábban `docs/drafts/relief_generator_plugin/` alatti dokumentum már a tervezési szakaszban átkerült a végleges `docs/plugins/relief_generator/` alá, Elfogadva státusszal. A Phase 8 ezért ✅ Approved-ra került. A projektgazda jelezte, hogy egy jövőbeli fázis fogja tartalmazni a további generátor-típusokat (pl. Heightmap, Image, Vector Generator) — ennek tervezete még nem készült el, a ROADMAP-ban emiatt egyelőre nem nyílik meg új fázis.
 
 ## Állapotjelölések
 
@@ -305,17 +307,17 @@ Kilépési feltétel: mind a négy tételhez jóváhagyott dokumentáció (7.1�
 
 ### Phase 8 – Relief Generator Plugin (opcionális MeshSource plugin)
 
-Állapot: 🟡 In Progress
+Állapot: ✅ Approved
 
 Feladata:
 
-* MeshSource architekturális döntés véglegesítése (a jelenleg `docs/drafts/relief_generator_plugin/` alatti `ADR_MESH_SOURCE.md`, `MESH_SOURCE.md`, `ARCHITECTURE_MESH_SOURCE_CHANGE_PLAN.md`, `DOMAIN_MODEL_CHANGE_PLAN.md` tartalmának átvezetése a végleges `docs/adr/`, `ARCHITECTURE.md`, `DOMAIN_MODEL.md` dokumentumokba);
-* az opcionális plugin-architektúra ADR-ben rögzítése (`ADR_OPTIONAL_MESHSOURCE_PLUGIN.md` alapján);
-* a Relief Generator plugin domain-, geometria- és mesh-generálási modelljének véglegesítése (`RELIEF_GENERATOR_DOMAIN.md`, `Wave Function Model.md`, `RELIEF_GEOMETRY_MODEL.md`, `MESH_GENERATION_MODEL.md`, `PARAMETRIC_RELIEF_GENERATOR.md` alapján), a végleges `docs/plugins/relief_generator/` alá;
-* a plugin repository- és package-struktúrájának véglegesítése (`PLUGIN_REPOSITORY_STRUCTURE_PROPOSAL.md` alapján) és a `plugins/relief_generator/` könyvtár létrehozása;
-* az első implementáció (`IMPLEMENTATION_PLAN.md` alapján): Wave Generator → Height Field → ReliefGeometry → Mesh Generator → Mesh → MeshSource, automatizált teszttel lefedve;
-* a MeshSource pluginok discovery-mechanizmusának és a hozzá tartozó generikus GUI paraméter-sémának (`MeshSourceDescriptor`) bevezetése, a projektgazda kifejezett kérésére, a valódi Qt GUI-integráció előfeltételeként (ADR-0017);
-* élő tesztelés a SliceDesigner meglévő pipeline-jával.
+* ~~MeshSource architekturális döntés véglegesítése (a jelenleg `docs/drafts/relief_generator_plugin/` alatti `ADR_MESH_SOURCE.md`, `MESH_SOURCE.md`, `ARCHITECTURE_MESH_SOURCE_CHANGE_PLAN.md`, `DOMAIN_MODEL_CHANGE_PLAN.md` tartalmának átvezetése a végleges `docs/adr/`, `ARCHITECTURE.md`, `DOMAIN_MODEL.md` dokumentumokba)~~ — kész (ADR-0014, `ARCHITECTURE.md`, `MESH_SOURCE.md`)
+* ~~az opcionális plugin-architektúra ADR-ben rögzítése (`ADR_OPTIONAL_MESHSOURCE_PLUGIN.md` alapján)~~ — kész (ADR-0015)
+* ~~a Relief Generator plugin domain-, geometria- és mesh-generálási modelljének véglegesítése (`RELIEF_GENERATOR_DOMAIN.md`, `Wave Function Model.md`, `RELIEF_GEOMETRY_MODEL.md`, `MESH_GENERATION_MODEL.md`, `PARAMETRIC_RELIEF_GENERATOR.md` alapján), a végleges `docs/plugins/relief_generator/` alá~~ — kész, mind a hat dokumentum Elfogadva státuszban
+* ~~a plugin repository- és package-struktúrájának véglegesítése (`PLUGIN_REPOSITORY_STRUCTURE_PROPOSAL.md` alapján) és a `plugins/relief_generator/` könyvtár létrehozása~~ — kész (ADR-0016)
+* ~~az első implementáció (`IMPLEMENTATION_PLAN.md` alapján): Wave Generator → Height Field → ReliefGeometry → Mesh Generator → Mesh → MeshSource, automatizált teszttel lefedve~~ — kész
+* ~~a MeshSource pluginok discovery-mechanizmusának és a hozzá tartozó generikus GUI paraméter-sémának (`MeshSourceDescriptor`) bevezetése, a projektgazda kifejezett kérésére, a valódi Qt GUI-integráció előfeltételeként (ADR-0017)~~ — kész: entry-point alapú discovery (`mesh_source_registry.py`), valódi Qt GUI-integráció a `ParameterPanel`-ban (Forrás-választó, generikus `ParameterSpec`-form, "Generálás" gomb, háttérszálas `_MeshGenerationWorker`)
+* ~~élő tesztelés a SliceDesigner meglévő pipeline-jával~~ — kész, a projektgazda élő tesztelésével megerősítve: a generált modell hibátlanul végigfut a teljes downstream pipeline-on
 
 Kilépési feltétel: a Relief Generator plugin end-to-end működik (Wave Generator-től a SliceDesigner Slice Engine-jéig), automatizált teszttel lefedve, élő teszttel megerősítve, és minden érintett, korábban `docs/drafts/` alatti dokumentum a végleges helyére került, `Tervezet` helyett `Elfogadva` státusszal.
 

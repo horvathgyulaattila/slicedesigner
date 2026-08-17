@@ -14,7 +14,7 @@ Ez a dokumentum rögzíti a Slice Designer jelenlegi kiadási állapotát: a ver
 
 **Verzió:** `0.1.0` (`pyproject.toml`)
 
-**Állapot:** Release Candidate — a ROADMAP Phase 6 folyamatban van. A domain-logika (mind a nyolc engine), a Project-réteg és a teljes GUI elkészült és automatizált teszttel lefedett; a jelenlegi kiadás a Release Candidate szakasz dokumentációs munkájának része.
+**Állapot:** A ROADMAP mind a nyolc fázisa (Phase 0–8) lezárult. A domain-logika (mind a nyolc engine), a Project-réteg, a teljes GUI és az első opcionális MeshSource plugin (Relief Generator) elkészült, automatizált teszttel lefedve és élő teszttel megerősítve.
 
 ## 2. Rendszerkövetelmények
 
@@ -22,7 +22,7 @@ Ez a dokumentum rögzíti a Slice Designer jelenlegi kiadási állapotát: a ver
 * `uv` csomagkezelő.
 * Fő függőségek (ADR-0006): `PySide6` (GUI), `trimesh` (mesh-kezelés, STL beolvasás), `ezdxf` (DXF írás), `shapely` (2D geometria).
 
-Telepítési és indítási lépések: `USER_GUIDE.md` 1. szakasz.
+Telepítési és indítási lépések: `USER_GUIDE.md` 1. szakasz. Az opcionális Relief Generator plugin (`plugins/relief_generator/`) telepítése önálló, külön lépés — `USER_GUIDE.md` 1. szakasz, "Opcionális plugin" alszakasz.
 
 ## 3. Támogatott platformok
 
@@ -35,7 +35,8 @@ A Slice Designer technológiája (tiszta Python, PySide6, a 2. szakaszban felsor
 * **Nesting — nem "true-shape" elrendezés (ADR-0008):** az elrendezési algoritmus tengelyfüggő befoglaló téglalapokkal dolgozik, nem a tényleges alkatrész-kontúr szerint. Erősen konkáv vagy egyenetlen alakú alkatrészeknél ez rosszabb lapkihasználtságot eredményezhet, mint egy ipari nesting szoftver.
 * **Toldási varrat kézi utómunkát igényel:** a laptól nagyobb alkatrészek toldásakor a varrat pusztán vágásvonal — nincs hozzá automatikusan generált illesztő-geometria (pl. saját furat vagy csap); az összeillesztés a vágás utáni, kézi lépés.
 * **Nincs kényelmi parancssori indító parancs:** a `pyproject.toml` nem tartalmaz `[project.scripts]` bejegyzést — az alkalmazás a `uv run python -m slicedesigner.gui.app` teljes paranccsal indítható, nincs rövidebb `slicedesigner` parancs. (Backlog-javaslatként rögzítve.)
-* **Kizárólag STL bemenet:** a Mesh Import más 3D formátumot (pl. STEP, OBJ) nem fogad el — ez a Vision szerint tudatos, jelenlegi hatókör-döntés, nem hiányosság.
+* **Kizárólag STL bemenet vagy telepített MeshSource plugin:** a Mesh Import más 3D fájlformátumot (pl. STEP, OBJ) nem fogad el; a modell forrása STL-fájl vagy egy telepített, opcionális MeshSource plugin (elsőként a Relief Generator) lehet — ez a Vision szerint tudatos, jelenlegi hatókör-döntés, nem hiányosság.
+* **Plugin által generált modellel rendelkező projekt nem menthető:** ha az aktuális modell egy MeshSource plugin generálásából származik (nem fájlból importált), a projekt "Mentés" funkciója egyelőre elutasítja a mentést, explicit hibaüzenettel (ADR-0017 nyomán hozott projektgazdai döntés) — az ilyen modell csak az aktuális munkamenetben használható. Ismert, dokumentált korlátozás, jövőbeli feloldás lehetséges.
 * **Nincs gépvezérlés:** a program a DXF Export előállításával lezárul; G-code generálás vagy bármilyen gépirányítás szándékosan nem célja (PROJECT_VISION.md).
 
 ## 5. Ismert hibák
@@ -72,4 +73,10 @@ A korábban azonosított, valódi felhasználói modelleken ("Wobbly Toad", "fac
 
 * Felhasználói kézikönyv (`USER_GUIDE.md`), munkafolyamat-leírás (`WORKFLOW.md`), ez a release dokumentáció, valamint a technikai dokumentáció (README, ARCHITECTURE, PROJECT_STRUCTURE, specifikációk) auditált, naprakész állapotban.
 
-*Ismert hiány ebben a kiadásban:* példaprojektek (`examples/`) — ld. ROADMAP Phase 6, 6.5–6.9 tétel.
+*Példaprojektek:* négy, önállóan reprodukálható példaprojekt (`examples/basic_example/`, `complex_example/`, `nesting_example/`, `reference_project/`), mindegyik saját `generate_example.py`-jal (ROADMAP Phase 6, 6.5–6.9 tétel).
+
+*Opcionális pluginok (ROADMAP Phase 8):*
+
+* Első opcionális MeshSource plugin: **Relief Generator** (parametrikus, hullám-alapú modellgenerátor, `plugins/relief_generator/`) — a SliceDesigner core plugin nélkül is teljes értékű marad (ADR-0014, ADR-0015, ADR-0016).
+* Plugin discovery Python entry points alapján, generikus GUI paraméter-sémával (ADR-0017) — valódi Qt-integráció a "Mesh Import" fülön (Forrás-választó, generikus paraméter-form, "Generálás" gomb, háttérszálas generálás).
+* A generált Mesh közvetlenül, fájl-köztes lépés nélkül kerül a slicing pipeline-ba.

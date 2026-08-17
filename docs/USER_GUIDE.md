@@ -32,6 +32,18 @@ uv run python -m slicedesigner.gui.app
 
 Ez megnyitja a Slice Designer főablakát.
 
+**Opcionális plugin — Relief Generator:**
+
+A Slice Designer plugin nélkül is teljes értékű. Az opcionális Relief Generator plugin (parametrikus, hullám-alapú modellgenerátor) külön telepíthető:
+
+```
+uv pip install -e plugins/relief_generator
+```
+
+Ezután az alkalmazás (újra)indításakor a "Mesh Import" fülön megjelenik egy "Forrás" legördülő, "STL fájl" mellett "Relief Generator (Wave)" opcióval — l. 4.1 szakasz.
+
+A plugin eltávolítása: `uv pip uninstall slicedesigner-relief-generator`, vagy egyszerűen `uv sync` (ami a venv-et a lockfile szerinti, plugin nélküli állapotra állítja vissza, mivel a plugin telepítése nem a lockfile-on keresztül történik).
+
 ## 2. A felület áttekintése
 
 A főablak három fő területre oszlik:
@@ -66,6 +78,16 @@ Betöltéskor a rendszer:
 * ellenőrzi, hogy a modell mérete plauzibilis-e (alapértelmezetten 1–3000 mm között bármely tengelyen) — ha nem, **figyelmeztetést** ad (tipikusan rossz mértékegységben exportált STL jele).
 
 **Ami hibát okoz (a betöltés leáll):** a fájl nem található vagy nem olvasható; a tartalom sem ASCII, sem bináris STL-ként nem ismerhető fel; a geometria üres vagy nulla méretű.
+
+### 4.1 Alternatív modellforrás: MeshSource pluginok (opcionális)
+
+Ha van telepített MeshSource plugin (l. 1. szakasz, "Opcionális plugin"), a "Mesh Import" fül tetején megjelenik egy "Forrás" legördülő, "STL fájl" mellett a plugin nevével (pl. "Relief Generator (Wave)").
+
+Plugin kiválasztásakor a fájl-választó helyett a plugin paraméterei jelennek meg, a plugin által megadott formában (pl. Szélesség, Magasság, Hullámhossz). A paraméterek kitöltése után a "Generálás" gomb elindítja a modell előállítását — ez a 3D előnézetben ugyanúgy megjelenik, mint egy importált STL. A generálás egy háttérszálon fut; amíg tart, a "Generálás" és a "Futtatás" gomb, valamint a "Fájl" menü letiltott.
+
+A "Futtatás" gomb ekkor a legutóbb sikeresen generált modellt használja — ha még nem volt sikeres generálás, a Futtatás konfigurációs hibával leáll ("Nincs generált modell — előbb kattints a 'Generálás' gombra."). Paraméter módosítása után újra rá kell kattintani a "Generálás" gombra, hogy az új értékek érvényesüljenek.
+
+**Fontos korlátozás:** egy plugin által generált modellt tartalmazó projekt jelenleg **nem menthető** — l. 8. szakasz.
 
 ## 5. Szeletelési beállítások
 
@@ -179,6 +201,8 @@ A `Fájl` menüben:
 * **Projekt megnyitása...** — egy korábban mentett `.json` visszatöltése; a paraméter-panel az összes widgetet a mentett értékekre állítja.
 
 Ha egy megnyitott projektfájl felülír olyan beállítást, ami eltér attól, ami korábban a felületen volt, a program figyelmeztetést ír az állapotnaplóba ("Figyelem: N beállítás felülírva"). Ha a fájl szerkezetileg hibás vagy értelmezhetetlen, "Konfigurációs hiba" üzenettel jelzi, és a felület állapota változatlan marad.
+
+**Fontos korlátozás:** ha az aktuális modell egy MeshSource plugin generálásából származik (l. 4.1 szakasz), a "Projekt mentése..." elutasítja a mentést, konfigurációs hiba üzenettel — ilyen projekt csak az aktuális munkamenetben használható. Ez ismert, dokumentált korlátozás (`RELEASE_NOTES.md` §4).
 
 ## 9. Beállítások
 
