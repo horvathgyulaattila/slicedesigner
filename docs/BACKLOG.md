@@ -3,7 +3,7 @@
 Státusz: Aktív
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-08-04
-Utolsó módosítás: 2026-08-13
+Utolsó módosítás: 2026-08-19
 Kapcsolódó dokumentumok: [ROADMAP.md](ROADMAP.md)
 
 ## Cél
@@ -12,4 +12,12 @@ Ez a dokumentum azokat a jövőbeli tételeket (funkciókat, optimalizálásokat
 
 ## Tételek
 
-Jelenleg nincs nyitott backlog-tétel. (2026-08-13: az 1. és 3. korábbi tétel a ROADMAP.md Phase 7 hatókörébe került; a 2. tétel véglegesen törölve, a projektgazda döntése alapján nem valósul meg.)
+1. **Alternatív hullámforma-függvények a Wave Generatorban** (2026-08-19) — a Wave Generator jelenleg kizárólag szinusz alapú (`WaveFunction = Sinusoidal`, [WAVE_DOMAIN_MODEL.md](plugins/relief_generator/WAVE_DOMAIN_MODEL.md) 6.2 szakasz). A domainmodell 6.3 szakasza már előre jelzi további WaveFunctionök (Cosine, Triangle, Sawtooth, egyéb periodikus függvény) bevezetésének lehetőségét, a `WaveFunction` absztrakció újratervezése nélkül. Várhatóan alacsony komplexitású bővítés, mivel az absztrakció már készen áll.
+
+2. **Új, Wave Generatortól független Height Field generátor-típusok** (2026-08-19) — procedurális felülettípusok (például faerezet-, Voronoi-, dűne-, holdkráter-szerű felszínek) mint önálló generátorok, nem a Wave Generator hullámforma-variánsaiként. Illeszkedik a `HeightField` már dokumentált, generátor-független szerződéséhez ([WAVE_FUNCTION_MODEL.md](plugins/relief_generator/WAVE_FUNCTION_MODEL.md) 18–20. szakasz), és a ROADMAP Phase 8 lezáró megjegyzésében is jelzett jövőbeli generátor-típusok (Heightmap, Image, Vector Generator) körébe tartozik.
+
+3. **Amplitude distortion mint AmplitudeEnvelope-bővítés** (2026-08-19) — a hullám magasságát (nem a koordinátáit) moduláló, procedurális torzítás (`z' = z × D(x,y)`) fogalmilag az `AmplitudeEnvelope` (9.2) körébe tartozik, nem a koordináta-alapú `Distortion` (9.6) körébe. A [WAVE_DOMAIN_MODEL.md](plugins/relief_generator/WAVE_DOMAIN_MODEL.md) 16.3 szakasza már előre jelzi jövőbeli envelope-típusok (pl. Image, HeightMap) bevezetésének lehetőségét — egy procedurális/noise-alapú envelope logikusan ide tartozna.
+
+4. **További Distortion-típusok a Wave Generatorban** (2026-08-19) — a 9.6 első köre kizárólag a `SwirlDistortion`-t vezeti be ([PROCEDURAL_DISTORTION.md](drafts/relief_generator_wave_extension/PROCEDURAL_DISTORTION.md) 3. szakasz). További, később hozzáadható típusok: sima, folytonos zajmező-alapú koordináta-warp (pl. Perlin/Simplex-szerű), valamint több lépték kombinálása (multi-scale distortion). Várhatóan alacsony komplexitású bővítés, mivel a `Distortion` absztrakció már készen áll.
+
+(2026-08-13: a korábbi három tétel lezárult — az 1. és 3. a ROADMAP.md Phase 7 hatókörébe került, a 2. véglegesen törölve, a projektgazda döntése alapján nem valósul meg.)
