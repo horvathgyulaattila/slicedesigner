@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-08-19
-Utolsó módosítás: 2026-08-19
+Utolsó módosítás: 2026-08-20
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](../../PROJECT_CONSTITUTION.md), [WAVE_FUNCTION_MODEL.md](WAVE_FUNCTION_MODEL.md), [AMPLITUDE_ENVELOPE.md](AMPLITUDE_ENVELOPE.md), [RADIAL_WAVE_SOURCE.md](RADIAL_WAVE_SOURCE.md), [WAVE_WEIGHTING.md](WAVE_WEIGHTING.md), [MULTIPLE_WAVE_SOURCES.md](MULTIPLE_WAVE_SOURCES.md), [PROCEDURAL_DISTORTION.md](PROCEDURAL_DISTORTION.md)
 
 ## 1. Cél
@@ -49,13 +49,11 @@ WaveParameters
       ↓
 WaveSet felépítése
       ↓
-Wave kiértékelés
+Wave kiértékelés (AmplitudeEnvelope-ot is alkalmazva, Wave-komponensenként)
       ↓
 nyers matematikai mező
       ↓
 normalizálás
-      ↓
-AmplitudeEnvelope alkalmazása
       ↓
 HeightField
 ```
@@ -250,7 +248,10 @@ A Wave domain nem köti a koordinátákat automatikusan normalizált (`[0,1]`) t
 
 ## 12. Normalizálás
 
-A WaveSet nyers eredménye: `F(x,y) = Σ f_i(x,y)`.
+A WaveSet nyers eredménye: `F(x,y) = Σ f_i(x,y)`, ahol minden `f_i` — a 4.1 szakasz
+szerint — már tartalmazza saját `AmplitudeEnvelope` komponensének (`M_i(x,y)`) hatását;
+az `AmplitudeEnvelope` Wave-szintű komponens, nem a `WaveSet` egészére alkalmazott
+önálló lépés (l. 8., 16.5 szakasz).
 
 A normalizálás:
 
@@ -258,13 +259,14 @@ A normalizálás:
 N(F) = (F − F_min) / (F_max − F_min)
 ```
 
-A normalizálás az amplitude envelope alkalmazása előtt történik. A végső matematikai felület:
+A végső matematikai felület:
 
 ```text
-H(x,y) = N(F(x,y)) · M(x,y)
+H(x,y) = N(F(x,y))
 ```
 
-Az envelope alkalmazása után **nincs újranormalizálás** — ez kötelező domainviselkedés.
+Nincs a normalizálás utáni további envelope-alkalmazás vagy újranormalizálás — ez
+kötelező domainviselkedés.
 
 ## 13. Degenerált normalizálás
 

@@ -28,6 +28,43 @@ class WaveParametersValueError(ReliefGeneratorError):
     """
 
 
+class WaveValueError(ReliefGeneratorError):
+    """Érvénytelen `Wave` mezőérték.
+
+    Akkor dobódik, ha a `Wave` létrehozásakor az `amplitude` vagy a
+    `wavelength` nem szigorúan pozitív (l. `Wave` osztály docstringje,
+    docs/plugins/relief_generator/WAVE_DOMAIN_MODEL.md 5.1–5.2 szakasz).
+    """
+
+
+class WaveSetValueError(ReliefGeneratorError):
+    """Érvénytelen `WaveSet` állapot.
+
+    Akkor dobódik, ha a `WaveSet` létrehozásakor a `waves` gyűjtemény
+    üres (l. `WaveSet` osztály docstringje,
+    docs/plugins/relief_generator/WAVE_DOMAIN_MODEL.md 9.1 szakasz).
+    """
+
+
+class RadialAmplitudeEnvelopeValueError(ReliefGeneratorError):
+    """Érvénytelen `RadialAmplitudeEnvelope` mezőérték.
+
+    Akkor dobódik, ha a `RadialAmplitudeEnvelope` létrehozásakor a
+    `radius` nem szigorúan pozitív (l. `RadialAmplitudeEnvelope` osztály
+    docstringje, docs/plugins/relief_generator/AMPLITUDE_ENVELOPE.md 2.
+    szakasz).
+    """
+
+
+class GaussianFalloffValueError(ReliefGeneratorError):
+    """Érvénytelen `GaussianFalloff` mezőérték.
+
+    Akkor dobódik, ha a `GaussianFalloff` létrehozásakor a `sharpness`
+    nem szigorúan pozitív (l. `GaussianFalloff` osztály docstringje,
+    docs/plugins/relief_generator/AMPLITUDE_ENVELOPE.md 7., 9. szakasz).
+    """
+
+
 class WaveGenerationError(ReliefGeneratorError):
     """A Wave Generator nem tud érvényes Height Fieldet előállítani.
 

@@ -2,14 +2,25 @@
 
 A determinisztikus komponens-előállítási szabály és a normalizálási
 mintavételezés szó szerinti forrása:
-docs/plugins/relief_generator/WAVE_FUNCTION_MODEL.md 22–23. szakasz.
+docs/plugins/relief_generator/WAVE_FUNCTION_MODEL.md 22–23. szakasz. A
+Phase 9.1 (ROADMAP, WAVE_DOMAIN_MODEL.md) óta a komponensek a
+komponensalapú `Wave`/`WaveSet` modellen keresztül épülnek fel és
+értékelődnek ki (Sinusoidal WaveFunction, DirectionalPropagation,
+UniformEnvelope, weight=1.0) — a megfigyelhető viselkedés a Phase 8-cal
+változatlan (backward compatibility, WAVE_DOMAIN_MODEL.md 15. szakasz).
 """
 
 import math
-from dataclasses import dataclass
 from typing import Callable
 
 from plugins.relief_generator.domain.height_field import HeightField
+from plugins.relief_generator.domain.wave import (
+    DirectionalPropagation,
+    Sinusoidal,
+    UniformEnvelope,
+    Wave,
+    WaveSet,
+)
 from plugins.relief_generator.domain.wave_parameters import WaveParameters
 from plugins.relief_generator.exceptions import WaveGenerationError
 
@@ -53,37 +64,14 @@ független a Mesh Generator felhasználó által vezérelt mintavételi
 felbontásától."""
 
 
-@dataclass(frozen=True)
-class _WaveComponent:
-    """Egy már kiszámított, konkrét hullámkomponens.
-
-    Belső implementációs részlet: a `WaveGenerator.generate` egyszer
-    számítja ki a komponenseket, majd a visszaadott `HeightField` ezeket
-    a már lezárt (closure-ben rögzített) értékeket használja minden
-    egyes lekérdezéskor.
-
-    Attributes:
-        amplitude: a komponens amplitúdója (`A_i`).
-        wavelength: a komponens hullámhossza (`λ_i`).
-        direction_rad: a komponens iránya radiánban (`θ_i`, már fokból
-            konvertálva).
-        phase: a komponens fázisa radiánban, a `[0, 2π)` intervallumból
-            (`φ_i`).
-    """
-
-    amplitude: float
-    wavelength: float
-    direction_rad: float
-    phase: float
-
-
 class WaveGenerator:
     """Directional Wave Generator: hullámkomponensekből épített Height Field.
 
     A `generate()` a `WaveParameters`-ből determinisztikusan, `random`
     modul vagy bármilyen implicit véletlenszám-állapot nélkül állítja
-    elő a hullámkomponenseket (WAVE_FUNCTION_MODEL.md 22. szakasz), majd
-    ezek összegét normalizálja egy `[0,1]`-be eső `HeightField`-dé
+    elő a hullámkomponenseket `Wave` objektumokként, egy `WaveSet`-be
+    gyűjtve (WAVE_FUNCTION_MODEL.md 22. szakasz; WAVE_DOMAIN_MODEL.md),
+    majd ezek összegét normalizálja egy `[0,1]`-be eső `HeightField`-dé
     (WAVE_FUNCTION_MODEL.md 23. szakasz).
     """
 
@@ -91,7 +79,7 @@ class WaveGenerator:
         """Előállít egy normalizált `HeightField`-et a megadott paraméterekből.
 
         A komponensek egyszer kerülnek kiszámításra ezen hívás során; a
-        visszaadott `HeightField` ezeket a már kiszámított komponenseket
+        visszaadott `HeightField` ezeket a már felépített `WaveSet`-et
         lezáró (closure) függvényt csomagol be, nem számítja újra őket
         lekérdezésenként.
 
@@ -110,8 +98,8 @@ class WaveGenerator:
                 megegyezik). Érvényes `WaveParameters` mellett elméletileg
                 nem fordulhat elő, mivel `amplitude > 0` validált.
         """
-        components = self._build_components(parameters)
-        raw_height_function = self._make_raw_height_function(components)
+        wave_set = self._build_wave_set(parameters)
+        raw_height_function = self._make_raw_height_function(wave_set)
 
         raw_min, raw_max = self._sample_extrema(raw_height_function)
         if raw_max == raw_min:
@@ -127,8 +115,14 @@ class WaveGenerator:
 
         return HeightField(normalized_height_function)
 
-    def _build_components(self, parameters: WaveParameters) -> list[_WaveComponent]:
-        """Kiszámítja a determinisztikus komponenslistát.
+    def _build_wave_set(self, parameters: WaveParameters) -> WaveSet:
+        """Kiszámítja a determinisztikus komponenslistát `WaveSet`-ként.
+
+        Minden komponens `Sinusoidal` `WaveFunction`-nel,
+        `DirectionalPropagation`-nel, `UniformEnvelope`-pal és
+        `weight=1.0`-val épül — ez biztosítja a Phase 8 azonos
+        konfigurációjú viselkedésével való egyezést
+        (WAVE_DOMAIN_MODEL.md 15. szakasz).
 
         Lásd: WAVE_FUNCTION_MODEL.md 22. szakasz.
         """
@@ -137,7 +131,7 @@ class WaveGenerator:
         )
         spread = parameters.direction_spread
 
-        components: list[_WaveComponent] = []
+        waves: list[Wave] = []
         for i in range(component_count):
             amplitude = (
                 parameters.amplitude
@@ -164,36 +158,29 @@ class WaveGenerator:
             )
             phase = (i * GOLDEN_ANGLE_RAD + phase_jitter) % (2.0 * math.pi)
 
-            components.append(
-                _WaveComponent(
+            waves.append(
+                Wave(
                     amplitude=amplitude,
                     wavelength=wavelength,
-                    direction_rad=math.radians(direction_deg),
                     phase=phase,
+                    function=Sinusoidal(),
+                    propagation=DirectionalPropagation(
+                        direction_rad=math.radians(direction_deg)
+                    ),
+                    envelope=UniformEnvelope(),
+                    weight=1.0,
                 )
             )
-        return components
+        return WaveSet(waves=tuple(waves))
 
     def _make_raw_height_function(
-        self, components: list[_WaveComponent]
+        self, wave_set: WaveSet
     ) -> Callable[[float, float], float]:
-        """Becsomagolja a komponensek összegét egy nyers `F(x,y)` függvénybe.
+        """Becsomagolja a `WaveSet` kiértékelését egy nyers `F(x,y)` függvénybe.
 
-        Lásd: WAVE_FUNCTION_MODEL.md 2. szakasz.
+        Lásd: WAVE_DOMAIN_MODEL.md 9.1 szakasz.
         """
-
-        def raw_height_function(x: float, y: float) -> float:
-            total = 0.0
-            for component in components:
-                projection = x * math.cos(component.direction_rad) + y * math.sin(
-                    component.direction_rad
-                )
-                total += component.amplitude * math.sin(
-                    2.0 * math.pi / component.wavelength * projection + component.phase
-                )
-            return total
-
-        return raw_height_function
+        return wave_set.evaluate_raw
 
     def _sample_extrema(
         self, raw_height_function: Callable[[float, float], float]
