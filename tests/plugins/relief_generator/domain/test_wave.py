@@ -139,3 +139,48 @@ def test_waveset_evaluate_raw_is_deterministic() -> None:
     second = wave_set.evaluate_raw(0.33, 0.77)
 
     assert first == second
+
+
+def test_wave_distortion_defaults_to_none() -> None:
+    wave = _make_wave()
+
+    assert wave.distortion is None
+
+
+class _TrackingEnvelope:
+    """Teszt-envelope, amely rögzíti a legutóbbi hívás koordinátáit."""
+
+    def __init__(self) -> None:
+        self.last_call: tuple[float, float] | None = None
+
+    def amplitude_factor(self, x: float, y: float) -> float:
+        self.last_call = (x, y)
+        return 1.0
+
+
+def test_wave_distortion_warps_propagation_input_but_not_envelope() -> None:
+    # Egy egyszerű, nem-identitás teszt-Distortion: eltolja a
+    # koordinátákat egy fix vektorral. Ez megváltoztatja a
+    # PropagationModel bemenetét, de nem az AmplitudeEnvelope-ét
+    # (PROCEDURAL_DISTORTION.md 2.1 szakasz képlete).
+    class _ShiftDistortion:
+        def warp(self, x: float, y: float) -> tuple[float, float]:
+            return (x + 0.37, y)
+
+    tracking_envelope = _TrackingEnvelope()
+    wave = _make_wave(
+        propagation=DirectionalPropagation(direction_rad=0.0),
+        envelope=tracking_envelope,
+        distortion=_ShiftDistortion(),
+    )
+
+    x, y = 0.2, 0.5
+    distorted_result = wave.evaluate(x, y)
+    undistorted_wave = _make_wave(
+        propagation=DirectionalPropagation(direction_rad=0.0),
+        envelope=tracking_envelope,
+    )
+    undistorted_result = undistorted_wave.evaluate(x, y)
+
+    assert distorted_result != pytest.approx(undistorted_result)
+    assert tracking_envelope.last_call == (x, y)

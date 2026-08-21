@@ -65,6 +65,27 @@ class GaussianFalloffValueError(ReliefGeneratorError):
     """
 
 
+class WaveSourceSpecValueError(ReliefGeneratorError):
+    """Érvénytelen `WaveSourceSpec` mezőérték.
+
+    Akkor dobódik, ha a `WaveSourceSpec` létrehozásakor az `amplitude`
+    vagy a `wavelength` nem szigorúan pozitív, vagy a típus-specifikus
+    mezők (`direction`, illetve `source_x`/`source_y`) nem a
+    `source_type`-nak megfelelően vannak kitöltve (l. `WaveSourceSpec`
+    osztály docstringje,
+    docs/plugins/relief_generator/MULTIPLE_WAVE_SOURCES.md 4. szakasz).
+    """
+
+
+class SwirlDistortionValueError(ReliefGeneratorError):
+    """Érvénytelen `SwirlDistortion` mezőérték.
+
+    Akkor dobódik, ha a `SwirlDistortion` létrehozásakor a `radius` nem
+    szigorúan pozitív (l. `SwirlDistortion` osztály docstringje,
+    docs/plugins/relief_generator/PROCEDURAL_DISTORTION.md 3. szakasz).
+    """
+
+
 class WaveGenerationError(ReliefGeneratorError):
     """A Wave Generator nem tud érvényes Height Fieldet előállítani.
 

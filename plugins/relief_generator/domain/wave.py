@@ -122,12 +122,35 @@ class UniformEnvelope:
         return 1.0
 
 
+class Distortion(Protocol):
+    """A hullám fázispozíció-számítása előtt alkalmazott koordináta-
+    torzítást meghatározó, opcionális komponens.
+
+    Lásd: PROCEDURAL_DISTORTION.md 2.1 szakasz. A `Distortion` kizárólag
+    a `PropagationModel` bemenetét torzítja — az `AmplitudeEnvelope`
+    továbbra is az eredeti, torzítatlan `(x,y)` koordinátákat kapja.
+    """
+
+    def warp(self, x: float, y: float) -> tuple[float, float]:
+        """Torzítja a koordinátákat a `PropagationModel` kiértékelése előtt.
+
+        Args:
+            x: X-koordináta.
+            y: Y-koordináta.
+
+        Returns:
+            A torzított `(x', y')` koordináták.
+        """
+        ...
+
+
 @dataclass(frozen=True)
 class Wave:
     """Egy konkrét matematikai hullámkomponens.
 
-    Lásd: WAVE_DOMAIN_MODEL.md 4. szakasz. Az összes mező kötelező (nincs
-    alapérték a `weight` kivételével), a létrehozott példány immutábilis
+    Lásd: WAVE_DOMAIN_MODEL.md 4. szakasz, PROCEDURAL_DISTORTION.md 2.
+    szakasz. Az összes mező kötelező (nincs alapérték a `weight` és a
+    `distortion` kivételével), a létrehozott példány immutábilis
     (`frozen=True`). Az `amplitude`/`wavelength` érvényességét a
     `__post_init__` fail-fast ellenőrzi.
 
@@ -144,6 +167,11 @@ class Wave:
         weight: a komponens hozzájárulása a `WaveSet` eredményéhez
             (`w_i`). Bármely véges valós érték lehet. Alapértelmezett:
             `1.0`.
+        distortion: a `propagation` kiértékelése előtt alkalmazott,
+            opcionális koordináta-torzítás (`Dist_i`). Alapértelmezett:
+            `None` — ekkor a `propagation` az eredeti `(x,y)`
+            koordinátákat kapja (identitás-transzformáció), ami a
+            Phase 8/9.1–9.5 viselkedést biztosítja.
     """
 
     amplitude: float
@@ -153,6 +181,7 @@ class Wave:
     propagation: PropagationModel
     envelope: AmplitudeEnvelope
     weight: float = 1.0
+    distortion: Distortion | None = None
 
     def __post_init__(self) -> None:
         """Fail-fast validálja az `amplitude`/`wavelength` mezőket.
@@ -175,8 +204,12 @@ class Wave:
     def evaluate(self, x: float, y: float) -> float:
         """Kiértékeli a komponens hozzájárulását egy adott koordinátán.
 
-        Lásd: WAVE_DOMAIN_MODEL.md 4.1 szakasz:
-        `f_i(x,y) = w_i · A_i · M_i(x,y) · W_i(P_i(x,y), λ_i, φ_i)`.
+        Lásd: WAVE_DOMAIN_MODEL.md 4.1 szakasz és PROCEDURAL_DISTORTION.md
+        2.1 szakasz:
+        `f_i(x,y) = w_i · A_i · M_i(x,y) · W_i(P_i(Dist_i(x,y)), λ_i, φ_i)`.
+        A `distortion` (ha meg van adva) kizárólag a `propagation`
+        bemenetét torzítja; az `envelope` az eredeti, torzítatlan
+        `(x,y)`-t kapja.
 
         Args:
             x: X-koordináta.
@@ -185,7 +218,11 @@ class Wave:
         Returns:
             A komponens `f_i(x,y)` hozzájárulása.
         """
-        phase_position = self.propagation.phase_position(x, y)
+        if self.distortion is None:
+            propagation_x, propagation_y = x, y
+        else:
+            propagation_x, propagation_y = self.distortion.warp(x, y)
+        phase_position = self.propagation.phase_position(propagation_x, propagation_y)
         shape = self.function.evaluate(phase_position, self.wavelength, self.phase)
         return (
             self.weight * self.amplitude * self.envelope.amplitude_factor(x, y) * shape
