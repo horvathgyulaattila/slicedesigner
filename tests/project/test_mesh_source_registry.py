@@ -13,6 +13,26 @@ from slicedesigner.project.mesh_source_registry import (
 )
 
 
+def test_parameter_spec_item_schema_defaults_to_empty_tuple() -> None:
+    spec = ParameterSpec(name="width", label="Szélesség", type="float", default=1.0)
+
+    assert spec.item_schema == ()
+
+
+def test_parameter_spec_list_type_carries_item_schema() -> None:
+    item_schema = (
+        ParameterSpec(name="x", label="X", type="float", default=0.0),
+        ParameterSpec(name="y", label="Y", type="float", default=0.0),
+    )
+
+    spec = ParameterSpec(
+        name="points", label="Pontok", type="list", default=[], item_schema=item_schema
+    )
+
+    assert spec.type == "list"
+    assert spec.item_schema == item_schema
+
+
 def _make_entry_point(name: str, factory: Any) -> MagicMock:
     entry_point = MagicMock()
     entry_point.name = name

@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 _ENTRY_POINT_GROUP = "slicedesigner.mesh_sources"
 
-ParameterType = Literal["float", "int", "str", "enum"]
+ParameterType = Literal["float", "int", "str", "enum", "list"]
 
 
 @dataclass(frozen=True)
@@ -34,12 +34,18 @@ class ParameterSpec:
         name: a paraméter programozott azonosítója (a `MeshSourceDescriptor.build()`
             `values` dict-jének kulcsa).
         label: a paraméter felhasználó felé megjelenő felirata.
-        type: a widget-típus kiválasztásához ("float"/"int"/"str"/"enum").
-        default: a paraméter alapértéke.
+        type: a widget-típus kiválasztásához
+            ("float"/"int"/"str"/"enum"/"list").
+        default: a paraméter alapértéke. `"list"` típusnál nem használt — a
+            lista mindig üresen indul.
         minimum: opcionális alsó korlát ("float"/"int" típusnál értelmezett).
         maximum: opcionális felső korlát ("float"/"int" típusnál értelmezett).
         unit: opcionális mértékegység-felirat (pl. "mm", "°").
         choices: "enum" típusnál a választható értékek — más típusnál üres tuple.
+        item_schema: `"list"` típusnál egyetlen listaelem mezőit leíró,
+            kizárólag skalár (nem `"list"` típusú) `ParameterSpec`-ekből
+            álló tuple — nincs beágyazott lista (ADR-0017 kiegészítés,
+            2026-08-21). Más típusnál üres tuple.
     """
 
     name: str
@@ -50,6 +56,7 @@ class ParameterSpec:
     maximum: float | None = None
     unit: str | None = None
     choices: tuple[str, ...] = ()
+    item_schema: tuple["ParameterSpec", ...] = ()
 
 
 @dataclass(frozen=True)

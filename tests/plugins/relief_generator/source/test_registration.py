@@ -5,7 +5,15 @@ Lásd: `plugins/relief_generator/source/registration.py`,
 `plugins/relief_generator/pyproject.toml`.
 """
 
+from plugins.relief_generator.domain.amplitude_envelope import (
+    GaussianFalloff,
+    RadialAmplitudeEnvelope,
+)
+from plugins.relief_generator.domain.procedural_distortion import SwirlDistortion
 from plugins.relief_generator.source.registration import (
+    _build_distortion,
+    _build_envelope,
+    _build_sources,
     build_mesh_source_descriptor,
 )
 from plugins.relief_generator.source.relief_generator_mesh_source import (
@@ -24,6 +32,18 @@ _EXPECTED_PARAMETER_NAMES = (
     "direction_spread",
     "irregularity",
     "complexity",
+    "envelope_type",
+    "envelope_center_x",
+    "envelope_center_y",
+    "envelope_radius",
+    "envelope_falloff",
+    "envelope_sharpness",
+    "distortion_type",
+    "distortion_center_x",
+    "distortion_center_y",
+    "distortion_radius",
+    "distortion_strength",
+    "sources",
 )
 
 
@@ -50,6 +70,141 @@ def test_build_with_default_values_returns_working_mesh_source() -> None:
 
     assert isinstance(mesh_source, ReliefGeneratorMeshSource)
     mesh = mesh_source.get_mesh()
+    assert mesh.is_valid is True
+    assert len(mesh.vertices) > 0
+    assert len(mesh.triangles) > 0
+
+
+# --- envelope/distortion/sources bekötése (9.7.d) ---
+
+
+def test_build_envelope_returns_none_when_type_is_none() -> None:
+    assert _build_envelope({"envelope_type": "None"}) is None
+
+
+def test_build_envelope_returns_radial_amplitude_envelope() -> None:
+    values = {
+        "envelope_type": "Radial",
+        "envelope_center_x": 0.2,
+        "envelope_center_y": 0.6,
+        "envelope_radius": 0.4,
+        "envelope_falloff": "Linear",
+        "envelope_sharpness": 1.0,
+    }
+
+    envelope = _build_envelope(values)
+
+    assert isinstance(envelope, RadialAmplitudeEnvelope)
+    assert envelope.center_x == 0.2
+    assert envelope.center_y == 0.6
+    assert envelope.radius == 0.4
+
+
+def test_build_envelope_gaussian_falloff_uses_sharpness() -> None:
+    values = {
+        "envelope_type": "Radial",
+        "envelope_center_x": 0.5,
+        "envelope_center_y": 0.5,
+        "envelope_radius": 0.3,
+        "envelope_falloff": "Gaussian",
+        "envelope_sharpness": 2.5,
+    }
+
+    envelope = _build_envelope(values)
+
+    assert isinstance(envelope, RadialAmplitudeEnvelope)
+    assert isinstance(envelope.falloff, GaussianFalloff)
+    assert envelope.falloff.sharpness == 2.5
+
+
+def test_build_distortion_returns_none_when_type_is_none() -> None:
+    assert _build_distortion({"distortion_type": "None"}) is None
+
+
+def test_build_distortion_returns_swirl_distortion() -> None:
+    values = {
+        "distortion_type": "Swirl",
+        "distortion_center_x": 0.4,
+        "distortion_center_y": 0.6,
+        "distortion_radius": 0.2,
+        "distortion_strength": 1.8,
+    }
+
+    distortion = _build_distortion(values)
+
+    assert isinstance(distortion, SwirlDistortion)
+    assert distortion.strength == 1.8
+
+
+def test_build_sources_returns_empty_tuple_for_empty_list() -> None:
+    assert _build_sources([]) == ()
+
+
+def test_build_sources_directional_omits_radial_fields() -> None:
+    sources = _build_sources(
+        [
+            {
+                "source_type": "Directional",
+                "amplitude": 0.4,
+                "wavelength": 0.2,
+                "phase": 0.0,
+                "weight": 1.0,
+                "direction": 90.0,
+                "source_x": 0.3,
+                "source_y": 0.7,
+            }
+        ]
+    )
+
+    assert len(sources) == 1
+    assert sources[0].direction == 90.0
+    assert sources[0].source_x is None
+    assert sources[0].source_y is None
+
+
+def test_build_sources_radial_omits_direction() -> None:
+    sources = _build_sources(
+        [
+            {
+                "source_type": "Radial",
+                "amplitude": 0.4,
+                "wavelength": 0.2,
+                "phase": 0.0,
+                "weight": 1.0,
+                "direction": 90.0,
+                "source_x": 0.3,
+                "source_y": 0.7,
+            }
+        ]
+    )
+
+    assert len(sources) == 1
+    assert sources[0].source_x == 0.3
+    assert sources[0].source_y == 0.7
+    assert sources[0].direction is None
+
+
+def test_build_with_full_phase9_configuration_returns_working_mesh_source() -> None:
+    descriptor = build_mesh_source_descriptor()
+    values = {spec.name: spec.default for spec in descriptor.parameters}
+    values["envelope_type"] = "Radial"
+    values["distortion_type"] = "Swirl"
+    values["sources"] = [
+        {
+            "source_type": "Radial",
+            "amplitude": 0.3,
+            "wavelength": 0.15,
+            "phase": 0.0,
+            "weight": 1.0,
+            "direction": 0.0,
+            "source_x": 0.2,
+            "source_y": 0.8,
+        }
+    ]
+
+    mesh_source = descriptor.build(values)
+    mesh = mesh_source.get_mesh()
+
     assert mesh.is_valid is True
     assert len(mesh.vertices) > 0
     assert len(mesh.triangles) > 0

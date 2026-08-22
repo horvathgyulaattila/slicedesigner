@@ -25,6 +25,16 @@ if _REPO_ROOT in sys.path:
     sys.path.remove(_REPO_ROOT)
 sys.path.insert(0, _REPO_ROOT)
 
+from plugins.relief_generator.domain.amplitude_envelope import (  # noqa: E402
+    LinearFalloff,
+    RadialAmplitudeEnvelope,
+)
+from plugins.relief_generator.domain.multiple_wave_sources import (  # noqa: E402
+    WaveSourceSpec,
+)
+from plugins.relief_generator.domain.procedural_distortion import (  # noqa: E402
+    SwirlDistortion,
+)
 from plugins.relief_generator.domain.wave_parameters import WaveParameters  # noqa: E402
 from plugins.relief_generator.exceptions import WaveParametersValueError  # noqa: E402
 
@@ -94,3 +104,80 @@ def test_out_of_range_field_raises(field: str, invalid_value: float) -> None:
 
     with pytest.raises(WaveParametersValueError):
         WaveParameters(**kwargs)
+
+
+def test_envelope_defaults_to_none() -> None:
+    parameters = WaveParameters(**_VALID_KWARGS)
+
+    assert parameters.envelope is None
+
+
+def test_distortion_defaults_to_none() -> None:
+    parameters = WaveParameters(**_VALID_KWARGS)
+
+    assert parameters.distortion is None
+
+
+def test_sources_defaults_to_empty_tuple() -> None:
+    parameters = WaveParameters(**_VALID_KWARGS)
+
+    assert parameters.sources == ()
+
+
+def test_envelope_accepts_radial_amplitude_envelope() -> None:
+    envelope = RadialAmplitudeEnvelope(
+        center_x=0.5, center_y=0.5, radius=0.5, falloff=LinearFalloff()
+    )
+
+    parameters = WaveParameters(
+        wavelength=0.3,
+        amplitude=1.0,
+        direction=45.0,
+        direction_spread=20.0,
+        irregularity=0.5,
+        complexity=0.5,
+        envelope=envelope,
+    )
+
+    assert parameters.envelope is envelope
+
+
+def test_distortion_accepts_swirl_distortion() -> None:
+    distortion = SwirlDistortion(center_x=0.5, center_y=0.5, radius=0.3, strength=1.0)
+
+    parameters = WaveParameters(
+        wavelength=0.3,
+        amplitude=1.0,
+        direction=45.0,
+        direction_spread=20.0,
+        irregularity=0.5,
+        complexity=0.5,
+        distortion=distortion,
+    )
+
+    assert parameters.distortion is distortion
+
+
+def test_sources_accepts_wave_source_spec_tuple() -> None:
+    sources = (
+        WaveSourceSpec(
+            source_type="Radial",
+            amplitude=1.0,
+            wavelength=0.4,
+            phase=0.0,
+            source_x=0.5,
+            source_y=0.5,
+        ),
+    )
+
+    parameters = WaveParameters(
+        wavelength=0.3,
+        amplitude=1.0,
+        direction=45.0,
+        direction_spread=20.0,
+        irregularity=0.5,
+        complexity=0.5,
+        sources=sources,
+    )
+
+    assert parameters.sources == sources

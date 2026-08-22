@@ -67,3 +67,31 @@ A döntés további részletei:
 * Az `ARCHITECTURE.md` a meglévő ADR-0014/ADR-0015/ADR-0016 hivatkozások mellé egy új bekezdést kap.
 * A `ROADMAP.md` Phase 8 hatóköre bővül a discovery-mechanizmussal — ezt a projektgazda kifejezett kérése indokolja (Projekt végrehajtási szabály), nem AI-kezdeményezésű optimalizáció.
 * Jelen ADR nem dönt a `ParameterSpec` pontos mezőlistájáról, a Qt widget-típus-leképezésről, a `MeshSourceDescriptor` pontos Python-modulhelyéről, sem a `pyproject.toml` entry-point csoport pontos szintaxisáról — ezeket a rá épülő implementációs promptok rendezik.
+
+## Kiegészítés (2026-08-21): `list` típus
+
+A ROADMAP Phase 9.7.a a `ParameterSpec`-et egy ötödik típussal, `"list"`-tel bővítette
+— ezt a jelen ADR "Következmények" szakasza kifejezetten előre jelezte ("a
+`ParameterSpec` pontos mezőlistájáról... a rá épülő implementációs promptok
+rendezik"), ezért ez kiegészítés, nem új ADR.
+
+Az igényt a Phase 9 (Wave Extension) 9.4 tétele (`WaveSourceSpec` explicit,
+felhasználó által megadható hullámforrás-lista,
+`docs/plugins/relief_generator/MULTIPLE_WAVE_SOURCES.md`) vetette fel: egy változó
+hosszúságú, strukturált rekordokból álló lista, amire az eredeti négy skalár típus
+nem elegendő.
+
+A `list` típusú `ParameterSpec` egy új `item_schema: tuple[ParameterSpec, ...]` mezőt
+kap, amely egyetlen listaelem mezőit írja le — kizárólag skalár (nem `list` típusú)
+`ParameterSpec`-ekből. **Nincs beágyazott lista** — ugyanaz az elv, mint a
+`WaveSet`/`WaveSourceSpec` domain rétegben (`WAVE_DOMAIN_MODEL.md` 17. szakasz, "nincs
+nested `WaveSet` struktúra").
+
+A core GUI generikus form-builderje (`src/slicedesigner/gui/parameter_panel.py`) egy új
+`_ListParameterWidget` osztályt kapott: soronként egy, az `item_schema` alapján
+generikusan épített mini-form (a meglévő `_GeneratorParameterForm` újrafelhasználásával,
+rekurzívan), "Hozzáadás"/"Eltávolítás" gombokkal. A `values()` a sorok
+`item_schema`-kulcsú dict-jeinek listáját adja vissza.
+
+A meglévő négy típus (`float`/`int`/`str`/`enum`) és minden meglévő `_PARAMETERS`
+tuple (jelenleg: relief_generator) változatlan — a `list` tisztán additív bővítés.

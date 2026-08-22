@@ -8,13 +8,21 @@ komponensalapú `Wave`/`WaveSet` modellen keresztül épülnek fel és
 értékelődnek ki (Sinusoidal WaveFunction, DirectionalPropagation,
 UniformEnvelope, weight=1.0) — a megfigyelhető viselkedés a Phase 8-cal
 változatlan (backward compatibility, WAVE_DOMAIN_MODEL.md 15. szakasz).
+A Phase 9.7.c óta a `WaveParameters.envelope`/`distortion`/`sources`
+mezői (ha meg vannak adva) ténylegesen befolyásolják az automatikusan
+generált komponenseket, illetve a végső `WaveSet`-et — l.
+docs/plugins/relief_generator/WAVE_EXTENSION_IMPLEMENTATION_PLAN.md.
 """
 
 import math
 from typing import Callable
 
 from plugins.relief_generator.domain.height_field import HeightField
+from plugins.relief_generator.domain.multiple_wave_sources import (
+    build_combined_wave_set,
+)
 from plugins.relief_generator.domain.wave import (
+    AmplitudeEnvelope,
     DirectionalPropagation,
     Sinusoidal,
     UniformEnvelope,
@@ -116,13 +124,22 @@ class WaveGenerator:
         return HeightField(normalized_height_function)
 
     def _build_wave_set(self, parameters: WaveParameters) -> WaveSet:
-        """Kiszámítja a determinisztikus komponenslistát `WaveSet`-ként.
+        """Kiszámítja a determinisztikus komponenslistát, majd az explicit
+        forráslistával összefűzve épít `WaveSet`-et.
 
-        Minden komponens `Sinusoidal` `WaveFunction`-nel,
-        `DirectionalPropagation`-nel, `UniformEnvelope`-pal és
-        `weight=1.0`-val épül — ez biztosítja a Phase 8 azonos
-        konfigurációjú viselkedésével való egyezést
-        (WAVE_DOMAIN_MODEL.md 15. szakasz).
+        Minden automatikusan generált komponens `Sinusoidal`
+        `WaveFunction`-nel, `DirectionalPropagation`-nel és
+        `weight=1.0`-val épül. Az `envelope` a `parameters.envelope`, ha
+        meg van adva — ekkor egységesen minden automatikusan generált
+        komponensre alkalmazódik —, különben `UniformEnvelope()`; ez
+        biztosítja a Phase 8 azonos konfigurációjú viselkedésével való
+        egyezést, ha `envelope=None` (WAVE_DOMAIN_MODEL.md 15. szakasz).
+        A `distortion` hasonlóan a `parameters.distortion` (lehet
+        `None`). A `parameters.sources` az automatikusan generált
+        komponensek UTÁN kerül a végső `WaveSet`-be
+        (MULTIPLE_WAVE_SOURCES.md 5. szakasz sorrendje); üres `sources`
+        esetén ez pontosan a korábbi, Phase 8/9.1–9.6-kompatibilis
+        eredményt adja.
 
         Lásd: WAVE_FUNCTION_MODEL.md 22. szakasz.
         """
@@ -130,6 +147,11 @@ class WaveGenerator:
             parameters.complexity * (MAX_COMPONENTS - MIN_COMPONENTS)
         )
         spread = parameters.direction_spread
+        envelope: AmplitudeEnvelope = (
+            parameters.envelope
+            if parameters.envelope is not None
+            else UniformEnvelope()
+        )
 
         waves: list[Wave] = []
         for i in range(component_count):
@@ -167,11 +189,12 @@ class WaveGenerator:
                     propagation=DirectionalPropagation(
                         direction_rad=math.radians(direction_deg)
                     ),
-                    envelope=UniformEnvelope(),
+                    envelope=envelope,
                     weight=1.0,
+                    distortion=parameters.distortion,
                 )
             )
-        return WaveSet(waves=tuple(waves))
+        return build_combined_wave_set(tuple(waves), parameters.sources)
 
     def _make_raw_height_function(
         self, wave_set: WaveSet

@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-08-19
-Utolsó módosítás: 2026-08-19
+Utolsó módosítás: 2026-08-21
 Kapcsolódó dokumentumok: [WAVE_DOMAIN_MODEL.md](WAVE_DOMAIN_MODEL.md), [RADIAL_WAVE_SOURCE.md](RADIAL_WAVE_SOURCE.md)
 
 ## 1. Cél
@@ -39,7 +39,7 @@ A `WaveSourceSpec` a [WAVE_DOMAIN_MODEL.md](WAVE_DOMAIN_MODEL.md) invariánsai s
 Minden `WaveSourceSpec`-ből előálló `Wave`:
 
 * `WaveFunction` = Sinusoidal (rögzített, a 9.1 hatókörének megfelelően — ld. `WAVE_DOMAIN_MODEL.md` 6.3 szakasz, illetve a `BACKLOG.md` 1. tétele a jövőbeli alternatívákról);
-* `AmplitudeEnvelope` = Uniform (rögzített — a forrásonkénti envelope-testreszabás jelenleg nem része a 9.4 hatókörének, ld. 7. szakasz).
+* `AmplitudeEnvelope`/`Distortion` = a `WaveParameters.envelope`/`distortion` — ugyanaz a megosztott, opcionális komponens, amit az automatikusan generált komponensek is kapnak (2026-08-21-i kiegészítés, ld. 9. szakasz). Forrásonkénti, egymástól eltérő envelope-/distortion-testreszabás továbbra sem lehetséges — ez marad hatókörön kívül (ld. 7. szakasz).
 
 ## 5. WaveSet felépítése
 
@@ -72,11 +72,22 @@ Ebből következik, hogy két, egymással azonos centerű `Radial` forrás **ér
 
 Nem része a 9.4-nek:
 
-* forrásonkénti `AmplitudeEnvelope`-testreszabás (minden explicit forrás Uniform envelope-ot kap);
-* forrásonkénti `Distortion` (9.6)-testreszabás;
-* az automatikus generálás kikapcsolása vagy "kizárólag explicit" mód bevezetése;
+* forrásonkénti, egymástól eltérő `AmplitudeEnvelope`-testreszabás (minden komponens — automatikus és explicit egyaránt — ugyanazt a megosztott envelope-ot kapja, ld. 4. és 9. szakasz);
+* forrásonkénti, egymástól eltérő `Distortion`-testreszabás (ugyanaz az elv, ld. 4. és 9. szakasz);
 * GUI-implementáció — a `WaveSourceSpec` lista felhasználói szerkesztése a meglévő, deklaratív paraméter-séma mechanizmuson (`MeshSourceDescriptor`/`ParameterSpec`, ADR-0017) keresztül valósul majd meg, ami nem igényel a 9.4 hatókörében saját tervezést.
+
+Az automatikus generálás kikapcsolhatósága ("kizárólag explicit" mód) a 9. szakaszban rögzített, 2026-08-21-i kiegészítés tárgya — ez már RÉSZE a domain-contractnak.
 
 ## 8. Phase 8 / 9.1 backward compatibility
 
 Ha az explicit forráslista üres (ez az alapértelmezett állapot), a viselkedés pontosan megegyezik a Phase 8 / 9.1 viselkedésével — kizárólag az automatikus, `WaveParameters`-alapú generálás fut. Ez a 9.4 validációjának kötelező része.
+
+## 9. Kiegészítés (2026-08-21): megosztott envelope/distortion és `include_automatic`
+
+Élő teszteléskor (ROADMAP Phase 9.7.f) kiderült, hogy a 4. és 7. szakaszban eredetileg rögzített két korlátozás — (a) az explicit forrásokból épülő `Wave`-ek mindig `Uniform` envelope-ot és semmilyen `Distortion`-t nem kapnak, (b) az automatikus generálás nem kapcsolható ki — együttesen olyan konfigurációt eredményeztek, ahol a felhasználó nem tudott kizárólag az explicit forrásokból álló reliefet létrehozni, és nem tudta ezekre alkalmazni a globálisan beállított envelope-ot/torzítást sem. A projektgazda ezt a két korlátozást felülbírálta:
+
+**Megosztott envelope/distortion.** A `WaveParameters.envelope`/`distortion` (9.7.b/c) mostantól **minden** `Wave`-re — az automatikusan generáltakra ÉS az explicit `WaveSourceSpec`-ekből épülőkre egyaránt — alkalmazódik, ugyanazzal a megosztott példánnyal. Ez a 4. szakasz korábbi "AmplitudeEnvelope = Uniform (rögzített)" kikötését hatálytalanítja. Forrásonkénti (egymástól eltérő) envelope-/distortion-testreszabás továbbra sem lehetséges — ez a korlátozás változatlan (ld. 7. szakasz).
+
+**`include_automatic`.** A `WaveParameters` egy új, opcionális `include_automatic: bool = True` mezőt kap. Ha `False`, a `WaveGenerator` **nem** épít automatikus komponenseket — a végső `WaveSet` kizárólag az explicit forráslistából áll. Ha `include_automatic=False` ÉS `sources` üres, a `WaveSet.__post_init__` már meglévő fail-fast hibáját (`WaveSetValueError`) dobja — ez szándékos, nem igényel külön kezelést.
+
+**Backward compatibility.** `include_automatic` alapértéke `True` — minden meglévő, ezt a mezőt nem megadó konstrukció (a teljes 9.1–9.7 tesztkészlet) változatlan viselkedést kap.

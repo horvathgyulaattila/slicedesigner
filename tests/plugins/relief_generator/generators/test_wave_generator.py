@@ -124,3 +124,108 @@ def test_generate_matches_analytic_single_component_formula() -> None:
     expected = raw / amplitude
 
     assert height_field.query(x, y) == pytest.approx(expected, abs=1e-9)
+
+
+# --- WaveParameters.envelope/distortion/sources tényleges bekötése (9.7.c) ---
+
+_BASE_KWARGS = {
+    "wavelength": 4.0,
+    "amplitude": 2.0,
+    "direction": 0.0,
+    "direction_spread": 0.0,
+    "irregularity": 0.0,
+    "complexity": 0.0,
+}
+
+
+def test_generate_applies_shared_envelope_to_automatic_components() -> None:
+    from plugins.relief_generator.domain.amplitude_envelope import (
+        LinearFalloff,
+        RadialAmplitudeEnvelope,
+    )
+
+    envelope = RadialAmplitudeEnvelope(
+        center_x=0.0, center_y=0.0, radius=0.3, falloff=LinearFalloff()
+    )
+    without_envelope = WaveGenerator().generate(WaveParameters(**_BASE_KWARGS))
+    with_envelope = WaveGenerator().generate(
+        WaveParameters(**_BASE_KWARGS, envelope=envelope)
+    )
+
+    x, y = 0.9, 0.9
+    assert with_envelope.query(x, y) != pytest.approx(without_envelope.query(x, y))
+
+
+def test_generate_applies_shared_distortion_to_automatic_components() -> None:
+    from plugins.relief_generator.domain.procedural_distortion import SwirlDistortion
+
+    distortion = SwirlDistortion(center_x=0.0, center_y=0.0, radius=5.0, strength=1.5)
+    without_distortion = WaveGenerator().generate(WaveParameters(**_BASE_KWARGS))
+    with_distortion = WaveGenerator().generate(
+        WaveParameters(**_BASE_KWARGS, distortion=distortion)
+    )
+
+    x, y = 0.5, 0.3
+    assert with_distortion.query(x, y) != pytest.approx(without_distortion.query(x, y))
+
+
+def test_generate_appends_explicit_sources_after_automatic_components() -> None:
+    from plugins.relief_generator.domain.multiple_wave_sources import WaveSourceSpec
+
+    source = WaveSourceSpec(
+        source_type="Radial",
+        amplitude=5.0,
+        wavelength=0.2,
+        phase=0.0,
+        source_x=0.5,
+        source_y=0.5,
+    )
+    without_source = WaveGenerator().generate(WaveParameters(**_BASE_KWARGS))
+    with_source = WaveGenerator().generate(
+        WaveParameters(**_BASE_KWARGS, sources=(source,))
+    )
+
+    x, y = 0.5, 0.5
+    assert with_source.query(x, y) != pytest.approx(without_source.query(x, y))
+
+
+def test_generate_is_deterministic_with_envelope_distortion_and_sources() -> None:
+    from plugins.relief_generator.domain.amplitude_envelope import (
+        LinearFalloff,
+        RadialAmplitudeEnvelope,
+    )
+    from plugins.relief_generator.domain.multiple_wave_sources import WaveSourceSpec
+    from plugins.relief_generator.domain.procedural_distortion import SwirlDistortion
+
+    parameters = WaveParameters(
+        wavelength=0.25,
+        amplitude=1.0,
+        direction=35.0,
+        direction_spread=40.0,
+        irregularity=0.6,
+        complexity=0.7,
+        envelope=RadialAmplitudeEnvelope(
+            center_x=0.5, center_y=0.5, radius=0.6, falloff=LinearFalloff()
+        ),
+        distortion=SwirlDistortion(
+            center_x=0.5, center_y=0.5, radius=0.4, strength=0.8
+        ),
+        sources=(
+            WaveSourceSpec(
+                source_type="Radial",
+                amplitude=0.5,
+                wavelength=0.3,
+                phase=0.1,
+                source_x=0.2,
+                source_y=0.8,
+            ),
+        ),
+    )
+    generator = WaveGenerator()
+
+    first = generator.generate(parameters)
+    second = generator.generate(parameters)
+
+    sample_points = [(0.0, 0.0), (0.2, 0.9), (0.5, 0.5), (0.9, 0.2), (1.0, 1.0)]
+    for x, y in sample_points:
+        assert first.query(x, y) == second.query(x, y)

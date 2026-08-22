@@ -2,10 +2,15 @@
 
 Lásd: docs/plugins/relief_generator/WAVE_FUNCTION_MODEL.md 4–9. szakasz,
 docs/plugins/relief_generator/PARAMETRIC_RELIEF_GENERATOR.md 11. szakasz.
+A Phase 9 (Wave Extension) óta három opcionális mező is bővíti: `envelope`,
+`distortion`, `sources` — l. docs/plugins/relief_generator/
+WAVE_EXTENSION_IMPLEMENTATION_PLAN.md, ROADMAP Phase 9.7.b.
 """
 
 from dataclasses import dataclass
 
+from plugins.relief_generator.domain.multiple_wave_sources import WaveSourceSpec
+from plugins.relief_generator.domain.wave import AmplitudeEnvelope, Distortion
 from plugins.relief_generator.exceptions import WaveParametersValueError
 
 _DIRECTION_MIN = 0.0
@@ -20,10 +25,14 @@ _UNIT_INTERVAL_MAX = 1.0
 class WaveParameters:
     """A Directional Wave Generator felhasználó által megadott bemeneti paraméterei.
 
-    Lásd: WAVE_FUNCTION_MODEL.md 4–9. szakasz. Mind a hat mező kötelező
-    (nincs alapérték), a létrehozott példány pedig immutábilis
-    (`frozen=True`). A mezők érvényességét a `__post_init__` fail-fast
-    ellenőrzi.
+    Lásd: WAVE_FUNCTION_MODEL.md 4–9. szakasz. A hat alapmező kötelező
+    (nincs alapérték), a három Phase 9 mező (`envelope`, `distortion`,
+    `sources`) opcionális. A létrehozott példány immutábilis
+    (`frozen=True`). A hat alapmező érvényességét a `__post_init__`
+    fail-fast ellenőrzi; az `envelope`/`distortion`/`sources` elemei
+    saját maguk (`RadialAmplitudeEnvelope`, `SwirlDistortion`,
+    `WaveSourceSpec` stb. `__post_init__`-je) validálnak, itt nincs
+    duplikált ellenőrzés.
 
     Attributes:
         wavelength: a domináns komponens hullámhossza, normalizált
@@ -40,6 +49,21 @@ class WaveParameters:
             zárt intervallumból.
         complexity: a hullámkomponensek számát meghatározó paraméter, a
             `[0.0, 1.0]` zárt intervallumból.
+        envelope: opcionális, az összes automatikusan generált komponensre
+            egységesen alkalmazott `AmplitudeEnvelope` (pl.
+            `RadialAmplitudeEnvelope`). Alapértelmezett: `None` — ekkor
+            minden automatikusan generált komponens `UniformEnvelope`-ot
+            kap, a Phase 8/9.1–9.6 viselkedésnek megfelelően.
+        distortion: opcionális, az összes automatikusan generált
+            komponensre egységesen alkalmazott `Distortion` (pl.
+            `SwirlDistortion`). Alapértelmezett: `None` — ekkor egyik
+            automatikusan generált komponens sem torzul, a Phase
+            8/9.1–9.6 viselkedésnek megfelelően.
+        sources: opcionális, explicit hullámforrás-specifikációk (l.
+            `WaveSourceSpec`, MULTIPLE_WAVE_SOURCES.md), amelyek az
+            automatikusan generált komponensek UTÁN kerülnek a végső
+            `WaveSet`-be. Alapértelmezett: üres tuple — ekkor a Phase
+            8/9.1–9.6 viselkedés érvényes (nincs explicit forrás).
     """
 
     wavelength: float
@@ -48,13 +72,20 @@ class WaveParameters:
     direction_spread: float
     irregularity: float
     complexity: float
+    envelope: AmplitudeEnvelope | None = None
+    distortion: Distortion | None = None
+    sources: tuple[WaveSourceSpec, ...] = ()
 
     def __post_init__(self) -> None:
-        """Fail-fast validálja az összes mezőt a dokumentált tartományok szerint.
+        """Fail-fast validálja a hat alapmezőt a dokumentált tartományok szerint.
+
+        Az `envelope`/`distortion`/`sources` elemei saját maguk
+        validálnak a létrehozásukkor — itt nincs duplikált ellenőrzés.
 
         Raises:
-            WaveParametersValueError: ha bármelyik mező kívül esik a
-                osztály-docstringben dokumentált érvényességi tartományán.
+            WaveParametersValueError: ha a hat alapmező bármelyike kívül
+                esik a osztály-docstringben dokumentált érvényességi
+                tartományán.
         """
         if not self.wavelength > 0.0:
             raise WaveParametersValueError(

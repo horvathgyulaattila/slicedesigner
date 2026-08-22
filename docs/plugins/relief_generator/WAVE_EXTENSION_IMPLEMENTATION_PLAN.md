@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-08-20
-Utolsó módosítás: 2026-08-20
+Utolsó módosítás: 2026-08-21
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](../../PROJECT_CONSTITUTION.md), [WAVE_DOMAIN_MODEL.md](WAVE_DOMAIN_MODEL.md), [AMPLITUDE_ENVELOPE.md](AMPLITUDE_ENVELOPE.md), [RADIAL_WAVE_SOURCE.md](RADIAL_WAVE_SOURCE.md), [WAVE_WEIGHTING.md](WAVE_WEIGHTING.md), [MULTIPLE_WAVE_SOURCES.md](MULTIPLE_WAVE_SOURCES.md), [PROCEDURAL_DISTORTION.md](PROCEDURAL_DISTORTION.md), [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
 ## 1. Cél
@@ -214,3 +214,19 @@ WAVE_EXTENSION_IMPLEMENTATION_PLAN.md
 A dokumentum nem tartalmaz új architekturális döntést; a hat, már Elfogadva
 domain-contractból vezeti le a végrehajtás sorrendjét és a tesztelési stratégiát, a
 Phase 8 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) mintáját követve.
+
+## 11. Kiegészítés (2026-08-21): 9.7.g — megosztott envelope/distortion és `include_automatic`
+
+A ROADMAP Phase 9.7.f (élő tesztelés) során a projektgazda felülbírálta a
+[MULTIPLE_WAVE_SOURCES.md](MULTIPLE_WAVE_SOURCES.md) 9. szakaszában rögzített két
+korábbi korlátozást — l. ott a részletes indoklást. A hátralévő implementációs lépés
+(9.7.g) ezt a két, egymással szorosan összefüggő módosítást valósítja meg:
+
+* `WaveParameters` új `include_automatic: bool = True` mezője;
+* `plugins/relief_generator/domain/multiple_wave_sources.py` `build_wave`/
+  `build_combined_wave_set` opcionális `envelope`/`distortion` paraméterrel bővül
+  (alapértelmezett `None` → változatlan, Phase 8/9.1–9.7 viselkedés);
+* `WaveGenerator._build_wave_set` mindkettőt bekötő módosítása.
+
+Mindhárom mező/paraméter alapértéke a jelenlegi viselkedést őrzi meg — a teljes
+9.1–9.7 tesztkészlet módosítás nélkül zöld marad.

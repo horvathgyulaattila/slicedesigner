@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (  # noqa: E402  # noqa: E402
     QComboBox,
     QDoubleSpinBox,
     QLineEdit,
+    QPushButton,
     QScrollArea,
     QSpinBox,
     QTabWidget,
@@ -305,3 +306,87 @@ def test_generate_button_emits_requested_signal_with_descriptor_and_values(
         "name": "wave",
         "mode": "b",
     }
+
+
+# --- "list" típusú ParameterSpec (ADR-0017 kiegészítés) ---
+
+
+def _make_item_schema() -> tuple[ParameterSpec, ...]:
+    return (
+        ParameterSpec(name="x", label="X", type="float", default=0.0, unit="mm"),
+        ParameterSpec(name="label", label="Címke", type="str", default=""),
+    )
+
+
+def test_list_widget_starts_with_no_rows(qtbot: QtBot) -> None:
+    from slicedesigner.gui.parameter_panel import _ListParameterWidget
+
+    widget = _ListParameterWidget(_make_item_schema())
+    qtbot.addWidget(widget)
+
+    assert widget.values() == []
+
+
+def test_list_widget_add_row_creates_item_schema_widgets(qtbot: QtBot) -> None:
+    from slicedesigner.gui.parameter_panel import _ListParameterWidget
+
+    widget = _ListParameterWidget(_make_item_schema())
+    qtbot.addWidget(widget)
+
+    widget._add_row()
+
+    assert widget.values() == [{"x": pytest.approx(0.0), "label": ""}]
+
+
+def test_list_widget_add_two_rows_preserves_order(qtbot: QtBot) -> None:
+    from slicedesigner.gui.parameter_panel import _ListParameterWidget
+
+    widget = _ListParameterWidget(_make_item_schema())
+    qtbot.addWidget(widget)
+
+    widget._add_row()
+    widget._rows[0]._float_widgets["x"].setValue(1.5)
+    widget._add_row()
+    widget._rows[1]._float_widgets["x"].setValue(2.5)
+
+    assert widget.values() == [
+        {"x": pytest.approx(1.5), "label": ""},
+        {"x": pytest.approx(2.5), "label": ""},
+    ]
+
+
+def test_list_widget_remove_row(qtbot: QtBot) -> None:
+    from slicedesigner.gui.parameter_panel import _ListParameterWidget
+
+    widget = _ListParameterWidget(_make_item_schema())
+    qtbot.addWidget(widget)
+    widget._add_row()
+    widget._rows[0]._float_widgets["x"].setValue(9.0)
+    widget._add_row()
+    widget._rows[1]._float_widgets["x"].setValue(1.0)
+
+    first_row_container = widget._rows_layout.itemAt(0).widget()
+    remove_button = first_row_container.findChildren(QPushButton)[-1]
+    remove_button.click()
+
+    assert widget.values() == [{"x": pytest.approx(1.0), "label": ""}]
+
+
+def test_generator_parameter_form_handles_list_type(qtbot: QtBot) -> None:
+    parameters = (
+        ParameterSpec(
+            name="sources",
+            label="Források",
+            type="list",
+            default=[],
+            item_schema=_make_item_schema(),
+        ),
+    )
+    form = _GeneratorParameterForm(parameters)
+    qtbot.addWidget(form)
+
+    assert form.values() == {"sources": []}
+
+    from slicedesigner.gui.parameter_panel import _ListParameterWidget
+
+    assert isinstance(form._list_widgets["sources"], _ListParameterWidget)

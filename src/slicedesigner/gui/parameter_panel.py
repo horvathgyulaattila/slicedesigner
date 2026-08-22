@@ -140,6 +140,7 @@ class _GeneratorParameterForm(QWidget):
         self._int_widgets: dict[str, QSpinBox] = {}
         self._str_widgets: dict[str, QLineEdit] = {}
         self._enum_widgets: dict[str, QComboBox] = {}
+        self._list_widgets: dict[str, _ListParameterWidget] = {}
 
         for spec in parameters:
             widget = self._build_widget(spec)
@@ -175,6 +176,10 @@ class _GeneratorParameterForm(QWidget):
             line_edit = QLineEdit(str(spec.default))
             self._str_widgets[spec.name] = line_edit
             return line_edit
+        if spec.type == "list":
+            list_widget = _ListParameterWidget(spec.item_schema)
+            self._list_widgets[spec.name] = list_widget
+            return list_widget
         combo = QComboBox()
         for choice in spec.choices:
             combo.addItem(choice, choice)
@@ -195,7 +200,68 @@ class _GeneratorParameterForm(QWidget):
             result[name] = str_widget.text()
         for name, combo_widget in self._enum_widgets.items():
             result[name] = combo_widget.currentData()
+        for name, list_widget in self._list_widgets.items():
+            result[name] = list_widget.values()
         return result
+
+
+class _ListParameterWidget(QWidget):
+    """`type="list"` `ParameterSpec`-hez: soronként egy, az `item_schema`
+    alapján generikusan épített mini-form, "Hozzáadás"/"Eltávolítás"
+    gombokkal (ADR-0017 kiegészítés, 2026-08-21).
+
+    Minden sor önmagában egy `_GeneratorParameterForm`, az `item_schema`-t
+    kapva `parameters`-ként — a beágyazott lista (`item_schema`-n belüli
+    `type="list"`) nem támogatott.
+    """
+
+    def __init__(
+        self,
+        item_schema: tuple[ParameterSpec, ...],
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._item_schema = item_schema
+        self._rows: list[_GeneratorParameterForm] = []
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self._rows_layout = QVBoxLayout()
+        layout.addLayout(self._rows_layout)
+
+        add_button = QPushButton("Hozzáadás")
+        add_button.clicked.connect(self._on_add_clicked)
+        layout.addWidget(add_button)
+
+    def _on_add_clicked(self) -> None:
+        self._add_row()
+
+    def _add_row(self) -> None:
+        row_container = QWidget()
+        row_layout = QHBoxLayout(row_container)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+
+        row_form = _GeneratorParameterForm(self._item_schema)
+        row_layout.addWidget(row_form)
+
+        remove_button = QPushButton("Eltávolítás")
+        row_layout.addWidget(remove_button)
+
+        self._rows_layout.addWidget(row_container)
+        self._rows.append(row_form)
+
+        def _on_remove_clicked() -> None:
+            self._rows_layout.removeWidget(row_container)
+            row_container.deleteLater()
+            self._rows.remove(row_form)
+
+        remove_button.clicked.connect(_on_remove_clicked)
+
+    def values(self) -> list[dict[str, Any]]:
+        """Az egyes sorok `item_schema`-kulcsú `values()`-einek listája,
+        a sorok hozzáadási sorrendjében."""
+        return [row.values() for row in self._rows]
 
 
 def _make_mm_spinbox(
