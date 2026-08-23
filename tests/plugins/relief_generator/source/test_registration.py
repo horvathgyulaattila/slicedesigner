@@ -133,6 +133,20 @@ def test_sources_item_schema_has_function_field_without_group() -> None:
     assert function_spec.choices == ("Sinusoidal", "Triangle", "Sawtooth", "Square")
 
 
+def test_sources_item_schema_has_irregularity_and_complexity_fields() -> None:
+    descriptor = build_mesh_source_descriptor()
+
+    sources_spec = next(s for s in descriptor.parameters if s.name == "sources")
+    item_names = {item.name: item for item in sources_spec.item_schema}
+
+    for name in ("irregularity", "complexity"):
+        item = item_names[name]
+        assert item.group is None
+        assert item.default == 0.0
+        assert item.minimum == 0.0
+        assert item.maximum == 1.0
+
+
 def test_build_with_default_values_returns_working_mesh_source() -> None:
     descriptor = build_mesh_source_descriptor()
     values = {spec.name: spec.default for spec in descriptor.parameters}
@@ -221,6 +235,8 @@ def test_build_sources_directional_omits_radial_fields() -> None:
                 "phase": 0.0,
                 "weight": 1.0,
                 "function": "Sinusoidal",
+                "irregularity": 0.0,
+                "complexity": 0.0,
                 "direction": 90.0,
                 "source_x": 0.3,
                 "source_y": 0.7,
@@ -244,6 +260,8 @@ def test_build_sources_radial_omits_direction() -> None:
                 "phase": 0.0,
                 "weight": 1.0,
                 "function": "Sinusoidal",
+                "irregularity": 0.0,
+                "complexity": 0.0,
                 "direction": 90.0,
                 "source_x": 0.3,
                 "source_y": 0.7,
@@ -267,6 +285,8 @@ def test_build_sources_uses_function_field() -> None:
                 "phase": 0.0,
                 "weight": 1.0,
                 "function": "Square",
+                "irregularity": 0.0,
+                "complexity": 0.0,
                 "direction": 90.0,
                 "source_x": 0.3,
                 "source_y": 0.7,
@@ -276,6 +296,30 @@ def test_build_sources_uses_function_field() -> None:
 
     assert len(sources) == 1
     assert sources[0].function == "Square"
+
+
+def test_build_sources_uses_irregularity_and_complexity_fields() -> None:
+    sources = _build_sources(
+        [
+            {
+                "source_type": "Directional",
+                "amplitude": 0.4,
+                "wavelength": 0.2,
+                "phase": 0.0,
+                "weight": 1.0,
+                "function": "Sinusoidal",
+                "irregularity": 0.6,
+                "complexity": 0.8,
+                "direction": 90.0,
+                "source_x": 0.3,
+                "source_y": 0.7,
+            }
+        ]
+    )
+
+    assert len(sources) == 1
+    assert sources[0].irregularity == 0.6
+    assert sources[0].complexity == 0.8
 
 
 def test_build_with_full_phase9_configuration_returns_working_mesh_source() -> None:
@@ -291,6 +335,8 @@ def test_build_with_full_phase9_configuration_returns_working_mesh_source() -> N
             "phase": 0.0,
             "weight": 1.0,
             "function": "Sinusoidal",
+            "irregularity": 0.0,
+            "complexity": 0.0,
             "direction": 0.0,
             "source_x": 0.2,
             "source_y": 0.8,
@@ -331,6 +377,8 @@ def test_build_with_include_automatic_nem_and_sources_returns_working_mesh_sourc
             "phase": 0.0,
             "weight": 1.0,
             "function": "Sinusoidal",
+            "irregularity": 0.0,
+            "complexity": 0.0,
             "direction": 0.0,
             "source_x": 0.5,
             "source_y": 0.5,

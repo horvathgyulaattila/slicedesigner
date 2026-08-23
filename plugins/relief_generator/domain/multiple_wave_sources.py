@@ -2,10 +2,10 @@
 hullámforrás-lista (ROADMAP Phase 9.4: Multiple wave sources).
 
 A `WaveSourceSpec` egy explicit hullámforrás specifikációja; a
-`build_wave` egyetlen specifikációból épít konkrét `Wave`-et; a
-`build_combined_wave_set` az automatikus generálásból származó
-`Wave`-lista és az explicit forráslista determinisztikus összefűzéséből
-épít végső `WaveSet`-et.
+`build_waves` egyetlen specifikációból épít egy vagy több, koncentrikusan
+rétegzett `Wave`-et; a `build_combined_wave_set` az automatikus generálásból
+származó `Wave`-lista és az explicit forráslista determinisztikus
+összefűzéséből épít végső `WaveSet`-et.
 
 Lásd: docs/plugins/relief_generator/MULTIPLE_WAVE_SOURCES.md. A tényleges
 `WaveParameters`/`WaveGenerator`/GUI-bekötés a ROADMAP 9.7 (Integration)
@@ -19,6 +19,16 @@ import math
 from dataclasses import dataclass
 from typing import Literal, cast
 
+from plugins.relief_generator.domain.deterministic_components import (
+    AMPLITUDE_JITTER_SCALE,
+    GOLDEN_ANGLE_RAD,
+    LACUNARITY,
+    PERSISTENCE,
+    PHASE_JITTER_SCALE,
+    WAVELENGTH_JITTER_SCALE,
+    component_count,
+    rho,
+)
 from plugins.relief_generator.domain.radial_wave_source import RadialPropagation
 from plugins.relief_generator.domain.wave import (
     AmplitudeEnvelope,
@@ -58,6 +68,23 @@ class WaveSourceSpec:
             egyedileg állítható, az `amplitude`/`wavelength`/`phase`
             mintájára — nem az `envelope`/`distortion`-hoz hasonlóan
             megosztott (ROADMAP Phase 10.2).
+        irregularity: a koncentrikus rétegek amplitúdójának,
+            hullámhosszának és fázisának determinisztikus szórási
+            mértéke, a `[0.0, 1.0]` zárt intervallumból. Alapértelmezett:
+            `0.0` (Phase 9.4–10.2-kompatibilis viselkedés). Ugyanaz a
+            szemantika, mint a `WaveParameters.irregularity`-nél
+            (WAVE_FUNCTION_MODEL.md 22. szakasz), de irány-/pozíció-
+            szórás nélkül — l. `complexity`.
+        complexity: a koncentrikus rétegek számát meghatározó paraméter,
+            a `[0.0, 1.0]` zárt intervallumból. Alapértelmezett: `0.0`
+            (egyetlen réteg — Phase 9.4–10.2-kompatibilis viselkedés).
+            `complexity=0.0` esetén a forrás pontosan egy `Wave`-et ad
+            (`build_waves()` egyelemű tuple-t ad vissza); nagyobb érték
+            esetén több, csökkenő amplitúdójú/hullámhosszú réteg épül,
+            UGYANAZZAL a `direction`/`source_x`/`source_y` propagation-nel
+            minden rétegen (koncentrikus rétegzés, ROADMAP Phase 10.3) —
+            ellentétben a `WaveParameters`-alapú automatikus generálással,
+            ahol a rétegek iránya is szóródik.
         direction: `source_type="Directional"` esetén kötelező, a hullám
             iránya fokban. `source_type="Radial"` esetén meg nem adható
             (`None`).
@@ -75,6 +102,8 @@ class WaveSourceSpec:
     phase: float
     weight: float = 1.0
     function: WaveFunctionName = "Sinusoidal"
+    irregularity: float = 0.0
+    complexity: float = 0.0
     direction: float | None = None
     source_x: float | None = None
     source_y: float | None = None
@@ -97,6 +126,16 @@ class WaveSourceSpec:
                 "A wavelength-nek szigorúan pozitívnak kell lennie, "
                 f"kapott érték: {self.wavelength}"
             )
+        if not 0.0 <= self.irregularity <= 1.0:
+            raise WaveSourceSpecValueError(
+                "Az irregularity-nek a [0.0, 1.0] zárt intervallumba kell "
+                f"esnie, kapott érték: {self.irregularity}"
+            )
+        if not 0.0 <= self.complexity <= 1.0:
+            raise WaveSourceSpecValueError(
+                "A complexity-nek a [0.0, 1.0] zárt intervallumba kell "
+                f"esnie, kapott érték: {self.complexity}"
+            )
         if self.source_type == "Directional":
             if self.direction is None:
                 raise WaveSourceSpecValueError(
@@ -117,19 +156,27 @@ class WaveSourceSpec:
                 )
 
 
-def build_wave(
+def build_waves(
     spec: WaveSourceSpec,
     envelope: AmplitudeEnvelope | None = None,
     distortion: Distortion | None = None,
-) -> Wave:
-    """Egyetlen `WaveSourceSpec`-ből konkrét `Wave`-et épít.
+) -> tuple[Wave, ...]:
+    """Egyetlen `WaveSourceSpec`-ből egy vagy több, koncentrikusan rétegzett
+    `Wave`-et épít.
 
     Lásd: MULTIPLE_WAVE_SOURCES.md 4. szakasz: minden `WaveSourceSpec`-ből
-    előálló `Wave` `WaveFunction`-je a `spec.function` szerint épül
-    (ROADMAP Phase 10.2 óta forrásonként választható, korábban rögzítetten
-    Sinusoidal volt). Az `envelope`/`distortion` a hívó (`WaveGenerator`)
-    által megosztott, opcionális komponens — 2026-08-21-i kiegészítés, ld.
-    MULTIPLE_WAVE_SOURCES.md 9. szakasz.
+    előálló réteg `WaveFunction`-je a `spec.function` szerint épül
+    (ROADMAP Phase 10.2). A `spec.complexity`/`spec.irregularity`
+    (ROADMAP Phase 10.3) a WAVE_FUNCTION_MODEL.md 22. szakaszának
+    determinisztikus szabályát használja — az irány-/pozíció-szórás
+    (`θ_i`) rész NÉLKÜL: minden réteg UGYANAZT a `propagation`-t kapja
+    (koncentrikus rétegzés), kizárólag `amplitude`/`wavelength`/`phase`
+    csökken/jitterel rétegenként. `spec.complexity=0.0` (alapértelmezett)
+    esetén egyetlen réteg épül, `spec.phase`-ből kiindulva, jitter
+    nélkül — ez a Phase 9.4–10.2-kompatibilis viselkedés. Az
+    `envelope`/`distortion` a hívó (`WaveGenerator`) által megosztott,
+    opcionális komponens, MINDEN rétegre alkalmazva — 2026-08-21-i
+    kiegészítés, ld. MULTIPLE_WAVE_SOURCES.md 9. szakasz.
 
     Args:
         spec: az explicit hullámforrás specifikációja.
@@ -140,7 +187,8 @@ def build_wave(
             nincs torzítás.
 
     Returns:
-        A specifikációnak megfelelő `Wave`.
+        A specifikációnak megfelelő rétegek `Wave`-jei, `i=0..n-1`
+        sorrendben (`n = component_count(spec.complexity)`).
     """
     propagation: DirectionalPropagation | RadialPropagation
     if spec.source_type == "Directional":
@@ -151,17 +199,39 @@ def build_wave(
         propagation = RadialPropagation(
             source_x=cast(float, spec.source_x), source_y=cast(float, spec.source_y)
         )
+    resolved_envelope = envelope if envelope is not None else UniformEnvelope()
 
-    return Wave(
-        amplitude=spec.amplitude,
-        wavelength=spec.wavelength,
-        phase=spec.phase,
-        function=build_wave_function(spec.function),
-        propagation=propagation,
-        envelope=envelope if envelope is not None else UniformEnvelope(),
-        weight=spec.weight,
-        distortion=distortion,
-    )
+    n = component_count(spec.complexity)
+    waves: list[Wave] = []
+    for i in range(n):
+        amplitude = (
+            spec.amplitude
+            * PERSISTENCE**i
+            * (1.0 + spec.irregularity * AMPLITUDE_JITTER_SCALE * rho(i, 0))
+        )
+        wavelength = (
+            spec.wavelength
+            / LACUNARITY**i
+            * (1.0 + spec.irregularity * WAVELENGTH_JITTER_SCALE * rho(i, 1))
+        )
+        phase_jitter = (
+            spec.irregularity * PHASE_JITTER_SCALE * rho(i, 2) * 2.0 * math.pi
+        )
+        phase = (spec.phase + i * GOLDEN_ANGLE_RAD + phase_jitter) % (2.0 * math.pi)
+
+        waves.append(
+            Wave(
+                amplitude=amplitude,
+                wavelength=wavelength,
+                phase=phase,
+                function=build_wave_function(spec.function),
+                propagation=propagation,
+                envelope=resolved_envelope,
+                weight=spec.weight,
+                distortion=distortion,
+            )
+        )
+    return tuple(waves)
 
 
 def build_combined_wave_set(
@@ -197,7 +267,8 @@ def build_combined_wave_set(
         sorrendben.
     """
     explicit_waves = tuple(
-        build_wave(spec, envelope=envelope, distortion=distortion)
+        wave
         for spec in source_specs
+        for wave in build_waves(spec, envelope=envelope, distortion=distortion)
     )
     return WaveSet(waves=automatic_waves + explicit_waves)

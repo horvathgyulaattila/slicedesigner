@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-08-19
-Utolsó módosítás: 2026-08-21
+Utolsó módosítás: 2026-08-23
 Kapcsolódó dokumentumok: [WAVE_DOMAIN_MODEL.md](WAVE_DOMAIN_MODEL.md), [RADIAL_WAVE_SOURCE.md](RADIAL_WAVE_SOURCE.md)
 
 ## 1. Cél
@@ -16,7 +16,9 @@ A [WAVE_FUNCTION_MODEL.md](WAVE_FUNCTION_MODEL.md) (Phase 8) 16. szakasza már e
 
 ## 3. Kettős mechanizmus: automatikus generálás és explicit forráslista
 
-A meglévő, `WaveParameters`-alapú automatikus generálás (`direction`, `direction_spread`, `irregularity`, `complexity`) egy **hullámcsalád-generátor**: egyetlen domináns irányból determinisztikusan szórt `Directional` komponenseket állít elő. Az `irregularity` és a `complexity` fogalmilag ehhez a családhoz tartozik — nincs értelmes általánosításuk egyetlen, explicit `Radial` forrásra, amelynek nincs mit "szórni" rajta.
+A meglévő, `WaveParameters`-alapú automatikus generálás (`direction`, `direction_spread`, `irregularity`, `complexity`) egy **hullámcsalád-generátor**: egyetlen domináns irányból determinisztikusan szórt `Directional` komponenseket állít elő.
+
+Korábban (9.4–10.2) ez a dokumentum kifejezetten kizárta az `irregularity`/`complexity`-t az explicit `WaveSourceSpec`-ekből, azzal az indoklással, hogy egyetlen forrásnak "nincs mit szórni rajta". A ROADMAP Phase 10.3 ezt a korlátozást feloldja: a projektgazda döntése alapján egy explicit forrás is állhat több, **koncentrikusan rétegzett** komponensből — ugyanazzal a pozícióval/iránnyal, de csökkenő amplitúdóval/hullámhosszal rétegenként (l. 4. szakasz). Ez megkülönböztetendő az automatikus generálás irány-szórásától: az explicit forrás rétegei sosem szóródnak iránynak/pozíciónak megfelelően, kizárólag amplitúdóban/hullámhosszban/fázisban.
 
 A 9.4 ezért **nem váltja fel** az automatikus generálást, hanem egy azzal párhuzamos, kiegészítő mechanizmust vezet be:
 
@@ -32,14 +34,21 @@ Egy explicit forrás specifikációja (`WaveSourceSpec`) a következő mezőkbő
 * **source_type**: `Directional` vagy `Radial`;
 * típus-specifikus pozíció: `Directional` esetén `direction`; `Radial` esetén `source_x` és `source_y`;
 * **amplitude**, **wavelength**, **phase**;
-* **weight** (opcionális, alapértelmezett érték `1`).
+* **weight** (opcionális, alapértelmezett érték `1`);
+* **irregularity**, **complexity** (opcionális, alapértelmezett érték `0.0`/`0.0` — koncentrikus rétegzés, ROADMAP Phase 10.3, l. lent).
 
-A `WaveSourceSpec` a [WAVE_DOMAIN_MODEL.md](WAVE_DOMAIN_MODEL.md) invariánsai szerint validálódik (pl. `amplitude > 0`, `wavelength > 0` — 5.1–5.2 szakasz), a típusnak megfelelő `PropagationModel` saját szabályai szerint (`DirectionalPropagation` — 7.2 szakasz; `RadialPropagation` — [RADIAL_WAVE_SOURCE.md](RADIAL_WAVE_SOURCE.md) 2–3. szakasz).
+A `WaveSourceSpec` a [WAVE_DOMAIN_MODEL.md](WAVE_DOMAIN_MODEL.md) invariánsai szerint validálódik (pl. `amplitude > 0`, `wavelength > 0` — 5.1–5.2 szakasz), a típusnak megfelelő `PropagationModel` saját szabályai szerint (`DirectionalPropagation` — 7.2 szakasz; `RadialPropagation` — [RADIAL_WAVE_SOURCE.md](RADIAL_WAVE_SOURCE.md) 2–3. szakasz). Az `irregularity`/`complexity` a `[0.0, 1.0]` zárt intervallumba validált.
 
-Minden `WaveSourceSpec`-ből előálló `Wave`:
+`build_waves(spec)` a `spec`-ből **egy vagy több**, koncentrikusan rétegzett `Wave`-et épít (`n = component_count(spec.complexity)`, [WAVE_FUNCTION_MODEL.md](WAVE_FUNCTION_MODEL.md) 22. szakasz — a `deterministic_components.py` közös szabálya, amit a `WaveGenerator` automatikus generálása is használ). Minden réteg (`i = 0..n-1`):
 
 * `WaveFunction` = a `WaveSourceSpec.function` mező szerint (Sinusoidal/Triangle/Sawtooth/Square, `WAVE_DOMAIN_MODEL.md` 6.2–6.3 szakasz), forrásonként egyedileg választható — ROADMAP Phase 10.2 kiegészítés (korábban rögzítetten Sinusoidal volt);
-* `AmplitudeEnvelope`/`Distortion` = a `WaveParameters.envelope`/`distortion` — ugyanaz a megosztott, opcionális komponens, amit az automatikusan generált komponensek is kapnak (2026-08-21-i kiegészítés, ld. 9. szakasz). Forrásonkénti, egymástól eltérő envelope-/distortion-testreszabás továbbra sem lehetséges — ez marad hatókörön kívül (ld. 7. szakasz).
+* `propagation` = UGYANAZ minden rétegen (a `spec.direction`, illetve `spec.source_x`/`spec.source_y` szerint) — ez a "koncentrikus" jelző lényege: nincs irány-/pozíció-szórás (`θ_i`), ellentétben az automatikus generálással;
+* `amplitude_i = spec.amplitude * PERSISTENCE**i * (1 + spec.irregularity * A_JITTER * ρ(i,0))`;
+* `wavelength_i = spec.wavelength / LACUNARITY**i * (1 + spec.irregularity * λ_JITTER * ρ(i,1))`;
+* `phase_i = (spec.phase + i * GOLDEN_ANGLE_RAD + spec.irregularity * φ_JITTER * ρ(i,2) * 2π) mod 2π`;
+* `AmplitudeEnvelope`/`Distortion` = a `WaveParameters.envelope`/`distortion` — ugyanaz a megosztott, opcionális komponens, amit az automatikusan generált komponensek is kapnak (2026-08-21-i kiegészítés, ld. 9. szakasz), MINDEN rétegre alkalmazva. Forrásonkénti, egymástól eltérő envelope-/distortion-testreszabás továbbra sem lehetséges — ez marad hatókörön kívül (ld. 7. szakasz).
+
+`spec.complexity=0.0` (alapértelmezett) esetén `n=1` — a forrás pontosan egy, jitter nélküli `Wave`-et ad, ami a Phase 9.4–10.2-kompatibilis viselkedés.
 
 ## 5. WaveSet felépítése
 
@@ -52,7 +61,7 @@ automatikus, jitterelt Directional Wave-lista (N darab)
       │
       │         WaveSourceSpec lista (0..N elem, alapértelmezetten üres)
       │                 ↓
-      │         egy Wave / spec
+      │         1..N koncentrikus Wave-réteg / spec
       │
       ▼                 ▼
       └──────── összefűzés ────────┘

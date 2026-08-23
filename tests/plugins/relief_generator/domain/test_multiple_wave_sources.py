@@ -17,10 +17,15 @@ if _REPO_ROOT in sys.path:
     sys.path.remove(_REPO_ROOT)
 sys.path.insert(0, _REPO_ROOT)
 
+from plugins.relief_generator.domain.deterministic_components import (  # noqa: E402
+    LACUNARITY,
+    PERSISTENCE,
+    component_count,
+)
 from plugins.relief_generator.domain.multiple_wave_sources import (  # noqa: E402
     WaveSourceSpec,
     build_combined_wave_set,
-    build_wave,
+    build_waves,
 )
 from plugins.relief_generator.domain.radial_wave_source import (  # noqa: E402
     RadialPropagation,
@@ -138,7 +143,7 @@ def test_build_wave_directional_uses_directional_propagation() -> None:
         direction=90.0,
     )
 
-    wave = build_wave(spec)
+    wave = build_waves(spec)[0]
 
     assert isinstance(wave.function, Sinusoidal)
     assert isinstance(wave.envelope, UniformEnvelope)
@@ -160,7 +165,7 @@ def test_build_wave_radial_uses_radial_propagation() -> None:
         source_y=-2.5,
     )
 
-    wave = build_wave(spec)
+    wave = build_waves(spec)[0]
 
     assert isinstance(wave.propagation, RadialPropagation)
     assert wave.propagation.source_x == 1.5
@@ -177,7 +182,7 @@ def test_build_wave_uses_spec_function() -> None:
         function="Square",
     )
 
-    wave = build_wave(spec)
+    wave = build_waves(spec)[0]
 
     assert isinstance(wave.function, Square)
 
@@ -254,7 +259,7 @@ def test_two_radial_sources_with_identical_center_are_valid() -> None:
     combined = build_combined_wave_set((), (spec_a, spec_b))
 
     assert len(combined.waves) == 2
-    wave_a, wave_b = build_wave(spec_a), build_wave(spec_b)
+    wave_a, wave_b = build_waves(spec_a)[0], build_waves(spec_b)[0]
     x, y = 2.5, 3.1
     expected = wave_a.evaluate(x, y) + wave_b.evaluate(x, y)
     assert combined.evaluate_raw(x, y) == pytest.approx(expected)
@@ -272,7 +277,7 @@ def test_build_wave_defaults_to_uniform_envelope_and_no_distortion() -> None:
         direction=0.0,
     )
 
-    wave = build_wave(spec)
+    wave = build_waves(spec)[0]
 
     assert isinstance(wave.envelope, UniformEnvelope)
     assert wave.distortion is None
@@ -298,7 +303,7 @@ def test_build_wave_uses_provided_envelope_and_distortion() -> None:
     )
     distortion = SwirlDistortion(center_x=0.5, center_y=0.5, radius=0.3, strength=1.2)
 
-    wave = build_wave(spec, envelope=envelope, distortion=distortion)
+    wave = build_waves(spec, envelope=envelope, distortion=distortion)[0]
 
     assert wave.envelope is envelope
     assert wave.distortion is distortion
@@ -325,3 +330,139 @@ def test_build_combined_wave_set_shares_envelope_with_sources() -> None:
     combined = build_combined_wave_set((), (spec,), envelope=envelope)
 
     assert combined.waves[0].envelope is envelope
+
+
+# --- koncentrikus rétegzés: irregularity/complexity (ROADMAP Phase 10.3) ---
+
+
+def test_irregularity_and_complexity_default_to_zero() -> None:
+    spec = WaveSourceSpec(
+        source_type="Directional",
+        amplitude=1.0,
+        wavelength=0.5,
+        phase=0.2,
+        direction=45.0,
+    )
+
+    assert spec.irregularity == 0.0
+    assert spec.complexity == 0.0
+
+
+@pytest.mark.parametrize("irregularity", [-0.1, 1.1])
+def test_irregularity_out_of_range_raises(irregularity: float) -> None:
+    with pytest.raises(WaveSourceSpecValueError):
+        WaveSourceSpec(
+            source_type="Directional",
+            amplitude=1.0,
+            wavelength=1.0,
+            phase=0.0,
+            direction=0.0,
+            irregularity=irregularity,
+        )
+
+
+@pytest.mark.parametrize("complexity", [-0.1, 1.1])
+def test_complexity_out_of_range_raises(complexity: float) -> None:
+    with pytest.raises(WaveSourceSpecValueError):
+        WaveSourceSpec(
+            source_type="Directional",
+            amplitude=1.0,
+            wavelength=1.0,
+            phase=0.0,
+            direction=0.0,
+            complexity=complexity,
+        )
+
+
+def test_build_waves_with_default_complexity_returns_single_layer() -> None:
+    spec = WaveSourceSpec(
+        source_type="Directional",
+        amplitude=2.0,
+        wavelength=0.4,
+        phase=0.1,
+        weight=0.5,
+        direction=90.0,
+    )
+
+    waves = build_waves(spec)
+
+    assert len(waves) == 1
+    wave = waves[0]
+    assert isinstance(wave.function, Sinusoidal)
+    assert isinstance(wave.envelope, UniformEnvelope)
+    assert isinstance(wave.propagation, DirectionalPropagation)
+    assert wave.propagation.direction_rad == pytest.approx(math.radians(90.0))
+    assert wave.amplitude == 2.0
+    assert wave.wavelength == 0.4
+    assert wave.phase == pytest.approx(0.1 % (2.0 * math.pi))
+    assert wave.weight == 0.5
+
+
+def test_build_waves_layer_count_matches_component_count() -> None:
+    spec = WaveSourceSpec(
+        source_type="Radial",
+        amplitude=1.0,
+        wavelength=0.5,
+        phase=0.0,
+        source_x=0.5,
+        source_y=0.5,
+        complexity=1.0,
+    )
+
+    waves = build_waves(spec)
+
+    assert len(waves) == component_count(1.0)
+    assert len(waves) > 1
+
+
+def test_build_waves_layers_have_decreasing_amplitude_and_wavelength() -> None:
+    spec = WaveSourceSpec(
+        source_type="Radial",
+        amplitude=1.0,
+        wavelength=0.5,
+        phase=0.0,
+        source_x=0.5,
+        source_y=0.5,
+        complexity=1.0,
+    )
+
+    waves = build_waves(spec)
+
+    for i, wave in enumerate(waves):
+        assert wave.amplitude == pytest.approx(spec.amplitude * PERSISTENCE**i)
+        assert wave.wavelength == pytest.approx(spec.wavelength / LACUNARITY**i)
+
+
+def test_build_waves_layers_share_identical_propagation() -> None:
+    spec = WaveSourceSpec(
+        source_type="Directional",
+        amplitude=1.0,
+        wavelength=0.5,
+        phase=0.0,
+        direction=30.0,
+        complexity=1.0,
+        irregularity=1.0,
+    )
+
+    waves = build_waves(spec)
+
+    assert len(waves) > 1
+    first_propagation = waves[0].propagation
+    for wave in waves[1:]:
+        assert wave.propagation is first_propagation
+
+
+def test_build_combined_wave_set_merges_all_layers_of_multi_layer_source() -> None:
+    spec = WaveSourceSpec(
+        source_type="Radial",
+        amplitude=1.0,
+        wavelength=0.5,
+        phase=0.0,
+        source_x=0.2,
+        source_y=0.3,
+        complexity=1.0,
+    )
+
+    combined = build_combined_wave_set((), (spec,))
+
+    assert len(combined.waves) == component_count(1.0)

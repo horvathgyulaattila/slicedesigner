@@ -22,6 +22,16 @@ docs/plugins/relief_generator/WAVE_EXTENSION_IMPLEMENTATION_PLAN.md.
 import math
 from typing import Callable
 
+from plugins.relief_generator.domain.deterministic_components import (
+    AMPLITUDE_JITTER_SCALE,
+    GOLDEN_ANGLE_RAD,
+    LACUNARITY,
+    PERSISTENCE,
+    PHASE_JITTER_SCALE,
+    WAVELENGTH_JITTER_SCALE,
+    component_count,
+    rho,
+)
 from plugins.relief_generator.domain.height_field import HeightField
 from plugins.relief_generator.domain.multiple_wave_sources import (
     build_combined_wave_set,
@@ -37,37 +47,10 @@ from plugins.relief_generator.domain.wave import (
 from plugins.relief_generator.domain.wave_parameters import WaveParameters
 from plugins.relief_generator.exceptions import WaveGenerationError
 
-# Komponensszám (WAVE_FUNCTION_MODEL.md 22. szakasz, "Komponensszám").
-MIN_COMPONENTS = 1
-"""A `complexity = 0.0`-hoz tartozó legkisebb komponensszám."""
-
-MAX_COMPONENTS = 5
-"""A `complexity = 1.0`-hoz tartozó legnagyobb komponensszám."""
-
-# Több léptékű komponensek (WAVE_FUNCTION_MODEL.md 8. és 22. szakasz).
-PERSISTENCE = 0.5
-"""Az egymást követő komponensek amplitúdó-csökkenési aránya
-(`A_i ∝ PERSISTENCE**i`)."""
-
-LACUNARITY = 2.0
-"""Az egymást követő komponensek hullámhossz-csökkenési aránya
-(`λ_i ∝ 1/LACUNARITY**i`)."""
-
-# Determinisztikus perturbáció (WAVE_FUNCTION_MODEL.md 22. szakasz, "ρ(i, salt)").
-GOLDEN_RATIO = 1.618033988749895
-"""Az aranymetszés-arány (φ), a `ρ(i, salt)` perturbációs segédfüggvény alapja."""
-
-GOLDEN_ANGLE_RAD = 2.399963229728653
-"""Az aranyszög radiánban, a fázisok determinisztikus, jól szóródó elosztásához."""
-
-AMPLITUDE_JITTER_SCALE = 0.5
-"""Az `irregularity` amplitúdóra gyakorolt hatásának skálázója (`A_JITTER`)."""
-
-WAVELENGTH_JITTER_SCALE = 0.3
-"""Az `irregularity` hullámhosszra gyakorolt hatásának skálázója (`λ_JITTER`)."""
-
-PHASE_JITTER_SCALE = 1.0
-"""Az `irregularity` fázisra gyakorolt hatásának skálázója (`φ_JITTER`)."""
+# Komponensszám, több léptékű komponensek, determinisztikus perturbáció:
+# l. plugins/relief_generator/domain/deterministic_components.py
+# (WAVE_FUNCTION_MODEL.md 22. szakasz) — megosztva a
+# multiple_wave_sources.build_waves()-szel (ROADMAP Phase 10.3).
 
 # Normalizálási mintavételezés (WAVE_FUNCTION_MODEL.md 23. szakasz).
 _NORMALIZATION_SAMPLE_RESOLUTION = 65
@@ -169,18 +152,16 @@ class WaveGenerator:
 
         waves: list[Wave] = []
         if parameters.include_automatic:
-            component_count = MIN_COMPONENTS + round(
-                parameters.complexity * (MAX_COMPONENTS - MIN_COMPONENTS)
-            )
+            n = component_count(parameters.complexity)
             spread = parameters.direction_spread
 
-            for i in range(component_count):
+            for i in range(n):
                 amplitude = (
                     parameters.amplitude
                     * PERSISTENCE**i
                     * (
                         1.0
-                        + parameters.irregularity * AMPLITUDE_JITTER_SCALE * _rho(i, 0)
+                        + parameters.irregularity * AMPLITUDE_JITTER_SCALE * rho(i, 0)
                     )
                 )
                 wavelength = (
@@ -188,19 +169,19 @@ class WaveGenerator:
                     / LACUNARITY**i
                     * (
                         1.0
-                        + parameters.irregularity * WAVELENGTH_JITTER_SCALE * _rho(i, 1)
+                        + parameters.irregularity * WAVELENGTH_JITTER_SCALE * rho(i, 1)
                     )
                 )
-                if component_count == 1:
+                if n == 1:
                     direction_deg = parameters.direction
                 else:
                     direction_deg = (parameters.direction - spread) + i * (
-                        2.0 * spread / (component_count - 1)
+                        2.0 * spread / (n - 1)
                     )
                 phase_jitter = (
                     parameters.irregularity
                     * PHASE_JITTER_SCALE
-                    * _rho(i, 2)
+                    * rho(i, 2)
                     * 2.0
                     * math.pi
                 )
@@ -256,24 +237,3 @@ class WaveGenerator:
                 raw_min = min(raw_min, value)
                 raw_max = max(raw_max, value)
         return raw_min, raw_max
-
-
-def _rho(index: int, salt: int) -> float:
-    """Determinisztikus, `[-1,1]`-be eső perturbációs érték (`ρ(i, salt)`).
-
-    Lásd: WAVE_FUNCTION_MODEL.md 22. szakasz. `random` modult vagy
-    bármilyen implicit véletlenszám-állapotot nem használ: kizárólag az
-    `index` és a `salt` értékétől függő, aranymetszés-arányon alapuló,
-    jól szóródó sorozat.
-
-    Args:
-        index: a komponens indexe (`i >= 0`).
-        salt: a felhasználási helyet megkülönböztető konstans (amplitúdó:
-            `0`, hullámhossz: `1`, fázis: `2`).
-
-    Returns:
-        A `[-1.0, 1.0]` zárt intervallumba eső, determinisztikus érték.
-    """
-    scaled = (index + 1 + salt) * GOLDEN_RATIO
-    fractional_part = scaled - math.floor(scaled)
-    return 2.0 * fractional_part - 1.0
