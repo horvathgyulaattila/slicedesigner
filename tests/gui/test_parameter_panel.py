@@ -18,6 +18,7 @@ import pytest  # noqa: E402
 from PySide6.QtWidgets import (  # noqa: E402  # noqa: E402
     QComboBox,
     QDoubleSpinBox,
+    QFormLayout,
     QLineEdit,
     QPushButton,
     QScrollArea,
@@ -28,6 +29,7 @@ from pytestqt.qtbot import QtBot  # noqa: E402
 
 from slicedesigner.gui.parameter_panel import (  # noqa: E402
     ParameterPanel,
+    _CollapsibleSection,
     _GeneratorParameterForm,
 )
 from slicedesigner.project.mesh_source_registry import (  # noqa: E402
@@ -74,8 +76,35 @@ def test_parameter_panel_has_eight_tabs_in_order(qtbot: QtBot) -> None:
 def test_every_tab_content_is_wrapped_in_its_own_scroll_area(qtbot: QtBot) -> None:
     panel = _make_panel(qtbot)
 
+    # A "Mesh Import" fül, ha van telepített MeshSource plugin (a
+    # tesztkörnyezetben a relief_generator az), a "Generálás" gombot
+    # footerként kapja — ekkor a fül tartalma egy közös konténer, a
+    # `QScrollArea` ALATT, nem közvetlenül `QScrollArea` (ROADMAP
+    # Phase 10.1). A többi fülnél a viselkedés változatlan.
+    mesh_import_index = _EXPECTED_TAB_TITLES.index("Mesh Import")
     for index in range(panel.count()):
+        if index == mesh_import_index and panel.generate_mesh_button is not None:
+            container = panel.widget(index)
+            assert not isinstance(container, QScrollArea)
+            assert isinstance(container.layout().itemAt(0).widget(), QScrollArea)
+            assert container.layout().itemAt(1).widget() is panel.generate_mesh_button
+            continue
         assert isinstance(panel.widget(index), QScrollArea)
+
+
+def test_mesh_import_tab_is_plain_scroll_area_without_installed_plugins(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`footer=None` esetén (nincs telepített MeshSource plugin) a "Mesh
+    Import" fül viselkedése bitre azonos a footer bevezetése előttivel."""
+    monkeypatch.setattr(
+        "slicedesigner.gui.parameter_panel.discover_mesh_sources", lambda: ()
+    )
+    panel = _make_panel(qtbot)
+
+    mesh_import_index = _EXPECTED_TAB_TITLES.index("Mesh Import")
+    assert panel.generate_mesh_button is None
+    assert isinstance(panel.widget(mesh_import_index), QScrollArea)
 
 
 def test_dowel_group_visibility_toggles_within_its_own_tab(qtbot: QtBot) -> None:
@@ -282,6 +311,36 @@ def test_generator_parameter_form_builds_widgets_for_all_types(qtbot: QtBot) -> 
     }
 
 
+def test_mesh_import_tab_footer_is_direct_child_not_inside_scroll_area(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    panel, _ = _make_panel_with_stub_descriptor(qtbot, monkeypatch)
+
+    mesh_import_index = _EXPECTED_TAB_TITLES.index("Mesh Import")
+    tab_content = panel.widget(mesh_import_index)
+    assert not isinstance(tab_content, QScrollArea)
+
+    layout = tab_content.layout()
+    assert layout.count() == 2
+    scroll_area = layout.itemAt(0).widget()
+    footer = layout.itemAt(1).widget()
+    assert isinstance(scroll_area, QScrollArea)
+    assert footer is panel.generate_mesh_button
+
+
+def test_generate_mesh_button_is_not_inside_generator_source_container(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    panel, _ = _make_panel_with_stub_descriptor(qtbot, monkeypatch)
+
+    assert panel.generate_mesh_button is not None
+    assert panel._generator_source_container is not None
+    assert (
+        panel.generate_mesh_button
+        not in panel._generator_source_container.findChildren(QPushButton)
+    )
+
+
 def test_generate_button_emits_requested_signal_with_descriptor_and_values(
     qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -306,6 +365,75 @@ def test_generate_button_emits_requested_signal_with_descriptor_and_values(
         "name": "wave",
         "mode": "b",
     }
+
+
+# --- mezőcsoportosítás (`group`, ADR-0017 kiegészítés, 2026-08-23) ---
+
+
+def test_generator_parameter_form_groups_same_group_fields_into_one_section(
+    qtbot: QtBot,
+) -> None:
+    parameters = (
+        ParameterSpec(name="a", label="A", type="float", default=1.0, group="G"),
+        ParameterSpec(name="b", label="B", type="float", default=2.0, group="G"),
+    )
+    form = _GeneratorParameterForm(parameters)
+    qtbot.addWidget(form)
+
+    layout = form.layout()
+    assert isinstance(layout, QFormLayout)
+    assert layout.rowCount() == 1
+    section = layout.itemAt(0, QFormLayout.ItemRole.SpanningRole).widget()
+    assert isinstance(section, _CollapsibleSection)
+    assert section.content_layout.rowCount() == 2
+
+
+def test_generator_parameter_form_ungrouped_field_stays_in_main_layout(
+    qtbot: QtBot,
+) -> None:
+    parameters = (
+        ParameterSpec(name="a", label="A", type="float", default=1.0),
+        ParameterSpec(name="b", label="B", type="float", default=2.0, group="G"),
+    )
+    form = _GeneratorParameterForm(parameters)
+    qtbot.addWidget(form)
+
+    layout = form.layout()
+    assert layout.rowCount() == 2
+    assert layout.itemAt(0, QFormLayout.ItemRole.LabelRole) is not None
+    section = layout.itemAt(1, QFormLayout.ItemRole.SpanningRole).widget()
+    assert isinstance(section, _CollapsibleSection)
+
+
+def test_generator_parameter_form_non_adjacent_same_group_fields_share_one_section(
+    qtbot: QtBot,
+) -> None:
+    parameters = (
+        ParameterSpec(name="a", label="A", type="float", default=1.0, group="G"),
+        ParameterSpec(name="mid", label="Mid", type="float", default=0.0),
+        ParameterSpec(name="b", label="B", type="float", default=2.0, group="G"),
+    )
+    form = _GeneratorParameterForm(parameters)
+    qtbot.addWidget(form)
+
+    layout = form.layout()
+    assert layout.rowCount() == 2
+    section = layout.itemAt(0, QFormLayout.ItemRole.SpanningRole).widget()
+    assert isinstance(section, _CollapsibleSection)
+    assert section.content_layout.rowCount() == 2
+
+
+def test_generator_parameter_form_values_same_shape_with_and_without_grouping(
+    qtbot: QtBot,
+) -> None:
+    parameters = (
+        ParameterSpec(name="a", label="A", type="float", default=1.0, group="G"),
+        ParameterSpec(name="b", label="B", type="int", default=3),
+    )
+    form = _GeneratorParameterForm(parameters)
+    qtbot.addWidget(form)
+
+    assert form.values() == {"a": pytest.approx(1.0), "b": 3}
 
 
 # --- "list" típusú ParameterSpec (ADR-0017 kiegészítés) ---

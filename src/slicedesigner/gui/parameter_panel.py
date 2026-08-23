@@ -125,7 +125,13 @@ class _GeneratorParameterForm(QWidget):
     """Egy `MeshSourceDescriptor.parameters` listájából generikusan épített
     beviteli form (ADR-0017) — a `ParameterPanel` sosem szembesül
     plugin-specifikus (pl. relief-specifikus) fogalommal, kizárólag
-    `ParameterSpec`-ekkel dolgozik."""
+    `ParameterSpec`-ekkel dolgozik.
+
+    Az azonos `ParameterSpec.group`-ú mezők egy közös, összecsukható
+    `_CollapsibleSection`-be kerülnek, a csoport első előfordulásának
+    helyén — nem szükséges, hogy a `parameters` tuple-ben szomszédosak
+    legyenek (ADR-0017 kiegészítés, 2026-08-23, ROADMAP Phase 10.1).
+    """
 
     def __init__(
         self,
@@ -142,9 +148,18 @@ class _GeneratorParameterForm(QWidget):
         self._enum_widgets: dict[str, QComboBox] = {}
         self._list_widgets: dict[str, _ListParameterWidget] = {}
 
+        sections: dict[str, _CollapsibleSection] = {}
         for spec in parameters:
             widget = self._build_widget(spec)
-            layout.addRow(f"{spec.label}:", widget)
+            if spec.group is None:
+                layout.addRow(f"{spec.label}:", widget)
+                continue
+            section = sections.get(spec.group)
+            if section is None:
+                section = _CollapsibleSection(spec.group)
+                sections[spec.group] = section
+                layout.addRow(section)
+            section.content_layout.addRow(f"{spec.label}:", widget)
 
     def _build_widget(self, spec: ParameterSpec) -> QWidget:
         if spec.type == "float":
@@ -394,7 +409,10 @@ class ParameterPanel(QTabWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
 
-        self._add_tab("Mesh Import", self._build_mesh_import_group())
+        mesh_import_content = self._build_mesh_import_group()
+        self._add_tab(
+            "Mesh Import", mesh_import_content, footer=self.generate_mesh_button
+        )
         self._add_tab("Slicing", self._build_slicing_group())
 
         self.use_dowels_checkbox = QCheckBox("Dowel rendszer használata")
@@ -433,12 +451,29 @@ class ParameterPanel(QTabWidget):
 
         logger.debug("ParameterPanel felépítve.")
 
-    def _add_tab(self, title: str, content: QWidget) -> None:
-        """Egy fül hozzáadása, saját `QScrollArea`-ba csomagolt tartalommal."""
+    def _add_tab(
+        self, title: str, content: QWidget, *, footer: QWidget | None = None
+    ) -> None:
+        """Egy fül hozzáadása, saját `QScrollArea`-ba csomagolt tartalommal.
+
+        Ha `footer` meg van adva, a `QScrollArea` ALÁ kerül egy közös
+        függőleges layoutban — a görgetéstől függetlenül, fixen látható
+        marad (ROADMAP Phase 10.1). `footer=None` esetén a viselkedés
+        szó szerint megegyezik a korábbival (a `scroll_area` közvetlenül
+        fül-tartalom).
+        """
         scroll_area = QScrollArea(self)
         scroll_area.setWidgetResizable(True)
         scroll_area.setWidget(content)
-        self.addTab(scroll_area, title)
+        if footer is None:
+            self.addTab(scroll_area, title)
+            return
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.addWidget(scroll_area)
+        container_layout.addWidget(footer)
+        self.addTab(container, title)
 
     @staticmethod
     def _build_toggle_tab(checkbox: QCheckBox, group: QGroupBox) -> QWidget:
@@ -526,7 +561,6 @@ class ParameterPanel(QTabWidget):
 
             self.generate_mesh_button = QPushButton("Generálás")
             self.generate_mesh_button.clicked.connect(self._on_generate_mesh_clicked)
-            generator_layout.addWidget(self.generate_mesh_button)
 
             self._generator_source_container.setVisible(False)
             layout.addRow(self._generator_source_container)

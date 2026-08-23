@@ -11,7 +11,11 @@ docs/plugins/relief_generator/MULTIPLE_WAVE_SOURCES.md 9. szakasz.
 from dataclasses import dataclass
 
 from plugins.relief_generator.domain.multiple_wave_sources import WaveSourceSpec
-from plugins.relief_generator.domain.wave import AmplitudeEnvelope, Distortion
+from plugins.relief_generator.domain.wave import (
+    AmplitudeEnvelope,
+    Distortion,
+    WaveFunctionName,
+)
 from plugins.relief_generator.exceptions import WaveParametersValueError
 
 _DIRECTION_MIN = 0.0
@@ -50,6 +54,13 @@ class WaveParameters:
             zárt intervallumból.
         complexity: a hullámkomponensek számát meghatározó paraméter, a
             `[0.0, 1.0]` zárt intervallumból.
+        function: az automatikusan generált komponensek közös
+            `WaveFunction`-je (`"Sinusoidal"`, `"Triangle"`, `"Sawtooth"`
+            vagy `"Square"`, WAVE_DOMAIN_MODEL.md 6.3 szakasz).
+            Alapértelmezett: `"Sinusoidal"` (Phase 8/9.1–10.1-kompatibilis
+            viselkedés). Az `envelope`/`distortion` mintájára egységesen
+            vonatkozik minden automatikusan generált komponensre — nem
+            komponensenként eltérő (ROADMAP Phase 10.2).
         envelope: opcionális, az összes komponensre — automatikusan
             generáltakra ÉS `sources`-ból épülőkre egyaránt — egységesen
             alkalmazott `AmplitudeEnvelope` (pl.
@@ -79,6 +90,7 @@ class WaveParameters:
     direction_spread: float
     irregularity: float
     complexity: float
+    function: WaveFunctionName = "Sinusoidal"
     envelope: AmplitudeEnvelope | None = None
     distortion: Distortion | None = None
     sources: tuple[WaveSourceSpec, ...] = ()

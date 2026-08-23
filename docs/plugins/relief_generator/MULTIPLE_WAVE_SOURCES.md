@@ -38,7 +38,7 @@ A `WaveSourceSpec` a [WAVE_DOMAIN_MODEL.md](WAVE_DOMAIN_MODEL.md) invariánsai s
 
 Minden `WaveSourceSpec`-ből előálló `Wave`:
 
-* `WaveFunction` = Sinusoidal (rögzített, a 9.1 hatókörének megfelelően — ld. `WAVE_DOMAIN_MODEL.md` 6.3 szakasz, illetve a `BACKLOG.md` 1. tétele a jövőbeli alternatívákról);
+* `WaveFunction` = a `WaveSourceSpec.function` mező szerint (Sinusoidal/Triangle/Sawtooth/Square, `WAVE_DOMAIN_MODEL.md` 6.2–6.3 szakasz), forrásonként egyedileg választható — ROADMAP Phase 10.2 kiegészítés (korábban rögzítetten Sinusoidal volt);
 * `AmplitudeEnvelope`/`Distortion` = a `WaveParameters.envelope`/`distortion` — ugyanaz a megosztott, opcionális komponens, amit az automatikusan generált komponensek is kapnak (2026-08-21-i kiegészítés, ld. 9. szakasz). Forrásonkénti, egymástól eltérő envelope-/distortion-testreszabás továbbra sem lehetséges — ez marad hatókörön kívül (ld. 7. szakasz).
 
 ## 5. WaveSet felépítése

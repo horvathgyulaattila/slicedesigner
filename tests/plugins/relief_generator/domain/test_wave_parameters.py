@@ -189,6 +189,27 @@ def test_include_automatic_defaults_to_true() -> None:
     assert parameters.include_automatic is True
 
 
+def test_function_defaults_to_sinusoidal() -> None:
+    parameters = WaveParameters(**_VALID_KWARGS)
+
+    assert parameters.function == "Sinusoidal"
+
+
+@pytest.mark.parametrize("function", ["Sinusoidal", "Triangle", "Sawtooth", "Square"])
+def test_function_accepts_explicit_value(function: str) -> None:
+    parameters = WaveParameters(
+        wavelength=0.3,
+        amplitude=1.0,
+        direction=45.0,
+        direction_spread=20.0,
+        irregularity=0.5,
+        complexity=0.5,
+        function=function,  # type: ignore[arg-type]
+    )
+
+    assert parameters.function == function
+
+
 def test_include_automatic_can_be_set_to_false() -> None:
     parameters = WaveParameters(
         wavelength=0.3,

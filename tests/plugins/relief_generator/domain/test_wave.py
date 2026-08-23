@@ -18,10 +18,14 @@ sys.path.insert(0, _REPO_ROOT)
 
 from plugins.relief_generator.domain.wave import (  # noqa: E402
     DirectionalPropagation,
+    Sawtooth,
     Sinusoidal,
+    Square,
+    Triangle,
     UniformEnvelope,
     Wave,
     WaveSet,
+    build_wave_function,
 )
 from plugins.relief_generator.exceptions import (  # noqa: E402
     WaveSetValueError,
@@ -36,6 +40,88 @@ def test_sinusoidal_matches_formula() -> None:
 
     expected = math.sin(2.0 * math.pi / 2.0 * 0.3 + 0.5)
     assert result == pytest.approx(expected)
+
+
+def test_triangle_matches_formula() -> None:
+    function = Triangle()
+
+    result = function.evaluate(phase_position=0.3, wavelength=2.0, phase=0.5)
+
+    theta = 2.0 * math.pi / 2.0 * 0.3 + 0.5
+    expected = (2.0 / math.pi) * math.asin(math.sin(theta))
+    assert result == pytest.approx(expected)
+
+
+@pytest.mark.parametrize(
+    "phase_position", [-3.0, -1.0, -0.2, 0.0, 0.2, 0.5, 1.0, 2.7, 10.0]
+)
+def test_triangle_stays_within_unit_range(phase_position: float) -> None:
+    function = Triangle()
+
+    result = function.evaluate(phase_position=phase_position, wavelength=1.3, phase=0.1)
+
+    assert -1.0 <= result <= 1.0
+
+
+def test_sawtooth_matches_formula() -> None:
+    function = Sawtooth()
+
+    result = function.evaluate(phase_position=0.3, wavelength=2.0, phase=0.5)
+
+    theta = 2.0 * math.pi / 2.0 * 0.3 + 0.5
+    t = theta / (2.0 * math.pi)
+    expected = 2.0 * (t - math.floor(t + 0.5))
+    assert result == pytest.approx(expected)
+
+
+@pytest.mark.parametrize(
+    "phase_position", [-3.0, -1.0, -0.2, 0.0, 0.2, 0.5, 1.0, 2.7, 10.0]
+)
+def test_sawtooth_stays_within_unit_range(phase_position: float) -> None:
+    function = Sawtooth()
+
+    result = function.evaluate(phase_position=phase_position, wavelength=1.3, phase=0.1)
+
+    assert -1.0 <= result <= 1.0
+
+
+def test_square_matches_formula() -> None:
+    function = Square()
+
+    result = function.evaluate(phase_position=0.3, wavelength=2.0, phase=0.5)
+
+    theta = 2.0 * math.pi / 2.0 * 0.3 + 0.5
+    t = (theta / (2.0 * math.pi)) % 1.0
+    expected = 1.0 if t < 0.5 else -1.0
+    assert result == pytest.approx(expected)
+
+
+@pytest.mark.parametrize(
+    "phase_position", [-3.0, -1.0, -0.2, 0.0, 0.2, 0.5, 1.0, 2.7, 10.0]
+)
+def test_square_stays_within_unit_range(phase_position: float) -> None:
+    function = Square()
+
+    result = function.evaluate(phase_position=phase_position, wavelength=1.3, phase=0.1)
+
+    assert result in (-1.0, 1.0)
+
+
+@pytest.mark.parametrize(
+    ("name", "expected_type"),
+    [
+        ("Sinusoidal", Sinusoidal),
+        ("Triangle", Triangle),
+        ("Sawtooth", Sawtooth),
+        ("Square", Square),
+    ],
+)
+def test_build_wave_function_returns_matching_type(
+    name: str, expected_type: type
+) -> None:
+    function = build_wave_function(name)  # type: ignore[arg-type]
+
+    assert isinstance(function, expected_type)
 
 
 def test_directional_propagation_matches_formula() -> None:

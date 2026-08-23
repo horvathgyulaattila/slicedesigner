@@ -29,10 +29,10 @@ from plugins.relief_generator.domain.multiple_wave_sources import (
 from plugins.relief_generator.domain.wave import (
     AmplitudeEnvelope,
     DirectionalPropagation,
-    Sinusoidal,
     UniformEnvelope,
     Wave,
     WaveSet,
+    build_wave_function,
 )
 from plugins.relief_generator.domain.wave_parameters import WaveParameters
 from plugins.relief_generator.exceptions import WaveGenerationError
@@ -137,11 +137,12 @@ class WaveGenerator:
         `include_automatic`), majd az explicit forráslistával összefűzve
         épít `WaveSet`-et.
 
-        Minden automatikusan generált komponens `Sinusoidal`
-        `WaveFunction`-nel, `DirectionalPropagation`-nel és
-        `weight=1.0`-val épül. Ha `parameters.include_automatic` hamis,
-        egyetlen automatikus komponens sem épül — a végső `WaveSet`
-        kizárólag a `parameters.sources`-ból áll.
+        Minden automatikusan generált komponens a `parameters.function`
+        szerinti `WaveFunction`-nel (alapértelmezetten Sinusoidal),
+        `DirectionalPropagation`-nel és `weight=1.0`-val épül. Ha
+        `parameters.include_automatic` hamis, egyetlen automatikus
+        komponens sem épül — a végső `WaveSet` kizárólag a
+        `parameters.sources`-ból áll.
 
         Az `envelope` a `parameters.envelope`, ha meg van adva — ekkor
         egységesen minden komponensre (automatikus ÉS explicit)
@@ -210,7 +211,7 @@ class WaveGenerator:
                         amplitude=amplitude,
                         wavelength=wavelength,
                         phase=phase,
-                        function=Sinusoidal(),
+                        function=build_wave_function(parameters.function),
                         propagation=DirectionalPropagation(
                             direction_rad=math.radians(direction_deg)
                         ),

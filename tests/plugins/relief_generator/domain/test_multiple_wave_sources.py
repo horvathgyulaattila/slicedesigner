@@ -28,6 +28,7 @@ from plugins.relief_generator.domain.radial_wave_source import (  # noqa: E402
 from plugins.relief_generator.domain.wave import (  # noqa: E402
     DirectionalPropagation,
     Sinusoidal,
+    Square,
     UniformEnvelope,
     Wave,
     WaveSet,
@@ -48,6 +49,7 @@ def test_directional_spec_is_created_successfully() -> None:
     assert spec.source_x is None
     assert spec.source_y is None
     assert spec.weight == 1.0
+    assert spec.function == "Sinusoidal"
 
 
 def test_radial_spec_is_created_successfully() -> None:
@@ -163,6 +165,21 @@ def test_build_wave_radial_uses_radial_propagation() -> None:
     assert isinstance(wave.propagation, RadialPropagation)
     assert wave.propagation.source_x == 1.5
     assert wave.propagation.source_y == -2.5
+
+
+def test_build_wave_uses_spec_function() -> None:
+    spec = WaveSourceSpec(
+        source_type="Directional",
+        amplitude=1.0,
+        wavelength=0.4,
+        phase=0.0,
+        direction=0.0,
+        function="Square",
+    )
+
+    wave = build_wave(spec)
+
+    assert isinstance(wave.function, Square)
 
 
 def _directional_wave(**overrides: object) -> Wave:

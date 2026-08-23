@@ -86,6 +86,7 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         type="float",
         default=0.3,
         minimum=0.0001,
+        group="Automatikus hullám",
     ),
     ParameterSpec(
         name="amplitude",
@@ -93,6 +94,7 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         type="float",
         default=0.5,
         minimum=0.0001,
+        group="Automatikus hullám",
     ),
     ParameterSpec(
         name="direction",
@@ -102,6 +104,7 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         minimum=0.0,
         maximum=360.0,
         unit="°",
+        group="Automatikus hullám",
     ),
     ParameterSpec(
         name="direction_spread",
@@ -111,6 +114,7 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         minimum=0.0,
         maximum=180.0,
         unit="°",
+        group="Automatikus hullám",
     ),
     ParameterSpec(
         name="irregularity",
@@ -119,6 +123,7 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         default=0.3,
         minimum=0.0,
         maximum=1.0,
+        group="Automatikus hullám",
     ),
     ParameterSpec(
         name="complexity",
@@ -127,6 +132,15 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         default=0.5,
         minimum=0.0,
         maximum=1.0,
+        group="Automatikus hullám",
+    ),
+    ParameterSpec(
+        name="function",
+        label="Hullámalak",
+        type="enum",
+        default="Sinusoidal",
+        choices=("Sinusoidal", "Triangle", "Sawtooth", "Square"),
+        group="Automatikus hullám",
     ),
     ParameterSpec(
         name="envelope_type",
@@ -134,18 +148,21 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         type="enum",
         default="None",
         choices=("None", "Radial"),
+        group="Envelope",
     ),
     ParameterSpec(
         name="envelope_center_x",
         label="Envelope center X",
         type="float",
         default=0.5,
+        group="Envelope",
     ),
     ParameterSpec(
         name="envelope_center_y",
         label="Envelope center Y",
         type="float",
         default=0.5,
+        group="Envelope",
     ),
     ParameterSpec(
         name="envelope_radius",
@@ -153,6 +170,7 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         type="float",
         default=0.3,
         minimum=0.0001,
+        group="Envelope",
     ),
     ParameterSpec(
         name="envelope_falloff",
@@ -160,6 +178,7 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         type="enum",
         default="Linear",
         choices=("Linear", "Smooth", "Gaussian"),
+        group="Envelope",
     ),
     ParameterSpec(
         name="envelope_sharpness",
@@ -167,6 +186,7 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         type="float",
         default=1.0,
         minimum=0.0001,
+        group="Envelope",
     ),
     ParameterSpec(
         name="distortion_type",
@@ -174,18 +194,21 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         type="enum",
         default="None",
         choices=("None", "Swirl"),
+        group="Torzítás",
     ),
     ParameterSpec(
         name="distortion_center_x",
         label="Torzítás center X",
         type="float",
         default=0.5,
+        group="Torzítás",
     ),
     ParameterSpec(
         name="distortion_center_y",
         label="Torzítás center Y",
         type="float",
         default=0.5,
+        group="Torzítás",
     ),
     ParameterSpec(
         name="distortion_radius",
@@ -193,12 +216,14 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         type="float",
         default=0.3,
         minimum=0.0001,
+        group="Torzítás",
     ),
     ParameterSpec(
         name="distortion_strength",
         label="Torzítás mértéke",
         type="float",
         default=1.0,
+        group="Torzítás",
     ),
     ParameterSpec(
         name="sources",
@@ -230,6 +255,13 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
             ParameterSpec(name="phase", label="Fázis", type="float", default=0.0),
             ParameterSpec(name="weight", label="Súly", type="float", default=1.0),
             ParameterSpec(
+                name="function",
+                label="Hullámalak",
+                type="enum",
+                default="Sinusoidal",
+                choices=("Sinusoidal", "Triangle", "Sawtooth", "Square"),
+            ),
+            ParameterSpec(
                 name="direction",
                 label="Irány",
                 type="float",
@@ -248,6 +280,7 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         type="enum",
         default="Igen",
         choices=("Igen", "Nem"),
+        group="Automatikus hullám",
     ),
 )
 
@@ -331,6 +364,7 @@ def _build_sources(source_values: list[dict[str, Any]]) -> tuple[WaveSourceSpec,
                     wavelength=item["wavelength"],
                     phase=item["phase"],
                     weight=item["weight"],
+                    function=item["function"],
                     direction=item["direction"],
                 )
             )
@@ -342,6 +376,7 @@ def _build_sources(source_values: list[dict[str, Any]]) -> tuple[WaveSourceSpec,
                     wavelength=item["wavelength"],
                     phase=item["phase"],
                     weight=item["weight"],
+                    function=item["function"],
                     source_x=item["source_x"],
                     source_y=item["source_y"],
                 )
@@ -358,6 +393,7 @@ def _build(values: dict[str, Any]) -> ReliefGeneratorMeshSource:
         direction_spread=values["direction_spread"],
         irregularity=values["irregularity"],
         complexity=values["complexity"],
+        function=values["function"],
         envelope=_build_envelope(values),
         distortion=_build_distortion(values),
         sources=_build_sources(values["sources"]),

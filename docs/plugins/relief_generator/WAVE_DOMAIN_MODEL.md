@@ -174,9 +174,32 @@ W(P, λ, φ) = sin( (2π / λ) · P + φ )
 
 Ez biztosítja a Phase 8 matematikai viselkedésének megőrzését.
 
-### 6.3 Jövőbeli WaveFunctionök
+### 6.3 Triangle, Sawtooth, Square
 
-A domainmodell később lehetővé teszi további WaveFunctionök bevezetését (pl. Cosine, Triangle, Sawtooth), de ezek nem részei a 9.1 scope-jának.
+A Sinusoidal mellett három további konkrét `WaveFunction` áll rendelkezésre (ROADMAP Phase 10.2) — mindegyik ugyanabba a `[-1, 1]` tartományba képez, hogy az `amplitude`/`weight`/`envelope` szemantikája (5.1, 5.4 szakasz) változatlan maradjon. Legyen `θ = 2π/λ·P + φ` (ugyanaz a fázisszög, amit a Sinusoidal is használ).
+
+**Triangle** (folytonos, törtvonalas):
+
+```text
+W(θ) = (2/π)·asin(sin(θ))
+```
+
+**Sawtooth** (lineáris rámpa):
+
+```text
+t = θ / (2π)
+W(θ) = 2·(t − floor(t + 0.5))
+```
+
+**Square** (kétértékű, `{−1, 1}`, 50%-os kitöltési tényezővel):
+
+```text
+t = (θ / (2π)) mod 1
+W(θ) = 1,  ha t < 0.5
+W(θ) = −1, egyébként
+```
+
+A választás a felhasználói szintű `WaveParameters.function` (automatikus komponensek, egységes) és `WaveSourceSpec.function` (explicit forrás, forrásonként egyedi) mezőn keresztül érhető el — l. [MULTIPLE_WAVE_SOURCES.md](MULTIPLE_WAVE_SOURCES.md) 4. szakasz.
 
 ## 7. PropagationModel
 
@@ -295,7 +318,7 @@ A 9.1 domainmodellnek lehetővé kell tennie további modellek hozzáadását az
 
 ### 16.1 WaveFunction
 
-Később hozzáadható például: Cosine, Triangle, Sawtooth, egyéb periodikus matematikai függvény.
+A Sinusoidal mellett a Triangle, Sawtooth és Square `WaveFunction` (6.3 szakasz, ROADMAP Phase 10.2) megvalósult. További periodikus matematikai függvény később is hozzáadható.
 
 ### 16.2 PropagationModel
 

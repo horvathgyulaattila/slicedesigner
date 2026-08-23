@@ -11,8 +11,9 @@ Lásd: docs/plugins/relief_generator/WAVE_DOMAIN_MODEL.md.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol
 
 from plugins.relief_generator.exceptions import WaveSetValueError, WaveValueError
 
@@ -48,6 +49,71 @@ class Sinusoidal:
 
     def evaluate(self, phase_position: float, wavelength: float, phase: float) -> float:
         return math.sin(2.0 * math.pi / wavelength * phase_position + phase)
+
+
+@dataclass(frozen=True)
+class Triangle:
+    """Háromszög `WaveFunction`: `W(θ) = (2/π)·asin(sin(θ))`, `θ = 2π/λ·P + φ`.
+
+    Lásd: WAVE_DOMAIN_MODEL.md 6.3 szakasz. `[-1, 1]` tartományba képez,
+    mint a `Sinusoidal`.
+    """
+
+    def evaluate(self, phase_position: float, wavelength: float, phase: float) -> float:
+        theta = 2.0 * math.pi / wavelength * phase_position + phase
+        return (2.0 / math.pi) * math.asin(math.sin(theta))
+
+
+@dataclass(frozen=True)
+class Sawtooth:
+    """Fűrészfog `WaveFunction`: lineáris rámpa `[-1, 1]` között.
+
+    Lásd: WAVE_DOMAIN_MODEL.md 6.3 szakasz. `θ = 2π/λ·P + φ`,
+    `t = θ/(2π)`, `W(θ) = 2·(t − floor(t + 0.5))`.
+    """
+
+    def evaluate(self, phase_position: float, wavelength: float, phase: float) -> float:
+        theta = 2.0 * math.pi / wavelength * phase_position + phase
+        t = theta / (2.0 * math.pi)
+        return 2.0 * (t - math.floor(t + 0.5))
+
+
+@dataclass(frozen=True)
+class Square:
+    """Négyszög `WaveFunction`: kétértékű `{-1, 1}`, 50%-os kitöltési tényezővel.
+
+    Lásd: WAVE_DOMAIN_MODEL.md 6.3 szakasz. `θ = 2π/λ·P + φ`,
+    `t = (θ/(2π)) mod 1`, `W(θ) = 1` ha `t < 0.5`, egyébként `-1`.
+    """
+
+    def evaluate(self, phase_position: float, wavelength: float, phase: float) -> float:
+        theta = 2.0 * math.pi / wavelength * phase_position + phase
+        t = (theta / (2.0 * math.pi)) % 1.0
+        return 1.0 if t < 0.5 else -1.0
+
+
+WaveFunctionName = Literal["Sinusoidal", "Triangle", "Sawtooth", "Square"]
+"""A GUI-n és a felhasználói szintű paramétereken (`WaveParameters.function`,
+`WaveSourceSpec.function`) választható `WaveFunction`-nevek (ROADMAP Phase 10.2)."""
+
+_WAVE_FUNCTION_FACTORIES: dict[WaveFunctionName, Callable[[], "WaveFunction"]] = {
+    "Sinusoidal": Sinusoidal,
+    "Triangle": Triangle,
+    "Sawtooth": Sawtooth,
+    "Square": Square,
+}
+
+
+def build_wave_function(name: WaveFunctionName) -> WaveFunction:
+    """A `WaveFunctionName` alapján egy konkrét `WaveFunction`-példányt épít.
+
+    Args:
+        name: a választott hullámalak neve.
+
+    Returns:
+        A megfelelő `WaveFunction`-implementáció új példánya.
+    """
+    return _WAVE_FUNCTION_FACTORIES[name]()
 
 
 class PropagationModel(Protocol):

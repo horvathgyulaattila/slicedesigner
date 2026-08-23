@@ -46,6 +46,12 @@ class ParameterSpec:
             kizárólag skalár (nem `"list"` típusú) `ParameterSpec`-ekből
             álló tuple — nincs beágyazott lista (ADR-0017 kiegészítés,
             2026-08-21). Más típusnál üres tuple.
+        group: opcionális csoportnév. Azonos `group`-ú `ParameterSpec`-ek a
+            `_GeneratorParameterForm`-ban egy közös, összecsukható
+            szakaszba kerülnek (ADR-0017 kiegészítés, 2026-08-23, ROADMAP
+            Phase 10.1). `None` esetén a mező csoportosítás nélkül, a fő
+            formban jelenik meg — ez a meglévő, Phase 9-ig egyetlen
+            viselkedés, változatlanul.
     """
 
     name: str
@@ -57,6 +63,7 @@ class ParameterSpec:
     unit: str | None = None
     choices: tuple[str, ...] = ()
     item_schema: tuple["ParameterSpec", ...] = ()
+    group: str | None = None
 
 
 @dataclass(frozen=True)

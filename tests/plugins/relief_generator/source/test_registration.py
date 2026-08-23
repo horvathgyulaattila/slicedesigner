@@ -34,6 +34,7 @@ _EXPECTED_PARAMETER_NAMES = (
     "direction_spread",
     "irregularity",
     "complexity",
+    "function",
     "envelope_type",
     "envelope_center_x",
     "envelope_center_y",
@@ -63,6 +64,73 @@ def test_build_mesh_source_descriptor_has_expected_parameters() -> None:
     assert tuple(spec.name for spec in descriptor.parameters) == (
         _EXPECTED_PARAMETER_NAMES
     )
+
+
+# --- mezőcsoportosítás (`group`, ADR-0017 kiegészítés, 2026-08-23) ---
+
+_EXPECTED_PARAMETER_GROUPS = {
+    "width": None,
+    "height": None,
+    "base_thickness": None,
+    "relief_height": None,
+    "sampling_distance": None,
+    "wavelength": "Automatikus hullám",
+    "amplitude": "Automatikus hullám",
+    "direction": "Automatikus hullám",
+    "direction_spread": "Automatikus hullám",
+    "irregularity": "Automatikus hullám",
+    "complexity": "Automatikus hullám",
+    "function": "Automatikus hullám",
+    "envelope_type": "Envelope",
+    "envelope_center_x": "Envelope",
+    "envelope_center_y": "Envelope",
+    "envelope_radius": "Envelope",
+    "envelope_falloff": "Envelope",
+    "envelope_sharpness": "Envelope",
+    "distortion_type": "Torzítás",
+    "distortion_center_x": "Torzítás",
+    "distortion_center_y": "Torzítás",
+    "distortion_radius": "Torzítás",
+    "distortion_strength": "Torzítás",
+    "sources": None,
+    "include_automatic": "Automatikus hullám",
+}
+
+
+def test_parameters_have_expected_group_assignment() -> None:
+    descriptor = build_mesh_source_descriptor()
+
+    groups = {spec.name: spec.group for spec in descriptor.parameters}
+
+    assert groups == _EXPECTED_PARAMETER_GROUPS
+
+
+def test_sources_item_schema_fields_have_no_group() -> None:
+    descriptor = build_mesh_source_descriptor()
+
+    sources_spec = next(s for s in descriptor.parameters if s.name == "sources")
+
+    assert all(item.group is None for item in sources_spec.item_schema)
+
+
+def test_function_parameter_has_expected_choices() -> None:
+    descriptor = build_mesh_source_descriptor()
+
+    spec = next(s for s in descriptor.parameters if s.name == "function")
+
+    assert spec.default == "Sinusoidal"
+    assert spec.choices == ("Sinusoidal", "Triangle", "Sawtooth", "Square")
+
+
+def test_sources_item_schema_has_function_field_without_group() -> None:
+    descriptor = build_mesh_source_descriptor()
+
+    sources_spec = next(s for s in descriptor.parameters if s.name == "sources")
+    function_spec = next(s for s in sources_spec.item_schema if s.name == "function")
+
+    assert function_spec.group is None
+    assert function_spec.default == "Sinusoidal"
+    assert function_spec.choices == ("Sinusoidal", "Triangle", "Sawtooth", "Square")
 
 
 def test_build_with_default_values_returns_working_mesh_source() -> None:
@@ -152,6 +220,7 @@ def test_build_sources_directional_omits_radial_fields() -> None:
                 "wavelength": 0.2,
                 "phase": 0.0,
                 "weight": 1.0,
+                "function": "Sinusoidal",
                 "direction": 90.0,
                 "source_x": 0.3,
                 "source_y": 0.7,
@@ -174,6 +243,7 @@ def test_build_sources_radial_omits_direction() -> None:
                 "wavelength": 0.2,
                 "phase": 0.0,
                 "weight": 1.0,
+                "function": "Sinusoidal",
                 "direction": 90.0,
                 "source_x": 0.3,
                 "source_y": 0.7,
@@ -185,6 +255,27 @@ def test_build_sources_radial_omits_direction() -> None:
     assert sources[0].source_x == 0.3
     assert sources[0].source_y == 0.7
     assert sources[0].direction is None
+
+
+def test_build_sources_uses_function_field() -> None:
+    sources = _build_sources(
+        [
+            {
+                "source_type": "Directional",
+                "amplitude": 0.4,
+                "wavelength": 0.2,
+                "phase": 0.0,
+                "weight": 1.0,
+                "function": "Square",
+                "direction": 90.0,
+                "source_x": 0.3,
+                "source_y": 0.7,
+            }
+        ]
+    )
+
+    assert len(sources) == 1
+    assert sources[0].function == "Square"
 
 
 def test_build_with_full_phase9_configuration_returns_working_mesh_source() -> None:
@@ -199,6 +290,7 @@ def test_build_with_full_phase9_configuration_returns_working_mesh_source() -> N
             "wavelength": 0.15,
             "phase": 0.0,
             "weight": 1.0,
+            "function": "Sinusoidal",
             "direction": 0.0,
             "source_x": 0.2,
             "source_y": 0.8,
@@ -238,6 +330,7 @@ def test_build_with_include_automatic_nem_and_sources_returns_working_mesh_sourc
             "wavelength": 0.15,
             "phase": 0.0,
             "weight": 1.0,
+            "function": "Sinusoidal",
             "direction": 0.0,
             "source_x": 0.5,
             "source_y": 0.5,

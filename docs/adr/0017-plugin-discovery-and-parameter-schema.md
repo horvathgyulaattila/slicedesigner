@@ -95,3 +95,31 @@ rekurzívan), "Hozzáadás"/"Eltávolítás" gombokkal. A `values()` a sorok
 
 A meglévő négy típus (`float`/`int`/`str`/`enum`) és minden meglévő `_PARAMETERS`
 tuple (jelenleg: relief_generator) változatlan — a `list` tisztán additív bővítés.
+
+## Kiegészítés (2026-08-23): mezőcsoportosítás (`group`)
+
+A ROADMAP Phase 10 10.1 tétele a `ParameterSpec`-et egy hatodik mezővel,
+`group: str | None = None`-nal bővítette — ezt a jelen ADR "Következmények"
+szakasza nem jelezte előre explicit módon, de a `list` típus kiegészítés
+mintáját követi: additív dataclass-mező, nem érinti a `build()`-szemantikát,
+ezért kiegészítés, nem új ADR.
+
+Az igényt a `BACKLOG.md` (korábbi) 5. tétele vetette fel: a relief_generator
+plugin 24 elemű `_PARAMETERS`-e (ROADMAP Phase 9.7.d) egyetlen, tagolatlan
+formként jelent meg, típustól/relevanciától függetlenül.
+
+Azonos `group`-ú `ParameterSpec`-ek a core GUI generikus form-builderjében
+(`src/slicedesigner/gui/parameter_panel.py::_GeneratorParameterForm`) egy
+közös, a meglévő `_CollapsibleSection` osztállyal épített, alapból csukott
+szakaszba kerülnek, a csoport első előfordulásának helyén — nem szükséges,
+hogy a `parameters` tuple-ben szomszédosak legyenek. `group=None` mezők
+(minden meglévő `ParameterSpec`, a relief_generator alapgeometriai mezői és
+a `sources` `item_schema`-ja is) csoportosítás nélkül, a fő formban jelennek
+meg — ez a `list` típushoz hasonlóan tisztán additív bővítés, minden meglévő
+`_PARAMETERS` tuple és a `_GeneratorParameterForm.values()` visszatérési
+alakja változatlan marad.
+
+**Explicit hatókörön kívül:** feltételes (dinamikus, egy másik mező
+értékétől függő) mezőláthatóság — a csoportosítás statikus, a `parameters`
+tuple összeállításakor rögzített, nem futásidőben, widget-eseményekre
+változó.

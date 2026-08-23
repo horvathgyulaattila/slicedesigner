@@ -126,6 +126,26 @@ def test_generate_matches_analytic_single_component_formula() -> None:
     assert height_field.query(x, y) == pytest.approx(expected, abs=1e-9)
 
 
+# --- WaveParameters.function (ROADMAP Phase 10.2) ---
+
+
+def test_generate_uses_function_field_for_automatic_components() -> None:
+    # A `test_generate_matches_analytic_single_component_formula` már
+    # implicit igazolja, hogy `function` explicit megadása nélkül (tehát
+    # alapértelmezett `"Sinusoidal"` mellett) a generált `HeightField` a
+    # 10.2 előtti, Sinusoidal-lal hardkódolt eredménnyel bitre azonos
+    # (analitikus Sinusoidal-formulával egyezik). Ez a teszt azt igazolja,
+    # hogy egy eltérő `function` ténylegesen más eredményt ad ugyanazon a
+    # mintaponton.
+    sinusoidal = WaveGenerator().generate(WaveParameters(**_BASE_KWARGS))
+    triangle = WaveGenerator().generate(
+        WaveParameters(**_BASE_KWARGS, function="Triangle")
+    )
+
+    x, y = 0.5, 0.3
+    assert triangle.query(x, y) != pytest.approx(sinusoidal.query(x, y))
+
+
 # --- WaveParameters.envelope/distortion/sources tényleges bekötése (9.7.c) ---
 
 _BASE_KWARGS = {

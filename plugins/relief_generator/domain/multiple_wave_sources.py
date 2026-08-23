@@ -24,10 +24,11 @@ from plugins.relief_generator.domain.wave import (
     AmplitudeEnvelope,
     DirectionalPropagation,
     Distortion,
-    Sinusoidal,
     UniformEnvelope,
     Wave,
+    WaveFunctionName,
     WaveSet,
+    build_wave_function,
 )
 from plugins.relief_generator.exceptions import WaveSourceSpecValueError
 
@@ -51,6 +52,12 @@ class WaveSourceSpec:
         phase: a forrás fáziseltolása, véges numerikus érték.
         weight: a forrás hozzájárulása a `WaveSet` eredményéhez.
             Alapértelmezett: `1.0`.
+        function: a forrás `WaveFunction`-je (`"Sinusoidal"`, `"Triangle"`,
+            `"Sawtooth"` vagy `"Square"`). Alapértelmezett: `"Sinusoidal"`
+            (Phase 9.4–10.1-kompatibilis viselkedés). Forrásonként
+            egyedileg állítható, az `amplitude`/`wavelength`/`phase`
+            mintájára — nem az `envelope`/`distortion`-hoz hasonlóan
+            megosztott (ROADMAP Phase 10.2).
         direction: `source_type="Directional"` esetén kötelező, a hullám
             iránya fokban. `source_type="Radial"` esetén meg nem adható
             (`None`).
@@ -67,6 +74,7 @@ class WaveSourceSpec:
     wavelength: float
     phase: float
     weight: float = 1.0
+    function: WaveFunctionName = "Sinusoidal"
     direction: float | None = None
     source_x: float | None = None
     source_y: float | None = None
@@ -117,9 +125,10 @@ def build_wave(
     """Egyetlen `WaveSourceSpec`-ből konkrét `Wave`-et épít.
 
     Lásd: MULTIPLE_WAVE_SOURCES.md 4. szakasz: minden `WaveSourceSpec`-ből
-    előálló `Wave` `WaveFunction`-je `Sinusoidal` (rögzített). Az
-    `envelope`/`distortion` a hívó (`WaveGenerator`) által megosztott,
-    opcionális komponens — 2026-08-21-i kiegészítés, ld.
+    előálló `Wave` `WaveFunction`-je a `spec.function` szerint épül
+    (ROADMAP Phase 10.2 óta forrásonként választható, korábban rögzítetten
+    Sinusoidal volt). Az `envelope`/`distortion` a hívó (`WaveGenerator`)
+    által megosztott, opcionális komponens — 2026-08-21-i kiegészítés, ld.
     MULTIPLE_WAVE_SOURCES.md 9. szakasz.
 
     Args:
@@ -147,7 +156,7 @@ def build_wave(
         amplitude=spec.amplitude,
         wavelength=spec.wavelength,
         phase=spec.phase,
-        function=Sinusoidal(),
+        function=build_wave_function(spec.function),
         propagation=propagation,
         envelope=envelope if envelope is not None else UniformEnvelope(),
         weight=spec.weight,
