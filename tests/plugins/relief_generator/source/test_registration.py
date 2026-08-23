@@ -5,6 +5,8 @@ Lásd: `plugins/relief_generator/source/registration.py`,
 `plugins/relief_generator/pyproject.toml`.
 """
 
+import pytest
+
 from plugins.relief_generator.domain.amplitude_envelope import (
     GaussianFalloff,
     RadialAmplitudeEnvelope,
@@ -44,6 +46,7 @@ _EXPECTED_PARAMETER_NAMES = (
     "distortion_radius",
     "distortion_strength",
     "sources",
+    "include_automatic",
 )
 
 
@@ -208,3 +211,53 @@ def test_build_with_full_phase9_configuration_returns_working_mesh_source() -> N
     assert mesh.is_valid is True
     assert len(mesh.vertices) > 0
     assert len(mesh.triangles) > 0
+
+
+# --- include_automatic GUI-paraméter (2026-08-21-i kiegészítés) ---
+
+
+def test_include_automatic_parameter_defaults_to_igen() -> None:
+    descriptor = build_mesh_source_descriptor()
+
+    spec = next(s for s in descriptor.parameters if s.name == "include_automatic")
+
+    assert spec.default == "Igen"
+    assert spec.choices == ("Igen", "Nem")
+
+
+def test_build_with_include_automatic_nem_and_sources_returns_working_mesh_source() -> (
+    None
+):
+    descriptor = build_mesh_source_descriptor()
+    values = {spec.name: spec.default for spec in descriptor.parameters}
+    values["include_automatic"] = "Nem"
+    values["sources"] = [
+        {
+            "source_type": "Radial",
+            "amplitude": 0.3,
+            "wavelength": 0.15,
+            "phase": 0.0,
+            "weight": 1.0,
+            "direction": 0.0,
+            "source_x": 0.5,
+            "source_y": 0.5,
+        }
+    ]
+
+    mesh_source = descriptor.build(values)
+    mesh = mesh_source.get_mesh()
+
+    assert mesh.is_valid is True
+    assert len(mesh.vertices) > 0
+    assert len(mesh.triangles) > 0
+
+
+def test_build_with_include_automatic_nem_and_no_sources_raises() -> None:
+    from plugins.relief_generator.exceptions import WaveSetValueError
+
+    descriptor = build_mesh_source_descriptor()
+    values = {spec.name: spec.default for spec in descriptor.parameters}
+    values["include_automatic"] = "Nem"
+
+    with pytest.raises(WaveSetValueError):
+        descriptor.build(values).get_mesh()

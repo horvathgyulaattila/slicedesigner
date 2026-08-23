@@ -181,3 +181,23 @@ def test_sources_accepts_wave_source_spec_tuple() -> None:
     )
 
     assert parameters.sources == sources
+
+
+def test_include_automatic_defaults_to_true() -> None:
+    parameters = WaveParameters(**_VALID_KWARGS)
+
+    assert parameters.include_automatic is True
+
+
+def test_include_automatic_can_be_set_to_false() -> None:
+    parameters = WaveParameters(
+        wavelength=0.3,
+        amplitude=1.0,
+        direction=45.0,
+        direction_spread=20.0,
+        irregularity=0.5,
+        complexity=0.5,
+        include_automatic=False,
+    )
+
+    assert parameters.include_automatic is False

@@ -756,7 +756,7 @@ class PreviewPanel(QWidget):
         MINDIG a fő szálon fut (ADR-0011: `clear()`/`add_mesh()`/
         `reset_camera()` Qt/OpenGL-kontextus-kötött, kizárólag a fő
         szálon biztonságos)."""
-        self.plotter.clear()
+        self._clear_plotter()
         self._add_origin_gizmo(bundle.slice_set.source_mesh.bounding_box)
 
         self._add_solid_with_edges(
@@ -791,6 +791,28 @@ class PreviewPanel(QWidget):
             )
 
         self.plotter.reset_camera()  # type: ignore[call-arg]
+
+    def _clear_plotter(self) -> None:
+        """`self.plotter.clear()`, a jelenet fényforrásainak visszaállításával.
+
+        A PyVista `Plotter.clear()` — a dokumentációjával ellentétben, ami
+        csak "removing all actors and properties"-t ígér — a jelenet
+        ÖSSZES fényforrását (`renderer.lights`) is eltávolítja, és semmi
+        nem állítja azokat automatikusan vissza. Fényforrás nélkül a
+        renderelés kizárólag az ambiens komponensre esik vissza — ez
+        okozta azt, hogy a `_add_solid_with_edges()` `smooth_shading`/
+        `specular` beállítása (2026-08-21-i kiegészítés) az ELSŐ
+        `clear()`-t (azaz gyakorlatilag minden renderelést) követően
+        látszólag semmilyen hatással nem volt: a felület lapos,
+        egybefüggő, egyszínű maszatnak látszott, függetlenül a GPU-tól/
+        drivertől — élő teszteléskor derült ki, hogy nem renderelési
+        háttér-korlátozás, hanem ez a fényforrás-elvesztés az ok.
+
+        A `plotter.enable_lightkit()` állítja vissza a `QtInteractor`
+        konstruktorakor alapértelmezetten beállított 5 fényforrásos
+        "light kit"-et."""
+        self.plotter.clear()
+        self.plotter.enable_lightkit()
 
     def _add_origin_gizmo(self, bounding_box: BoundingBox) -> None:
         """A világ-origó és a három pozitív tengelyirány (X, Y, Z)
@@ -835,6 +857,7 @@ class PreviewPanel(QWidget):
         color: str,
         opacity: float = 1.0,
         edge_color: str = "dimgray",
+        smooth_shading: bool = False,
     ) -> None:
         """Egy szolid test hozzáadása, valódi (nem háromszögesítési-
         diagonál) kontúréleivel.
@@ -855,8 +878,30 @@ class PreviewPanel(QWidget):
         A kontúr-réteg ugyanazt az `opacity`-t kapja, mint a hozzá
         tartozó test — a kiemeléskori elhalványítás (`opacity=0.15`) így
         az élekre is helyesen érvényesül.
+
+        A `smooth_shading` (alapértelmezetten `False`) mérsékelt
+        `specular`-ral együtt kapcsolja be a Phong-árnyalást
+        (2026-08-21-i kiegészítés) — enélkül a lapos (facettázott)
+        árnyékolás és a nulla specularitás miatt finom, alacsony
+        amplitúdójú felületmintázatoknál (pl. Wave Generator relief)
+        gyakorlatilag csak a fenti kontúrél-réteg látszott, maga a
+        felület vizuálisan "belesimult" egy sík, egyszínű testbe. Ez
+        kizárólag az "Eredeti Mesh" nézetben (`_render_mesh()`) kell —
+        a "Szeletelt összeállítás" nézetben (`_render_geometry_bundle()`)
+        a geometria fizikailag is lapos, vízszintes rétegek egymásra
+        halmozásából áll (`render_geometry.py::slice_set_to_polydata()`
+        — minden Slice külön, saját lapos extrudálású test), ott a Phong-
+        árnyalás nem tudna mit "elsimítani", csak a rétegek határán
+        keltene zavaró, a tényleges geometriától idegen fényes csíkokat.
+        A kontúrél-réteg (egyszerű vonalgeometria) SOSEM kap
+        `smooth_shading`/`specular`-t — ott nincs értelme.
         """
-        self.plotter.add_mesh(polydata, color=color, opacity=opacity)
+        solid_kwargs: dict[str, object] = {}
+        if smooth_shading:
+            solid_kwargs["smooth_shading"] = True
+            solid_kwargs["specular"] = 0.5
+            solid_kwargs["specular_power"] = 15
+        self.plotter.add_mesh(polydata, color=color, opacity=opacity, **solid_kwargs)
         edges = polydata.extract_feature_edges(
             feature_angle=30,
             boundary_edges=True,
@@ -868,9 +913,11 @@ class PreviewPanel(QWidget):
             self.plotter.add_mesh(edges, color=edge_color, opacity=opacity)
 
     def _render_mesh(self, mesh: Mesh) -> None:
-        self.plotter.clear()
+        self._clear_plotter()
         self._add_origin_gizmo(mesh.bounding_box)
-        self._add_solid_with_edges(mesh_to_polydata(mesh), color="lightgray")
+        self._add_solid_with_edges(
+            mesh_to_polydata(mesh), color="lightgray", smooth_shading=True
+        )
         # pyvista `Plotter.reset_camera` is `@wraps`-decorated from
         # `Renderer.reset_camera`, which confuses mypy into requiring an
         # explicit `self` argument on the already-bound call — a pyvista

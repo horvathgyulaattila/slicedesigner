@@ -242,6 +242,13 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
             ParameterSpec(name="source_y", label="Forrás Y", type="float", default=0.5),
         ),
     ),
+    ParameterSpec(
+        name="include_automatic",
+        label="Automatikus hullám",
+        type="enum",
+        default="Igen",
+        choices=("Igen", "Nem"),
+    ),
 )
 
 
@@ -354,6 +361,7 @@ def _build(values: dict[str, Any]) -> ReliefGeneratorMeshSource:
         envelope=_build_envelope(values),
         distortion=_build_distortion(values),
         sources=_build_sources(values["sources"]),
+        include_automatic=values["include_automatic"] == "Igen",
     )
     parameters = ReliefGeneratorParameters(
         width=values["width"],

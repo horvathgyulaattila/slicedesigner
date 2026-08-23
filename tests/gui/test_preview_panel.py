@@ -813,6 +813,51 @@ def test_extract_feature_edges_keeps_real_edges_excludes_diagonals() -> None:
     assert edges.n_lines == 12
 
 
+def test_original_mesh_uses_smooth_shading_and_specular(
+    preview_panel: PreviewPanel, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A finom felületmintázatok (pl. Wave Generator relief) megfelelő
+    árnyékolásához az "Eredeti Mesh" nézet (`show_mesh()`) szolid rétege
+    `smooth_shading` + mérsékelt `specular` mellett kerül hozzáadásra
+    (2026-08-21-i kiegészítés) — enélkül a lapos árnyékolás miatt
+    gyakorlatilag csak a kontúrél-réteg volt látható finom mintázatoknál."""
+    calls = _record_add_mesh_calls(preview_panel, monkeypatch)
+
+    preview_panel.show_mesh(_empty_mesh())
+
+    grouped = _group_calls_by_color(calls)
+    base_kwargs = grouped["lightgray"][0]
+    assert base_kwargs["smooth_shading"] is True
+    assert base_kwargs["specular"] == 0.5
+    assert base_kwargs["specular_power"] == 15
+
+
+def test_sliced_assembly_does_not_use_smooth_shading(
+    preview_panel: PreviewPanel, monkeypatch: pytest.MonkeyPatch, qtbot: QtBot
+) -> None:
+    """A "Szeletelt összeállítás" nézetben a geometria fizikailag is
+    lapos, vízszintes rétegek egymásra halmozásából áll — a Phong-
+    árnyalás itt nem tudna mit "elsimítani", csak a rétegek határán
+    keltene, a tényleges geometriától idegen fényes csíkokat, ezért ez a
+    nézet NEM kéri a `smooth_shading`-et (`_add_solid_with_edges()`
+    alapértelmezése)."""
+    calls = _record_add_mesh_calls(preview_panel, monkeypatch)
+
+    _show_sliced_assembly_sync(qtbot, preview_panel, _slice_set(5))
+
+    grouped = _group_calls_by_color(calls)
+    base_kwargs = grouped["#7E4B26"][0]
+    assert "smooth_shading" not in base_kwargs
+    assert "specular" not in base_kwargs
+    assert "specular_power" not in base_kwargs
+
+    # A kontúrél-réteg SOSEM kap smooth_shading/specular-t — egyszerű
+    # vonalgeometria, ahol ennek nincs értelme.
+    edge_kwargs = grouped["#1A1719"][0]
+    assert "smooth_shading" not in edge_kwargs
+    assert "specular" not in edge_kwargs
+
+
 def test_enable_depth_peeling_called_with_number_of_peels_zero(
     qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
 ) -> None:

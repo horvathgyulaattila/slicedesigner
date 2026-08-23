@@ -229,3 +229,70 @@ def test_generate_is_deterministic_with_envelope_distortion_and_sources() -> Non
     sample_points = [(0.0, 0.0), (0.2, 0.9), (0.5, 0.5), (0.9, 0.2), (1.0, 1.0)]
     for x, y in sample_points:
         assert first.query(x, y) == second.query(x, y)
+
+
+# --- megosztott envelope/distortion és include_automatic (2026-08-21-i kiegészítés) ---
+
+
+def test_generate_with_include_automatic_false_and_no_sources_raises() -> None:
+    from plugins.relief_generator.exceptions import WaveSetValueError
+
+    parameters = WaveParameters(**_BASE_KWARGS, include_automatic=False)
+
+    with pytest.raises(WaveSetValueError):
+        WaveGenerator().generate(parameters)
+
+
+def test_generate_with_include_automatic_false_uses_only_explicit_sources() -> None:
+    from plugins.relief_generator.domain.multiple_wave_sources import WaveSourceSpec
+
+    source = WaveSourceSpec(
+        source_type="Radial",
+        amplitude=1.0,
+        wavelength=0.2,
+        phase=0.0,
+        source_x=0.5,
+        source_y=0.5,
+    )
+    parameters = WaveParameters(
+        **_BASE_KWARGS, include_automatic=False, sources=(source,)
+    )
+
+    height_field = WaveGenerator().generate(parameters)
+
+    assert 0.0 <= height_field.query(0.5, 0.5) <= 1.0
+
+
+def test_generate_applies_shared_envelope_to_explicit_sources_too() -> None:
+    from plugins.relief_generator.domain.amplitude_envelope import (
+        LinearFalloff,
+        RadialAmplitudeEnvelope,
+    )
+    from plugins.relief_generator.domain.multiple_wave_sources import WaveSourceSpec
+
+    envelope = RadialAmplitudeEnvelope(
+        center_x=0.0, center_y=0.0, radius=0.05, falloff=LinearFalloff()
+    )
+    source = WaveSourceSpec(
+        source_type="Radial",
+        amplitude=1.0,
+        wavelength=0.1,
+        phase=0.0,
+        source_x=0.9,
+        source_y=0.9,
+    )
+    without_envelope = WaveGenerator().generate(
+        WaveParameters(**_BASE_KWARGS, include_automatic=False, sources=(source,))
+    )
+    with_envelope = WaveGenerator().generate(
+        WaveParameters(
+            **_BASE_KWARGS,
+            include_automatic=False,
+            sources=(source,),
+            envelope=envelope,
+        )
+    )
+
+    assert with_envelope.query(0.9, 0.9) != pytest.approx(
+        without_envelope.query(0.9, 0.9)
+    )

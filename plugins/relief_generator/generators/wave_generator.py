@@ -10,7 +10,12 @@ UniformEnvelope, weight=1.0) — a megfigyelhető viselkedés a Phase 8-cal
 változatlan (backward compatibility, WAVE_DOMAIN_MODEL.md 15. szakasz).
 A Phase 9.7.c óta a `WaveParameters.envelope`/`distortion`/`sources`
 mezői (ha meg vannak adva) ténylegesen befolyásolják az automatikusan
-generált komponenseket, illetve a végső `WaveSet`-et — l.
+generált komponenseket, illetve a végső `WaveSet`-et. A 2026-08-21-i
+kiegészítés (MULTIPLE_WAVE_SOURCES.md 9. szakasz) óta az `envelope`/
+`distortion` az explicit `sources`-ból épülő komponensekre IS
+alkalmazódik (ugyanazzal a megosztott példánnyal), és a `WaveParameters.
+include_automatic=False` esetén az automatikus komponens-generálás
+teljesen kimarad — l.
 docs/plugins/relief_generator/WAVE_EXTENSION_IMPLEMENTATION_PLAN.md.
 """
 
@@ -105,6 +110,10 @@ class WaveGenerator:
                 felület degenerált (a mintavételezett maximum és minimum
                 megegyezik). Érvényes `WaveParameters` mellett elméletileg
                 nem fordulhat elő, mivel `amplitude > 0` validált.
+            WaveSetValueError: ha `parameters.include_automatic` `False`
+                ÉS `parameters.sources` üres — ekkor a végső `WaveSet`
+                nulla komponenst tartalmazna, ami érvénytelen (l.
+                `WaveSet.__post_init__`).
         """
         wave_set = self._build_wave_set(parameters)
         raw_height_function = self._make_raw_height_function(wave_set)
@@ -124,29 +133,33 @@ class WaveGenerator:
         return HeightField(normalized_height_function)
 
     def _build_wave_set(self, parameters: WaveParameters) -> WaveSet:
-        """Kiszámítja a determinisztikus komponenslistát, majd az explicit
-        forráslistával összefűzve épít `WaveSet`-et.
+        """Kiszámítja a determinisztikus komponenslistát (ha
+        `include_automatic`), majd az explicit forráslistával összefűzve
+        épít `WaveSet`-et.
 
         Minden automatikusan generált komponens `Sinusoidal`
         `WaveFunction`-nel, `DirectionalPropagation`-nel és
-        `weight=1.0`-val épül. Az `envelope` a `parameters.envelope`, ha
-        meg van adva — ekkor egységesen minden automatikusan generált
-        komponensre alkalmazódik —, különben `UniformEnvelope()`; ez
-        biztosítja a Phase 8 azonos konfigurációjú viselkedésével való
-        egyezést, ha `envelope=None` (WAVE_DOMAIN_MODEL.md 15. szakasz).
-        A `distortion` hasonlóan a `parameters.distortion` (lehet
-        `None`). A `parameters.sources` az automatikusan generált
-        komponensek UTÁN kerül a végső `WaveSet`-be
-        (MULTIPLE_WAVE_SOURCES.md 5. szakasz sorrendje); üres `sources`
+        `weight=1.0`-val épül. Ha `parameters.include_automatic` hamis,
+        egyetlen automatikus komponens sem épül — a végső `WaveSet`
+        kizárólag a `parameters.sources`-ból áll.
+
+        Az `envelope` a `parameters.envelope`, ha meg van adva — ekkor
+        egységesen minden komponensre (automatikus ÉS explicit)
+        alkalmazódik —, különben `UniformEnvelope()`. A `distortion`
+        hasonlóan a `parameters.distortion` (lehet `None`), szintén
+        mindkét komponens-csoportra. Ez biztosítja a Phase 8 azonos
+        konfigurációjú viselkedésével való egyezést, ha `envelope=None`
+        és `distortion=None` (WAVE_DOMAIN_MODEL.md 15. szakasz).
+
+        A `parameters.sources` az automatikusan generált komponensek
+        UTÁN kerül a végső `WaveSet`-be (MULTIPLE_WAVE_SOURCES.md 5.
+        szakasz sorrendje); üres `sources` és `include_automatic=True`
         esetén ez pontosan a korábbi, Phase 8/9.1–9.6-kompatibilis
         eredményt adja.
 
-        Lásd: WAVE_FUNCTION_MODEL.md 22. szakasz.
+        Lásd: WAVE_FUNCTION_MODEL.md 22. szakasz,
+        MULTIPLE_WAVE_SOURCES.md 9. szakasz (2026-08-21-i kiegészítés).
         """
-        component_count = MIN_COMPONENTS + round(
-            parameters.complexity * (MAX_COMPONENTS - MIN_COMPONENTS)
-        )
-        spread = parameters.direction_spread
         envelope: AmplitudeEnvelope = (
             parameters.envelope
             if parameters.envelope is not None
@@ -154,47 +167,64 @@ class WaveGenerator:
         )
 
         waves: list[Wave] = []
-        for i in range(component_count):
-            amplitude = (
-                parameters.amplitude
-                * PERSISTENCE**i
-                * (1.0 + parameters.irregularity * AMPLITUDE_JITTER_SCALE * _rho(i, 0))
+        if parameters.include_automatic:
+            component_count = MIN_COMPONENTS + round(
+                parameters.complexity * (MAX_COMPONENTS - MIN_COMPONENTS)
             )
-            wavelength = (
-                parameters.wavelength
-                / LACUNARITY**i
-                * (1.0 + parameters.irregularity * WAVELENGTH_JITTER_SCALE * _rho(i, 1))
-            )
-            if component_count == 1:
-                direction_deg = parameters.direction
-            else:
-                direction_deg = (parameters.direction - spread) + i * (
-                    2.0 * spread / (component_count - 1)
-                )
-            phase_jitter = (
-                parameters.irregularity
-                * PHASE_JITTER_SCALE
-                * _rho(i, 2)
-                * 2.0
-                * math.pi
-            )
-            phase = (i * GOLDEN_ANGLE_RAD + phase_jitter) % (2.0 * math.pi)
+            spread = parameters.direction_spread
 
-            waves.append(
-                Wave(
-                    amplitude=amplitude,
-                    wavelength=wavelength,
-                    phase=phase,
-                    function=Sinusoidal(),
-                    propagation=DirectionalPropagation(
-                        direction_rad=math.radians(direction_deg)
-                    ),
-                    envelope=envelope,
-                    weight=1.0,
-                    distortion=parameters.distortion,
+            for i in range(component_count):
+                amplitude = (
+                    parameters.amplitude
+                    * PERSISTENCE**i
+                    * (
+                        1.0
+                        + parameters.irregularity * AMPLITUDE_JITTER_SCALE * _rho(i, 0)
+                    )
                 )
-            )
-        return build_combined_wave_set(tuple(waves), parameters.sources)
+                wavelength = (
+                    parameters.wavelength
+                    / LACUNARITY**i
+                    * (
+                        1.0
+                        + parameters.irregularity * WAVELENGTH_JITTER_SCALE * _rho(i, 1)
+                    )
+                )
+                if component_count == 1:
+                    direction_deg = parameters.direction
+                else:
+                    direction_deg = (parameters.direction - spread) + i * (
+                        2.0 * spread / (component_count - 1)
+                    )
+                phase_jitter = (
+                    parameters.irregularity
+                    * PHASE_JITTER_SCALE
+                    * _rho(i, 2)
+                    * 2.0
+                    * math.pi
+                )
+                phase = (i * GOLDEN_ANGLE_RAD + phase_jitter) % (2.0 * math.pi)
+
+                waves.append(
+                    Wave(
+                        amplitude=amplitude,
+                        wavelength=wavelength,
+                        phase=phase,
+                        function=Sinusoidal(),
+                        propagation=DirectionalPropagation(
+                            direction_rad=math.radians(direction_deg)
+                        ),
+                        envelope=envelope,
+                        weight=1.0,
+                        distortion=parameters.distortion,
+                    )
+                )
+        return build_combined_wave_set(
+            tuple(waves),
+            parameters.sources,
+            envelope=envelope,
+            distortion=parameters.distortion,
+        )
 
     def _make_raw_height_function(
         self, wave_set: WaveSet

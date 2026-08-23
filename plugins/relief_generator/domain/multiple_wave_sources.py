@@ -21,7 +21,9 @@ from typing import Literal, cast
 
 from plugins.relief_generator.domain.radial_wave_source import RadialPropagation
 from plugins.relief_generator.domain.wave import (
+    AmplitudeEnvelope,
     DirectionalPropagation,
+    Distortion,
     Sinusoidal,
     UniformEnvelope,
     Wave,
@@ -107,15 +109,26 @@ class WaveSourceSpec:
                 )
 
 
-def build_wave(spec: WaveSourceSpec) -> Wave:
+def build_wave(
+    spec: WaveSourceSpec,
+    envelope: AmplitudeEnvelope | None = None,
+    distortion: Distortion | None = None,
+) -> Wave:
     """Egyetlen `WaveSourceSpec`-ből konkrét `Wave`-et épít.
 
     Lásd: MULTIPLE_WAVE_SOURCES.md 4. szakasz: minden `WaveSourceSpec`-ből
-    előálló `Wave` `WaveFunction`-je `Sinusoidal`, `AmplitudeEnvelope`-ja
-    `Uniform` (mindkettő rögzített).
+    előálló `Wave` `WaveFunction`-je `Sinusoidal` (rögzített). Az
+    `envelope`/`distortion` a hívó (`WaveGenerator`) által megosztott,
+    opcionális komponens — 2026-08-21-i kiegészítés, ld.
+    MULTIPLE_WAVE_SOURCES.md 9. szakasz.
 
     Args:
         spec: az explicit hullámforrás specifikációja.
+        envelope: opcionális, megosztott `AmplitudeEnvelope`. `None`
+            esetén `UniformEnvelope()` (Phase 8/9.1–9.7.f-kompatibilis
+            alapértelmezés).
+        distortion: opcionális, megosztott `Distortion`. `None` esetén
+            nincs torzítás.
 
     Returns:
         A specifikációnak megfelelő `Wave`.
@@ -136,13 +149,17 @@ def build_wave(spec: WaveSourceSpec) -> Wave:
         phase=spec.phase,
         function=Sinusoidal(),
         propagation=propagation,
-        envelope=UniformEnvelope(),
+        envelope=envelope if envelope is not None else UniformEnvelope(),
         weight=spec.weight,
+        distortion=distortion,
     )
 
 
 def build_combined_wave_set(
-    automatic_waves: tuple[Wave, ...], source_specs: tuple[WaveSourceSpec, ...]
+    automatic_waves: tuple[Wave, ...],
+    source_specs: tuple[WaveSourceSpec, ...],
+    envelope: AmplitudeEnvelope | None = None,
+    distortion: Distortion | None = None,
 ) -> WaveSet:
     """Az automatikus generálás és az explicit forráslista összefűzéséből
     épít végső `WaveSet`-et.
@@ -151,17 +168,27 @@ def build_combined_wave_set(
     generált komponensek előbb, az explicit forráslista elemei a
     megadott sorrendjükben utánuk; nincs a több forrásra vonatkozó
     önálló validációs szabály (pl. két azonos centerű `Radial` forrás
-    érvényes konfiguráció).
+    érvényes konfiguráció). Az `envelope`/`distortion` — ha meg vannak
+    adva — minden `source_specs`-ből épülő `Wave`-re alkalmazódik,
+    ugyanazzal a megosztott példánnyal (MULTIPLE_WAVE_SOURCES.md 9.
+    szakasz, 2026-08-21-i kiegészítés).
 
     Args:
         automatic_waves: a `WaveParameters`-alapú automatikus generálásból
             származó, már felépített `Wave`-lista.
         source_specs: az explicit forráslista, alapértelmezetten üres.
+        envelope: opcionális, megosztott `AmplitudeEnvelope`, amelyet a
+            `source_specs`-ből épülő minden `Wave` megkap.
+        distortion: opcionális, megosztott `Distortion`, amelyet a
+            `source_specs`-ből épülő minden `Wave` megkap.
 
     Returns:
         Az összefűzött `WaveSet` — az `automatic_waves` elemei előbb, a
         `source_specs`-ből épített `Wave`-ek utánuk, a megadott
         sorrendben.
     """
-    explicit_waves = tuple(build_wave(spec) for spec in source_specs)
+    explicit_waves = tuple(
+        build_wave(spec, envelope=envelope, distortion=distortion)
+        for spec in source_specs
+    )
     return WaveSet(waves=automatic_waves + explicit_waves)

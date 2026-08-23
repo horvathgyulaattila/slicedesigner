@@ -241,3 +241,70 @@ def test_two_radial_sources_with_identical_center_are_valid() -> None:
     x, y = 2.5, 3.1
     expected = wave_a.evaluate(x, y) + wave_b.evaluate(x, y)
     assert combined.evaluate_raw(x, y) == pytest.approx(expected)
+
+
+# --- megosztott envelope/distortion (2026-08-21-i kiegészítés) ---
+
+
+def test_build_wave_defaults_to_uniform_envelope_and_no_distortion() -> None:
+    spec = WaveSourceSpec(
+        source_type="Directional",
+        amplitude=1.0,
+        wavelength=0.3,
+        phase=0.0,
+        direction=0.0,
+    )
+
+    wave = build_wave(spec)
+
+    assert isinstance(wave.envelope, UniformEnvelope)
+    assert wave.distortion is None
+
+
+def test_build_wave_uses_provided_envelope_and_distortion() -> None:
+    from plugins.relief_generator.domain.amplitude_envelope import (
+        LinearFalloff,
+        RadialAmplitudeEnvelope,
+    )
+    from plugins.relief_generator.domain.procedural_distortion import SwirlDistortion
+
+    spec = WaveSourceSpec(
+        source_type="Radial",
+        amplitude=1.0,
+        wavelength=0.3,
+        phase=0.0,
+        source_x=0.4,
+        source_y=0.6,
+    )
+    envelope = RadialAmplitudeEnvelope(
+        center_x=0.5, center_y=0.5, radius=0.4, falloff=LinearFalloff()
+    )
+    distortion = SwirlDistortion(center_x=0.5, center_y=0.5, radius=0.3, strength=1.2)
+
+    wave = build_wave(spec, envelope=envelope, distortion=distortion)
+
+    assert wave.envelope is envelope
+    assert wave.distortion is distortion
+
+
+def test_build_combined_wave_set_shares_envelope_with_sources() -> None:
+    from plugins.relief_generator.domain.amplitude_envelope import (
+        LinearFalloff,
+        RadialAmplitudeEnvelope,
+    )
+
+    spec = WaveSourceSpec(
+        source_type="Radial",
+        amplitude=1.0,
+        wavelength=0.3,
+        phase=0.0,
+        source_x=0.4,
+        source_y=0.6,
+    )
+    envelope = RadialAmplitudeEnvelope(
+        center_x=0.5, center_y=0.5, radius=0.4, falloff=LinearFalloff()
+    )
+
+    combined = build_combined_wave_set((), (spec,), envelope=envelope)
+
+    assert combined.waves[0].envelope is envelope
