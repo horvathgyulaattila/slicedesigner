@@ -72,3 +72,34 @@ A domainfeltétel `k > 0`. A `k → 0+` tartományban `M(t) → 1`, tehát a Gau
 ## 10. Envelope által létrehozott konstans nulla eredmény
 
 Ha az envelope minden vizsgált ponton `M(x,y) = 0`, akkor `H(x,y) = 0` minden ponton. Ez érvényes eredmény. Az ilyen eredményt az envelope alkalmazása után nem szabad újranormalizálni (lásd [WAVE_DOMAIN_MODEL.md](WAVE_DOMAIN_MODEL.md) 12. szakasz).
+
+## 11. NoiseAmplitudeEnvelope (ROADMAP Phase 10.5)
+
+A `Noise` envelope a Phase 10.4-ben bevezetett `GradientNoiseField`/
+`VoronoiNoiseField` primitívumok egyikét csomagolja be
+`AmplitudeEnvelope`-ként, egy apró, helyben (`amplitude_envelope.py`)
+definiált `NoiseSource` Protocol-lal (`sample(x,y) -> float`) — mindkét
+primitívum már ezt a metódus-aláírást implementálja, structural
+typing-gal, a `procedural_noise.py` módosítása nélkül.
+
+```text
+raw = noise.sample(x, y)
+normalized = (raw − input_min) / (input_max − input_min)
+M(x,y) = clamp(normalized, 0, 1)
+```
+
+`input_min`/`input_max` alapértéke `0.0`/`1.0` — ez a `VoronoiNoiseField`
+natív tartományának felel meg, nem igényel remapet.
+`GradientNoiseField`-hez `input_min=-1.0, input_max=1.0` adandó meg (a
+GUI-bekötés, l. `registration.py`, ezt automatikusan beállítja a
+választott zajtípus szerint).
+
+Nincs invertálás — a `VoronoiNoiseField` cellahatárai (nagy F1-távolság)
+adják a magas amplitúdót, a mag-pontok közelsége (kis távolság) az
+alacsonyat; ha a fordított viselkedés válik szükségessé, az külön,
+jövőbeli kiegészítés.
+
+## 12. Kivétel
+
+`NoiseAmplitudeEnvelopeValueError` — akkor dobódik, ha
+`input_max <= input_min`.

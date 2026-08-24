@@ -16,6 +16,7 @@ from typing import Protocol
 
 from plugins.relief_generator.exceptions import (
     GaussianFalloffValueError,
+    NoiseAmplitudeEnvelopeValueError,
     RadialAmplitudeEnvelopeValueError,
 )
 
@@ -152,3 +153,85 @@ class RadialAmplitudeEnvelope:
         """
         d = math.hypot(x - self.center_x, y - self.center_y)
         return self.falloff.factor(d, self.radius)
+
+
+class NoiseSource(Protocol):
+    """Egy determinisztikus 2D zajmező-mintavételező komponens.
+
+    Lásd: AMPLITUDE_ENVELOPE.md 11. szakasz (ROADMAP Phase 10.5). A
+    `plugins.relief_generator.domain.procedural_noise.GradientNoiseField`
+    és `VoronoiNoiseField` (Phase 10.4) mindkettő már kielégíti ezt a
+    Protocolt, módosítás nélkül — tisztán structural typing, a
+    `Falloff`/`AmplitudeEnvelope`/`Distortion`/`PropagationModel` mintáját
+    követve.
+    """
+
+    def sample(self, x: float, y: float) -> float:
+        """Mintavételezi a zajmezőt egy adott térbeli koordinátán.
+
+        Args:
+            x: X-koordináta.
+            y: Y-koordináta.
+
+        Returns:
+            A zajmező mintavételezett értéke (a konkrét megvalósítás
+            saját tartományában — l. `input_min`/`input_max` a
+            `NoiseAmplitudeEnvelope`-on).
+        """
+        ...
+
+
+@dataclass(frozen=True)
+class NoiseAmplitudeEnvelope:
+    """Eljárásos zajmező-alapú amplitúdómoduláció.
+
+    Lásd: AMPLITUDE_ENVELOPE.md 11. szakasz (ROADMAP Phase 10.5). A
+    `plugins.relief_generator.domain.wave.AmplitudeEnvelope` Protocol
+    megvalósítása — a `noise` mezőt egy `[input_min, input_max]`
+    tartományból lineárisan `[0.0, 1.0]`-ra képezi, `[0.0, 1.0]`-ra
+    vágva (numerikus biztonsági háló).
+
+    Attributes:
+        noise: a mintavételezendő zajmező-forrás (bármely `NoiseSource`
+            Protocolt kielégítő objektum — pl. `GradientNoiseField` vagy
+            `VoronoiNoiseField`, Phase 10.4).
+        input_min: a `noise.sample()` elméleti alsó korlátja.
+            Alapértelmezett: `0.0` (a `VoronoiNoiseField` natív
+            tartománya — nem igényel remapet).
+        input_max: a `noise.sample()` elméleti felső korlátja.
+            Alapértelmezett: `1.0`. `GradientNoiseField`-hez
+            `input_min=-1.0` adandó meg a hívó által.
+    """
+
+    noise: NoiseSource
+    input_min: float = 0.0
+    input_max: float = 1.0
+
+    def __post_init__(self) -> None:
+        """Fail-fast validálja az `input_min`/`input_max` mezőket.
+
+        Raises:
+            NoiseAmplitudeEnvelopeValueError: ha `input_max` nem
+                szigorúan nagyobb, mint `input_min`.
+        """
+        if not self.input_max > self.input_min:
+            raise NoiseAmplitudeEnvelopeValueError(
+                "Az input_max-nak szigorúan nagyobbnak kell lennie, mint "
+                f"az input_min, kapott érték: input_min={self.input_min}, "
+                f"input_max={self.input_max}"
+            )
+
+    def amplitude_factor(self, x: float, y: float) -> float:
+        """Kiszámítja az amplitúdómodulációs szorzót egy adott koordinátán.
+
+        Args:
+            x: X-koordináta.
+            y: Y-koordináta.
+
+        Returns:
+            A `[0.0, 1.0]` zárt intervallumba eső amplitúdómodulációs
+            szorzó.
+        """
+        raw = self.noise.sample(x, y)
+        normalized = (raw - self.input_min) / (self.input_max - self.input_min)
+        return min(max(normalized, 0.0), 1.0)

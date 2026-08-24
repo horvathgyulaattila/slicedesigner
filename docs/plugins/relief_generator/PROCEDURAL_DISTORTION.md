@@ -71,11 +71,42 @@ A `SwirlDistortion` tisztán parametrikus — nem igényel zajgenerátort vagy s
 
 Nem része a 9.6-nak:
 
-* Amplitude distortion (a hullám magasságát, nem a koordinátáit moduláló torzítás) — ez fogalmilag az `AmplitudeEnvelope` (9.2) jövőbeli bővítése, `BACKLOG.md` 3. tétel;
-* további `Distortion`-típusok (pl. sima, folytonos zajmező-alapú koordináta-warp, több lépték kombinálása) — `BACKLOG.md` 4. tétel;
+* Amplitude distortion (a hullám magasságát, nem a koordinátáit moduláló torzítás) — ez fogalmilag az `AmplitudeEnvelope` (9.2) jövőbeli bővítése, `BACKLOG.md` 3. tétel — **megvalósítva**: l. [AMPLITUDE_ENVELOPE.md](AMPLITUDE_ENVELOPE.md) 11. szakasz, `NoiseAmplitudeEnvelope` (ROADMAP Phase 10.5);
+* ~~további `Distortion`-típusok (pl. sima, folytonos zajmező-alapú koordináta-warp, több lépték kombinálása) — `BACKLOG.md` 4. tétel~~ — **megvalósítva**: l. 9. szakasz, `NoiseDistortion` (ROADMAP Phase 10.6);
 * több `Distortion` egymásra rétegzése ("Distortion Layer" stacking);
 * GUI-implementáció (a paraméterek domain-szintű létezése a meglévő `MeshSourceDescriptor`/`ParameterSpec` mechanizmuson, ADR-0017, keresztül válik automatikusan szerkeszthetővé, ugyanúgy, mint a 9.4-nél).
 
 ## 8. Phase 8/9.1–9.5 backward compatibility
 
 Ha egy `Wave`-nek nincs `Distortion` komponense (ez az alapértelmezett állapot), a viselkedés pontosan megegyezik a `Distortion` bevezetése előtti (Phase 8, illetve 9.1–9.5) viselkedéssel. Ez a 9.6 validációjának kötelező része.
+
+## 9. NoiseDistortion (ROADMAP Phase 10.6)
+
+A `Noise` distortion a Phase 10.4-ben bevezetett `GradientNoiseField`
+primitívumot csomagolja be `Distortion`-ként — kizárólag
+`GradientNoiseField`-et, NEM `VoronoiNoiseField`-et, mert a
+koordináta-eltoláshoz előjeles (`[-1,1]`) érték szükséges, amit a
+`VoronoiNoiseField` nem-negatív, távolság-jellegű `[0,1]` kimenete nem
+ad közvetlenül.
+
+Klasszikus "domain warping" technika: az X és Y koordinátát KÉT,
+egymástól független zajmező (jellemzően azonos `scale`, de eltérő
+`seed`/`seed+1`) mintáival tolja el:
+
+```text
+x' = x + strength · noise_x(x, y)
+y' = y + strength · noise_y(x, y)
+```
+
+A `strength` bármely véges valós érték lehet — pontosan a
+`SwirlDistortion.strength` mintájára (3–5. szakasz), `strength=0` az
+identitás-transzformációval egyenértékű. Nincs invariáns, nincs hozzá
+tartozó kivétel.
+
+A "több lépték kombinálása" (`BACKLOG.md` 4. tétel másik fele) a
+`GradientNoiseField` `octaves` paraméterén (PROCEDURAL_NOISE.md 2.3
+szakasz) keresztül már elérhető — nem igényelt új logikát ehhez a
+tételhez.
+
+**Hatókörön kívül marad** (l. 7. szakasz is): a "Distortion Layer"
+stacking (több `Distortion` egymásra rétegzése).

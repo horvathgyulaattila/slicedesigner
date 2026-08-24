@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Protocol
 
 from plugins.relief_generator.exceptions import SwirlDistortionValueError
 
@@ -76,3 +77,66 @@ class SwirlDistortion:
         warped_x = self.center_x + dx * cos_a - dy * sin_a
         warped_y = self.center_y + dx * sin_a + dy * cos_a
         return warped_x, warped_y
+
+
+class NoiseSource(Protocol):
+    """Egy determinisztikus 2D zajmező-mintavételező komponens.
+
+    Lásd: PROCEDURAL_DISTORTION.md 9. szakasz (ROADMAP Phase 10.6). A
+    `plugins.relief_generator.domain.procedural_noise.GradientNoiseField`
+    (Phase 10.4) már kielégíti ezt a Protocolt, módosítás nélkül —
+    tisztán structural typing, az `amplitude_envelope.py`-beli azonos
+    nevű, de önálló (nem importált) Protocol mintáját követve.
+    """
+
+    def sample(self, x: float, y: float) -> float:
+        """Mintavételezi a zajmezőt egy adott térbeli koordinátán.
+
+        Args:
+            x: X-koordináta.
+            y: Y-koordináta.
+
+        Returns:
+            A zajmező mintavételezett értéke, `[-1.0, 1.0]`-ból.
+        """
+        ...
+
+
+@dataclass(frozen=True)
+class NoiseDistortion:
+    """Zajmező-alapú, sima koordináta-warp (domain warping).
+
+    Lásd: PROCEDURAL_DISTORTION.md 9. szakasz (ROADMAP Phase 10.6). A
+    `plugins.relief_generator.domain.wave.Distortion` Protocol
+    megvalósítása — az X és Y koordinátát két, egymástól független
+    zajmező (jellemzően eltérő seedű `GradientNoiseField`) mintáival
+    tolja el.
+
+    Attributes:
+        noise_x: az X-eltolást meghatározó zajmező-forrás.
+        noise_y: az Y-eltolást meghatározó zajmező-forrás — a hívó
+            felelőssége eltérő (pl. `seed+1`) forrást megadni, hogy az
+            X/Y eltolás ne legyen tökéletesen korrelált.
+        strength: az eltolás mértéke — a zajmezők `[-1,1]` kimenetét
+            ezzel szorozva kapjuk a tényleges eltolást. Bármely véges
+            valós érték lehet; `strength=0` az identitás-transzformációval
+            egyenértékű.
+    """
+
+    noise_x: NoiseSource
+    noise_y: NoiseSource
+    strength: float
+
+    def warp(self, x: float, y: float) -> tuple[float, float]:
+        """Eltolja a koordinátákat a két zajmező mintái szerint.
+
+        Args:
+            x: X-koordináta.
+            y: Y-koordináta.
+
+        Returns:
+            A torzított `(x', y')` koordináták.
+        """
+        dx = self.strength * self.noise_x.sample(x, y)
+        dy = self.strength * self.noise_y.sample(x, y)
+        return x + dx, y + dy

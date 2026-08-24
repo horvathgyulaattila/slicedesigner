@@ -65,6 +65,16 @@ class GaussianFalloffValueError(ReliefGeneratorError):
     """
 
 
+class NoiseAmplitudeEnvelopeValueError(ReliefGeneratorError):
+    """Érvénytelen `NoiseAmplitudeEnvelope` mezőérték.
+
+    Akkor dobódik, ha a `NoiseAmplitudeEnvelope` létrehozásakor az
+    `input_max` nem szigorúan nagyobb, mint az `input_min` (l.
+    `NoiseAmplitudeEnvelope` osztály docstringje,
+    docs/plugins/relief_generator/AMPLITUDE_ENVELOPE.md 11. szakasz).
+    """
+
+
 class WaveSourceSpecValueError(ReliefGeneratorError):
     """Érvénytelen `WaveSourceSpec` mezőérték.
 
@@ -83,6 +93,15 @@ class SwirlDistortionValueError(ReliefGeneratorError):
     Akkor dobódik, ha a `SwirlDistortion` létrehozásakor a `radius` nem
     szigorúan pozitív (l. `SwirlDistortion` osztály docstringje,
     docs/plugins/relief_generator/PROCEDURAL_DISTORTION.md 3. szakasz).
+    """
+
+
+class ProceduralNoiseValueError(ReliefGeneratorError):
+    """Érvénytelen `GradientNoiseField`/`VoronoiNoiseField` mezőérték.
+
+    Akkor dobódik, ha a `scale` nem szigorúan pozitív, vagy (kizárólag
+    `GradientNoiseField` esetén) az `octaves` 1-nél kisebb (l.
+    docs/plugins/relief_generator/PROCEDURAL_NOISE.md).
     """
 
 

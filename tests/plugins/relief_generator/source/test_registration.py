@@ -9,9 +9,14 @@ import pytest
 
 from plugins.relief_generator.domain.amplitude_envelope import (
     GaussianFalloff,
+    NoiseAmplitudeEnvelope,
     RadialAmplitudeEnvelope,
 )
-from plugins.relief_generator.domain.procedural_distortion import SwirlDistortion
+from plugins.relief_generator.domain.procedural_distortion import (
+    NoiseDistortion,
+    SwirlDistortion,
+)
+from plugins.relief_generator.domain.procedural_noise import GradientNoiseField
 from plugins.relief_generator.source.registration import (
     _build_distortion,
     _build_envelope,
@@ -41,11 +46,23 @@ _EXPECTED_PARAMETER_NAMES = (
     "envelope_radius",
     "envelope_falloff",
     "envelope_sharpness",
+    "envelope_noise_type",
+    "envelope_noise_scale",
+    "envelope_noise_seed",
+    "envelope_noise_octaves",
+    "envelope_noise_persistence",
+    "envelope_noise_lacunarity",
     "distortion_type",
     "distortion_center_x",
     "distortion_center_y",
     "distortion_radius",
     "distortion_strength",
+    "distortion_noise_scale",
+    "distortion_noise_seed",
+    "distortion_noise_octaves",
+    "distortion_noise_persistence",
+    "distortion_noise_lacunarity",
+    "distortion_noise_strength",
     "sources",
     "include_automatic",
 )
@@ -87,11 +104,23 @@ _EXPECTED_PARAMETER_GROUPS = {
     "envelope_radius": "Envelope",
     "envelope_falloff": "Envelope",
     "envelope_sharpness": "Envelope",
+    "envelope_noise_type": "Envelope",
+    "envelope_noise_scale": "Envelope",
+    "envelope_noise_seed": "Envelope",
+    "envelope_noise_octaves": "Envelope",
+    "envelope_noise_persistence": "Envelope",
+    "envelope_noise_lacunarity": "Envelope",
     "distortion_type": "Torzítás",
     "distortion_center_x": "Torzítás",
     "distortion_center_y": "Torzítás",
     "distortion_radius": "Torzítás",
     "distortion_strength": "Torzítás",
+    "distortion_noise_scale": "Torzítás",
+    "distortion_noise_seed": "Torzítás",
+    "distortion_noise_octaves": "Torzítás",
+    "distortion_noise_persistence": "Torzítás",
+    "distortion_noise_lacunarity": "Torzítás",
+    "distortion_noise_strength": "Torzítás",
     "sources": None,
     "include_automatic": "Automatikus hullám",
 }
@@ -202,6 +231,42 @@ def test_build_envelope_gaussian_falloff_uses_sharpness() -> None:
     assert envelope.falloff.sharpness == 2.5
 
 
+def test_build_envelope_noise_gradient_uses_symmetric_input_range() -> None:
+    values = {
+        "envelope_type": "Noise",
+        "envelope_noise_type": "Gradient",
+        "envelope_noise_scale": 0.3,
+        "envelope_noise_seed": 0,
+        "envelope_noise_octaves": 1,
+        "envelope_noise_persistence": 0.5,
+        "envelope_noise_lacunarity": 2.0,
+    }
+
+    envelope = _build_envelope(values)
+
+    assert isinstance(envelope, NoiseAmplitudeEnvelope)
+    assert envelope.input_min == -1.0
+    assert envelope.input_max == 1.0
+
+
+def test_build_envelope_noise_voronoi_uses_default_input_range() -> None:
+    values = {
+        "envelope_type": "Noise",
+        "envelope_noise_type": "Voronoi",
+        "envelope_noise_scale": 0.3,
+        "envelope_noise_seed": 0,
+        "envelope_noise_octaves": 1,
+        "envelope_noise_persistence": 0.5,
+        "envelope_noise_lacunarity": 2.0,
+    }
+
+    envelope = _build_envelope(values)
+
+    assert isinstance(envelope, NoiseAmplitudeEnvelope)
+    assert envelope.input_min == 0.0
+    assert envelope.input_max == 1.0
+
+
 def test_build_distortion_returns_none_when_type_is_none() -> None:
     assert _build_distortion({"distortion_type": "None"}) is None
 
@@ -219,6 +284,28 @@ def test_build_distortion_returns_swirl_distortion() -> None:
 
     assert isinstance(distortion, SwirlDistortion)
     assert distortion.strength == 1.8
+
+
+def test_build_distortion_returns_noise_distortion_with_decorrelated_seeds() -> None:
+    values = {
+        "distortion_type": "Noise",
+        "distortion_noise_scale": 0.3,
+        "distortion_noise_seed": 5,
+        "distortion_noise_octaves": 1,
+        "distortion_noise_persistence": 0.5,
+        "distortion_noise_lacunarity": 2.0,
+        "distortion_noise_strength": 0.1,
+    }
+
+    distortion = _build_distortion(values)
+
+    assert isinstance(distortion, NoiseDistortion)
+    assert distortion.strength == 0.1
+    assert isinstance(distortion.noise_x, GradientNoiseField)
+    assert isinstance(distortion.noise_y, GradientNoiseField)
+    assert distortion.noise_x.seed == 5
+    assert distortion.noise_y.seed == 6
+    assert distortion.noise_x.seed + 1 == distortion.noise_y.seed
 
 
 def test_build_sources_returns_empty_tuple_for_empty_list() -> None:
@@ -342,6 +429,40 @@ def test_build_with_full_phase9_configuration_returns_working_mesh_source() -> N
             "source_y": 0.8,
         }
     ]
+
+    mesh_source = descriptor.build(values)
+    mesh = mesh_source.get_mesh()
+
+    assert mesh.is_valid is True
+    assert len(mesh.vertices) > 0
+    assert len(mesh.triangles) > 0
+
+
+# --- Noise envelope end-to-end (ROADMAP Phase 10.5) ---
+
+
+@pytest.mark.parametrize("noise_type", ["Gradient", "Voronoi"])
+def test_build_with_noise_envelope_returns_working_mesh_source(noise_type: str) -> None:
+    descriptor = build_mesh_source_descriptor()
+    values = {spec.name: spec.default for spec in descriptor.parameters}
+    values["envelope_type"] = "Noise"
+    values["envelope_noise_type"] = noise_type
+
+    mesh_source = descriptor.build(values)
+    mesh = mesh_source.get_mesh()
+
+    assert mesh.is_valid is True
+    assert len(mesh.vertices) > 0
+    assert len(mesh.triangles) > 0
+
+
+# --- Noise distortion end-to-end (ROADMAP Phase 10.6) ---
+
+
+def test_build_with_noise_distortion_returns_working_mesh_source() -> None:
+    descriptor = build_mesh_source_descriptor()
+    values = {spec.name: spec.default for spec in descriptor.parameters}
+    values["distortion_type"] = "Noise"
 
     mesh_source = descriptor.build(values)
     mesh = mesh_source.get_mesh()

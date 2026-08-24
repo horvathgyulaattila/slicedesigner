@@ -6,6 +6,7 @@ Lásd: docs/plugins/relief_generator/AMPLITUDE_ENVELOPE.md.
 
 import math
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -20,8 +21,13 @@ sys.path.insert(0, _REPO_ROOT)
 from plugins.relief_generator.domain.amplitude_envelope import (  # noqa: E402
     GaussianFalloff,
     LinearFalloff,
+    NoiseAmplitudeEnvelope,
     RadialAmplitudeEnvelope,
     SmoothFalloff,
+)
+from plugins.relief_generator.domain.procedural_noise import (  # noqa: E402
+    GradientNoiseField,
+    VoronoiNoiseField,
 )
 from plugins.relief_generator.domain.wave import (  # noqa: E402
     DirectionalPropagation,
@@ -30,6 +36,7 @@ from plugins.relief_generator.domain.wave import (  # noqa: E402
 )
 from plugins.relief_generator.exceptions import (  # noqa: E402
     GaussianFalloffValueError,
+    NoiseAmplitudeEnvelopeValueError,
     RadialAmplitudeEnvelopeValueError,
 )
 
@@ -147,3 +154,92 @@ def test_radial_envelope_satisfies_amplitude_envelope_contract_with_wave() -> No
 
     # d=2.0 > radius=1.0 -> Linear falloff nulla -> a teljes Wave hozzájárulás nulla
     assert wave.evaluate(2.0, 0.0) == pytest.approx(0.0)
+
+
+# --- NoiseAmplitudeEnvelope (ROADMAP Phase 10.5) ---
+
+
+@dataclass(frozen=True)
+class _ConstantNoiseSource:
+    """Teszt-stub `NoiseSource`: mindig egy rögzített értéket ad vissza."""
+
+    value: float
+
+    def sample(self, x: float, y: float) -> float:
+        return self.value
+
+
+def test_noise_amplitude_envelope_maps_input_min_to_zero() -> None:
+    envelope = NoiseAmplitudeEnvelope(
+        noise=_ConstantNoiseSource(-1.0), input_min=-1.0, input_max=1.0
+    )
+
+    assert envelope.amplitude_factor(0.0, 0.0) == pytest.approx(0.0)
+
+
+def test_noise_amplitude_envelope_maps_input_max_to_one() -> None:
+    envelope = NoiseAmplitudeEnvelope(
+        noise=_ConstantNoiseSource(1.0), input_min=-1.0, input_max=1.0
+    )
+
+    assert envelope.amplitude_factor(0.0, 0.0) == pytest.approx(1.0)
+
+
+def test_noise_amplitude_envelope_maps_midpoint_to_half() -> None:
+    envelope = NoiseAmplitudeEnvelope(
+        noise=_ConstantNoiseSource(0.0), input_min=-1.0, input_max=1.0
+    )
+
+    assert envelope.amplitude_factor(0.0, 0.0) == pytest.approx(0.5)
+
+
+def test_noise_amplitude_envelope_stays_in_unit_interval_with_gradient_field() -> None:
+    envelope = NoiseAmplitudeEnvelope(
+        noise=GradientNoiseField(scale=0.3, seed=1), input_min=-1.0, input_max=1.0
+    )
+
+    for x, y in [(0.0, 0.0), (0.7, 0.2), (-3.0, 5.0), (12.5, -8.25)]:
+        result = envelope.amplitude_factor(x, y)
+        assert 0.0 <= result <= 1.0
+
+
+def test_noise_amplitude_envelope_with_voronoi_is_identity() -> None:
+    # Voronoi natív tartománya [0,1] -> az alapértelmezett input_min/input_max
+    # mellett nincs remap, amplitude_factor == noise.sample().
+    noise = VoronoiNoiseField(scale=0.3, seed=2)
+    envelope = NoiseAmplitudeEnvelope(noise=noise)
+
+    for x, y in [(0.0, 0.0), (0.7, 0.2), (-3.0, 5.0), (12.5, -8.25)]:
+        assert envelope.amplitude_factor(x, y) == pytest.approx(noise.sample(x, y))
+
+
+@pytest.mark.parametrize("input_max", [0.0, -1.0])
+def test_noise_amplitude_envelope_input_max_not_greater_than_input_min_raises(
+    input_max: float,
+) -> None:
+    with pytest.raises(NoiseAmplitudeEnvelopeValueError):
+        NoiseAmplitudeEnvelope(
+            noise=_ConstantNoiseSource(0.0), input_min=0.0, input_max=input_max
+        )
+
+
+def test_noise_amplitude_envelope_satisfies_amplitude_envelope_contract_with_wave() -> (
+    None
+):
+    # Integrációs jellegű mini-teszt: a NoiseAmplitudeEnvelope valódi
+    # AmplitudeEnvelope-ként használható egy Wave-ben (l. domain/wave.py),
+    # a wave.py módosítása nélkül (structural typing, Protocol).
+    envelope = NoiseAmplitudeEnvelope(
+        noise=_ConstantNoiseSource(-1.0), input_min=-1.0, input_max=1.0
+    )
+    wave = Wave(
+        amplitude=1.0,
+        wavelength=1.0,
+        phase=0.0,
+        function=Sinusoidal(),
+        propagation=DirectionalPropagation(direction_rad=0.0),
+        envelope=envelope,
+    )
+
+    # amplitude_factor == 0.0 mindenhol -> a teljes Wave hozzájárulás nulla
+    assert wave.evaluate(0.0, 0.0) == pytest.approx(0.0)

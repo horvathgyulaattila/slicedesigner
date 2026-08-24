@@ -21,11 +21,19 @@ from typing import Any
 from plugins.relief_generator.domain.amplitude_envelope import (
     GaussianFalloff,
     LinearFalloff,
+    NoiseAmplitudeEnvelope,
     RadialAmplitudeEnvelope,
     SmoothFalloff,
 )
 from plugins.relief_generator.domain.multiple_wave_sources import WaveSourceSpec
-from plugins.relief_generator.domain.procedural_distortion import SwirlDistortion
+from plugins.relief_generator.domain.procedural_distortion import (
+    NoiseDistortion,
+    SwirlDistortion,
+)
+from plugins.relief_generator.domain.procedural_noise import (
+    GradientNoiseField,
+    VoronoiNoiseField,
+)
 from plugins.relief_generator.domain.wave import AmplitudeEnvelope, Distortion
 from plugins.relief_generator.domain.wave_parameters import WaveParameters
 from plugins.relief_generator.source.relief_generator_mesh_source import (
@@ -147,7 +155,7 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         label="Envelope típusa",
         type="enum",
         default="None",
-        choices=("None", "Radial"),
+        choices=("None", "Radial", "Noise"),
         group="Envelope",
     ),
     ParameterSpec(
@@ -189,11 +197,58 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         group="Envelope",
     ),
     ParameterSpec(
+        name="envelope_noise_type",
+        label="Envelope zaj típusa",
+        type="enum",
+        default="Gradient",
+        choices=("Gradient", "Voronoi"),
+        group="Envelope",
+    ),
+    ParameterSpec(
+        name="envelope_noise_scale",
+        label="Envelope zaj skála",
+        type="float",
+        default=0.3,
+        minimum=0.0001,
+        group="Envelope",
+    ),
+    ParameterSpec(
+        name="envelope_noise_seed",
+        label="Envelope zaj seed",
+        type="int",
+        default=0,
+        group="Envelope",
+    ),
+    ParameterSpec(
+        name="envelope_noise_octaves",
+        label="Envelope zaj oktávok",
+        type="int",
+        default=1,
+        minimum=1,
+        group="Envelope",
+    ),
+    ParameterSpec(
+        name="envelope_noise_persistence",
+        label="Envelope zaj persistence",
+        type="float",
+        default=0.5,
+        minimum=0.0001,
+        group="Envelope",
+    ),
+    ParameterSpec(
+        name="envelope_noise_lacunarity",
+        label="Envelope zaj lacunarity",
+        type="float",
+        default=2.0,
+        minimum=0.0001,
+        group="Envelope",
+    ),
+    ParameterSpec(
         name="distortion_type",
         label="Torzítás típusa",
         type="enum",
         default="None",
-        choices=("None", "Swirl"),
+        choices=("None", "Swirl", "Noise"),
         group="Torzítás",
     ),
     ParameterSpec(
@@ -223,6 +278,52 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         label="Torzítás mértéke",
         type="float",
         default=1.0,
+        group="Torzítás",
+    ),
+    ParameterSpec(
+        name="distortion_noise_scale",
+        label="Torzítás zaj skála",
+        type="float",
+        default=0.3,
+        minimum=0.0001,
+        group="Torzítás",
+    ),
+    ParameterSpec(
+        name="distortion_noise_seed",
+        label="Torzítás zaj seed",
+        type="int",
+        default=0,
+        group="Torzítás",
+    ),
+    ParameterSpec(
+        name="distortion_noise_octaves",
+        label="Torzítás zaj oktávok",
+        type="int",
+        default=1,
+        minimum=1,
+        group="Torzítás",
+    ),
+    ParameterSpec(
+        name="distortion_noise_persistence",
+        label="Torzítás zaj persistence",
+        type="float",
+        default=0.5,
+        minimum=0.0001,
+        group="Torzítás",
+    ),
+    ParameterSpec(
+        name="distortion_noise_lacunarity",
+        label="Torzítás zaj lacunarity",
+        type="float",
+        default=2.0,
+        minimum=0.0001,
+        group="Torzítás",
+    ),
+    ParameterSpec(
+        name="distortion_noise_strength",
+        label="Torzítás zaj mértéke",
+        type="float",
+        default=0.1,
         group="Torzítás",
     ),
     ParameterSpec(
@@ -306,16 +407,35 @@ def _build_envelope(values: dict[str, Any]) -> AmplitudeEnvelope | None:
 
     Args:
         values: a generikus form kitöltött értékei (legalább az
-            `envelope_type` és — ha az nem `"None"` — a többi
-            `envelope_*` kulcsot tartalmaznia kell).
+            `envelope_type` és — ha az nem `"None"` — a típusnak
+            megfelelő `envelope_*` kulcsokat tartalmaznia kell).
 
     Returns:
-        `None`, ha `values["envelope_type"] == "None"`; egyébként egy
-        `RadialAmplitudeEnvelope`, a választott `envelope_falloff`-nak
-        megfelelő `Falloff`-fal.
+        `None`, ha `values["envelope_type"] == "None"`; egy
+        `RadialAmplitudeEnvelope`, ha `"Radial"`, a választott
+        `envelope_falloff`-nak megfelelő `Falloff`-fal; egy
+        `NoiseAmplitudeEnvelope`, ha `"Noise"`, a választott
+        `envelope_noise_type`-nak megfelelő `GradientNoiseField`/
+        `VoronoiNoiseField`-del (ROADMAP Phase 10.5).
     """
     if values["envelope_type"] == "None":
         return None
+    if values["envelope_type"] == "Noise":
+        noise: GradientNoiseField | VoronoiNoiseField
+        if values["envelope_noise_type"] == "Gradient":
+            noise = GradientNoiseField(
+                scale=values["envelope_noise_scale"],
+                seed=values["envelope_noise_seed"],
+                octaves=values["envelope_noise_octaves"],
+                persistence=values["envelope_noise_persistence"],
+                lacunarity=values["envelope_noise_lacunarity"],
+            )
+            return NoiseAmplitudeEnvelope(noise=noise, input_min=-1.0, input_max=1.0)
+        noise = VoronoiNoiseField(
+            scale=values["envelope_noise_scale"],
+            seed=values["envelope_noise_seed"],
+        )
+        return NoiseAmplitudeEnvelope(noise=noise)
     falloff: LinearFalloff | SmoothFalloff | GaussianFalloff
     if values["envelope_falloff"] == "Linear":
         falloff = LinearFalloff()
@@ -336,15 +456,37 @@ def _build_distortion(values: dict[str, Any]) -> Distortion | None:
 
     Args:
         values: a generikus form kitöltött értékei (legalább a
-            `distortion_type` és — ha az nem `"None"` — a többi
-            `distortion_*` kulcsot tartalmaznia kell).
+            `distortion_type` és — ha az nem `"None"` — a típusnak
+            megfelelő `distortion_*` kulcsokat tartalmaznia kell).
 
     Returns:
-        `None`, ha `values["distortion_type"] == "None"`; egyébként egy
-        `SwirlDistortion`.
+        `None`, ha `values["distortion_type"] == "None"`; egy
+        `SwirlDistortion`, ha `"Swirl"`; egy `NoiseDistortion`, ha
+        `"Noise"` (ROADMAP Phase 10.6), két, egymástól dekorrelált
+        (`seed`/`seed+1`) `GradientNoiseField`-del.
     """
     if values["distortion_type"] == "None":
         return None
+    if values["distortion_type"] == "Noise":
+        noise_x = GradientNoiseField(
+            scale=values["distortion_noise_scale"],
+            seed=values["distortion_noise_seed"],
+            octaves=values["distortion_noise_octaves"],
+            persistence=values["distortion_noise_persistence"],
+            lacunarity=values["distortion_noise_lacunarity"],
+        )
+        noise_y = GradientNoiseField(
+            scale=values["distortion_noise_scale"],
+            seed=values["distortion_noise_seed"] + 1,
+            octaves=values["distortion_noise_octaves"],
+            persistence=values["distortion_noise_persistence"],
+            lacunarity=values["distortion_noise_lacunarity"],
+        )
+        return NoiseDistortion(
+            noise_x=noise_x,
+            noise_y=noise_y,
+            strength=values["distortion_noise_strength"],
+        )
     return SwirlDistortion(
         center_x=values["distortion_center_x"],
         center_y=values["distortion_center_y"],
