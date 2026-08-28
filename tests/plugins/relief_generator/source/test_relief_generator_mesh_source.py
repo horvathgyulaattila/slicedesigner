@@ -31,6 +31,9 @@ from plugins.relief_generator.exceptions import (  # noqa: E402
     MeshGenerationError,
     ReliefGeometryValueError,
 )
+from plugins.relief_generator.generators.wave_generator import (  # noqa: E402
+    WaveHeightFieldSource,
+)
 from plugins.relief_generator.source.relief_generator_mesh_source import (  # noqa: E402
     ReliefGeneratorMeshSource,
 )
@@ -60,7 +63,7 @@ def _make_parameters(
         base_thickness=base_thickness,
         relief_height=relief_height,
         sampling_distance=sampling_distance,
-        wave=wave,
+        height_field_source=WaveHeightFieldSource(wave),
     )
 
 

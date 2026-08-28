@@ -142,3 +142,36 @@ class MeshValidationError(ReliefGeneratorError):
     Akkor dobódik, ha a `MeshValidator.validate` során legalább egy
     (rendezetlen) él nem pontosan két háromszögben szerepel a mesh-ben.
     """
+
+
+class VoronoiParametersValueError(ReliefGeneratorError):
+    """Érvénytelen `VoronoiParameters` mezőérték.
+
+    Akkor dobódik, ha a `VoronoiParameters` létrehozásakor a `scale` nem
+    szigorúan pozitív (l. `VoronoiParameters` osztály docstringje,
+    docs/plugins/relief_generator/VORONOI_RELIEF_GENERATOR.md,
+    ROADMAP Phase 11.1).
+    """
+
+
+class CraterParametersValueError(ReliefGeneratorError):
+    """Érvénytelen `CraterParameters` mezőérték.
+
+    Akkor dobódik, ha a `CraterParameters` létrehozásakor a `scale` vagy
+    a `power` nem szigorúan pozitív, a `radius` nem esik a `(0, 1]`
+    tartományba, az `octaves` 1-nél kisebb, vagy a `lacunarity` nem
+    szigorúan nagyobb 1.0-nál (l. `CraterParameters` osztály
+    docstringje, docs/plugins/relief_generator/CRATER_RELIEF_GENERATOR.md,
+    ROADMAP Phase 11.2).
+    """
+
+
+class DuneParametersValueError(ReliefGeneratorError):
+    """Érvénytelen `DuneParameters` mezőérték.
+
+    Akkor dobódik, ha a `DuneParameters` létrehozásakor a `base_scale`,
+    a `ripple_wavelength`, a `ripple_amplitude` vagy a `warp_scale` nem
+    szigorúan pozitív (l. `DuneParameters` osztály docstringje,
+    docs/plugins/relief_generator/DUNE_RELIEF_GENERATOR.md,
+    ROADMAP Phase 11.3).
+    """

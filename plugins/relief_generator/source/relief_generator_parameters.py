@@ -6,8 +6,30 @@ Lásd: docs/plugins/relief_generator/IMPLEMENTATION_PLAN.md 15. szakasz
 """
 
 from dataclasses import dataclass
+from typing import Protocol
 
-from plugins.relief_generator.domain.wave_parameters import WaveParameters
+from plugins.relief_generator.domain.height_field import HeightField
+
+
+class HeightFieldSource(Protocol):
+    """A `ReliefGeneratorParameters` felszín-forrása — a konkrét generátor
+    (Wave, Voronoi, ...) kiválasztásától független, egymetódusú szerződés
+    (ROADMAP Phase 11.1). Minden megvalósítás a `generators/` rétegben él
+    (pl. `WaveHeightFieldSource`, `VoronoiHeightFieldSource`), a saját
+    paraméter-dataclass-át és a hozzá tartozó generátor-osztályt fogja
+    össze — a `ReliefGeneratorMeshSource` sosem szembesül konkrét
+    generátor-típussal.
+    """
+
+    def build_height_field(self) -> HeightField:
+        """Előállítja a felszínt leíró, normalizált `HeightField`-et.
+
+        Returns:
+            A konkrét generátor kimenete, a `HeightField` szerződésének
+            megfelelően (WAVE_FUNCTION_MODEL.md 18–20. szakasz,
+            generátor-független kontraktus).
+        """
+        ...
 
 
 @dataclass(frozen=True)
@@ -16,9 +38,9 @@ class ReliefGeneratorParameters:
 
     Tisztán szállító (carrier) típus, saját validáció nélkül — minden
     mezőt a downstream konstruktorok (`ReliefGeometry.__post_init__`) és
-    hívások (`MeshGenerator.generate()`, `WaveParameters.__post_init__`)
-    validálnak a tényleges felhasználáskor, elkerülve a validációs logika
-    duplikálását.
+    hívások (`MeshGenerator.generate()`, a `height_field_source` mögötti
+    konkrét paraméter-dataclass `__post_init__`-je) validálnak a
+    tényleges felhasználáskor, elkerülve a validációs logika duplikálását.
 
     Attributes:
         width: a relief-test fizikai X-kiterjedése (ld. `ReliefGeometry`).
@@ -27,7 +49,9 @@ class ReliefGeneratorParameters:
         relief_height: a relief-magasság (ld. `ReliefGeometry`).
         sampling_distance: a mesh mintavételi sűrűsége, fizikai
             egységben (ld. `MeshGenerator.generate`).
-        wave: a Wave Generator bemeneti paraméterei.
+        height_field_source: a felszínt előállító, konkrét generátor-
+            típustól független forrás (ROADMAP Phase 11.1 — korábban
+            `wave: WaveParameters` volt, l. `HeightFieldSource`).
     """
 
     width: float
@@ -35,4 +59,4 @@ class ReliefGeneratorParameters:
     base_thickness: float
     relief_height: float
     sampling_distance: float
-    wave: WaveParameters
+    height_field_source: HeightFieldSource

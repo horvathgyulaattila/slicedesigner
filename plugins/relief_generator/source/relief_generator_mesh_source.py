@@ -5,7 +5,6 @@ Lásd: docs/plugins/relief_generator/IMPLEMENTATION_PLAN.md 15. szakasz,
 docs/MESH_SOURCE.md.
 """
 
-from plugins.relief_generator.generators.wave_generator import WaveGenerator
 from plugins.relief_generator.geometry.relief_geometry import ReliefGeometry
 from plugins.relief_generator.mesh.generated_mesh import GeneratedMesh
 from plugins.relief_generator.mesh.mesh_generator import MeshGenerator
@@ -19,16 +18,23 @@ class ReliefGeneratorMeshSource:
     """A parametrikus Relief Generator MeshSource-adaptere.
 
     A `get_mesh()` a teljes generálási láncot végigfuttatja:
-    `WaveGenerator → HeightField → ReliefGeometry → MeshGenerator →
-    GeneratedMesh`, majd a `GeneratedMesh`-t a SliceDesigner core `Mesh`
-    típusára alakítja (`source_path=None`, mivel generált, nem
-    fájlból importált modellről van szó — MESH_SOURCE.md 5. szakasz).
+    `parameters.height_field_source.build_height_field() → HeightField →
+    ReliefGeometry → MeshGenerator → GeneratedMesh`, majd a
+    `GeneratedMesh`-t a SliceDesigner core `Mesh` típusára alakítja
+    (`source_path=None`, mivel generált, nem fájlból importált
+    modellről van szó — MESH_SOURCE.md 5. szakasz). A konkrét generátor
+    (Wave, Voronoi, ...) kiválasztása a `height_field_source`
+    (`HeightFieldSource`, ROADMAP Phase 11.1) mögött történik — ez az
+    osztály sosem szembesül konkrét generátor-típussal.
 
-    A downstream kivételek (`WaveGenerationError`, `ReliefGeometryValueError`,
-    `MeshGenerationError`, `MeshValidationError`, `HeightFieldValueError`,
-    `WaveParametersValueError`) nem kerülnek újra-csomagolásra, változatlanul
-    propagálnak — a MeshSource fail-fast szerződését (MESH_SOURCE.md 9.
-    szakasz) ezek a már meglévő, saját kivételek teljesítik.
+    A downstream kivételek (a `height_field_source.build_height_field()`
+    által dobott, generátor-specifikus kivételek — pl.
+    `WaveGenerationError` `WaveHeightFieldSource` esetén —,
+    `ReliefGeometryValueError`, `MeshGenerationError`,
+    `MeshValidationError`, `HeightFieldValueError`) nem kerülnek
+    újra-csomagolásra, változatlanul propagálnak — a MeshSource
+    fail-fast szerződését (MESH_SOURCE.md 9. szakasz) ezek a már meglévő,
+    saját kivételek teljesítik.
     """
 
     def __init__(self, parameters: ReliefGeneratorParameters) -> None:
@@ -50,13 +56,16 @@ class ReliefGeneratorMeshSource:
             szerint érvényes).
 
         Raises:
-            WaveGenerationError: l. `WaveGenerator.generate`.
+            Exception: a `height_field_source.build_height_field()` által
+                dobott, generátor-specifikus kivétel — l. a konkrét
+                `HeightFieldSource`-megvalósítás dokumentációját (pl.
+                `WaveGenerationError`, `WaveHeightFieldSource` esetén).
             ReliefGeometryValueError: l. `ReliefGeometry.__post_init__`.
             HeightFieldValueError: l. `HeightField.query`.
             MeshGenerationError: l. `MeshGenerator.generate`.
             MeshValidationError: l. `MeshGenerator.generate`.
         """
-        height_field = WaveGenerator().generate(self._parameters.wave)
+        height_field = self._parameters.height_field_source.build_height_field()
 
         geometry = ReliefGeometry(
             width=self._parameters.width,

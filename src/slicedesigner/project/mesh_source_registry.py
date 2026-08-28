@@ -52,6 +52,16 @@ class ParameterSpec:
             Phase 10.1). `None` esetén a mező csoportosítás nélkül, a fő
             formban jelenik meg — ez a meglévő, Phase 9-ig egyetlen
             viselkedés, változatlanul.
+        visible_when: opcionális `(vezérlő_mező_neve, elvárt_érték)` pár
+            (ADR-0017 kiegészítés, 2026-08-24, ROADMAP Phase 11.0). A mező
+            csak akkor jelenik meg a GUI-n, ha a `vezérlő_mező_neve` nevű
+            (ugyanabban a `parameters`/`item_schema` listában szereplő)
+            mező jelenlegi értéke megegyezik `elvárt_érték`-kel — ÉS a
+            vezérlő mező maga is effektíven látható (rekurzív
+            kaszkádolás, kétszintű vagy mélyebb láncokhoz). `None`
+            (alapértelmezés) esetén a mező mindig látható — ez a meglévő,
+            Phase 10-ig egyetlen viselkedés, változatlanul. Kizárólag
+            `"enum"` típusú vezérlő mezőre értelmezett.
     """
 
     name: str
@@ -64,6 +74,7 @@ class ParameterSpec:
     choices: tuple[str, ...] = ()
     item_schema: tuple["ParameterSpec", ...] = ()
     group: str | None = None
+    visible_when: tuple[str, str] | None = None
 
 
 @dataclass(frozen=True)

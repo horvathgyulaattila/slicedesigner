@@ -131,6 +131,16 @@ class _GeneratorParameterForm(QWidget):
     `_CollapsibleSection`-be kerülnek, a csoport első előfordulásának
     helyén — nem szükséges, hogy a `parameters` tuple-ben szomszédosak
     legyenek (ADR-0017 kiegészítés, 2026-08-23, ROADMAP Phase 10.1).
+
+    A `ParameterSpec.visible_when`-nel rendelkező mezők sora (a Qt
+    `QFormLayout`-sorban a felirat ÉS a beviteli widget együtt) rejtve
+    marad, amíg a vezérlő mező értéke nem egyezik az elvárt értékkel — a
+    vezérlő mező értékváltozására a forma minden érintett sor
+    láthatóságát újraszámolja, rekurzívan, láncolt függőségekre is
+    (ADR-0017 kiegészítés, 2026-08-24, ROADMAP Phase 11.0). A rejtett
+    mezők értéke továbbra is szerepel a `values()` visszatérési
+    dict-jében — ugyanaz az elv, mint az összecsukott `_CollapsibleSection`
+    mezőinél.
     """
 
     def __init__(
@@ -148,11 +158,17 @@ class _GeneratorParameterForm(QWidget):
         self._enum_widgets: dict[str, QComboBox] = {}
         self._list_widgets: dict[str, _ListParameterWidget] = {}
 
+        self._spec_by_name: dict[str, ParameterSpec] = {
+            spec.name: spec for spec in parameters
+        }
+        self._row_widgets: dict[str, tuple[QWidget, QFormLayout]] = {}
+
         sections: dict[str, _CollapsibleSection] = {}
         for spec in parameters:
             widget = self._build_widget(spec)
             if spec.group is None:
                 layout.addRow(f"{spec.label}:", widget)
+                self._row_widgets[spec.name] = (widget, layout)
                 continue
             section = sections.get(spec.group)
             if section is None:
@@ -160,6 +176,11 @@ class _GeneratorParameterForm(QWidget):
                 sections[spec.group] = section
                 layout.addRow(section)
             section.content_layout.addRow(f"{spec.label}:", widget)
+            self._row_widgets[spec.name] = (widget, section.content_layout)
+
+        for combo in self._enum_widgets.values():
+            combo.currentIndexChanged.connect(self._update_conditional_visibility)
+        self._update_conditional_visibility()
 
     def _build_widget(self, spec: ParameterSpec) -> QWidget:
         if spec.type == "float":
@@ -218,6 +239,40 @@ class _GeneratorParameterForm(QWidget):
         for name, list_widget in self._list_widgets.items():
             result[name] = list_widget.values()
         return result
+
+    def _effective_visible(self, name: str) -> bool:
+        """Egy mező tényleges (rekurzív) láthatósága.
+
+        `spec.visible_when is None` esetén mindig `True` — ez a
+        meglévő, Phase 10-ig egyetlen viselkedés. Egyébként a
+        vezérlő mező jelenlegi értékét és a vezérlő mező SAJÁT
+        effektív láthatóságát is figyelembe veszi, hogy a láncolt
+        függőségek (pl. A a B-től, B a C-től függ) helyesen
+        kaszkádoljanak.
+        """
+        spec = self._spec_by_name.get(name)
+        if spec is None or spec.visible_when is None:
+            return True
+        controller_name, expected_value = spec.visible_when
+        controller_combo = self._enum_widgets.get(controller_name)
+        if controller_combo is None:
+            return True
+        if controller_combo.currentData() != expected_value:
+            return False
+        return self._effective_visible(controller_name)
+
+    def _update_conditional_visibility(self) -> None:
+        """Minden `visible_when`-nel rendelkező mező sorának (felirat +
+        beviteli widget) láthatóságát frissíti, a jelenlegi vezérlő-
+        értékek alapján. Vezérlő-widget értékváltozásra (`currentIndexChanged`)
+        hívódik, és egyszer, a form felépítésekor is, a kezdeti állapot
+        beállításához."""
+        for name, (widget, owning_layout) in self._row_widgets.items():
+            visible = self._effective_visible(name)
+            widget.setVisible(visible)
+            label = owning_layout.labelForField(widget)
+            if label is not None:
+                label.setVisible(visible)
 
 
 class _ListParameterWidget(QWidget):

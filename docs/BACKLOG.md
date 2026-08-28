@@ -3,7 +3,7 @@
 Státusz: Aktív
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-08-04
-Utolsó módosítás: 2026-08-23
+Utolsó módosítás: 2026-08-25
 Kapcsolódó dokumentumok: [ROADMAP.md](ROADMAP.md)
 
 ## Cél
@@ -12,8 +12,10 @@ Ez a dokumentum azokat a jövőbeli tételeket (funkciókat, optimalizálásokat
 
 ## Tételek
 
-1. **Új, Wave Generatortól független Height Field generátor-típusok** (2026-08-19) — procedurális felülettípusok (például faerezet-, Voronoi-, dűne-, holdkráter-szerű felszínek) mint önálló generátorok, nem a Wave Generator hullámforma-variánsaiként. Illeszkedik a `HeightField` már dokumentált, generátor-független szerződéséhez ([WAVE_FUNCTION_MODEL.md](plugins/relief_generator/WAVE_FUNCTION_MODEL.md) 18–20. szakasz), és a ROADMAP Phase 8 lezáró megjegyzésében is jelzett jövőbeli generátor-típusok (Heightmap, Image, Vector Generator) körébe tartozik.
+1. **Nem téglalap alaprajzú / áttört (lyukacsos) relief-testek** (2026-08-25) — a jelenlegi geometria-modell (`ReliefGeometry`) mindig egy folytonos, téglalap alaprajzú, `base_thickness` vastagságú alaplemezre épít, amire a `HeightField` egy `relief_height`-tel skálázott buckót helyez — a `HeightField.query(x,y) -> float` szerződése kizárólag magasságot fejez ki, azt nem, hogy van-e egyáltalán anyag egy adott `(x,y)` ponton. Két, egymással rokon jövőbeli igény merült fel (a projektgazdától, a Voronoi-mesh élő tesztelése közben): (a) nem téglalap alakú alaptest (pl. kör, ellipszis, vagy egy hullám kontúrját követő szabálytalan alaprajz); (b) áttört/lyukacsos relief, ahol egyes belső régiókban sincs anyag (sem relief, sem alaplemez). Mindkettő architekturálisan ugyanarra az alapmechanizmusra vezethető vissza — egy, a `HeightField`-től független, `(x,y) → van-e anyag` footprint/maszk-függvényre —, de ez egy jóval nagyobb, önálló geometria-modell-döntés lenne, nem a jelenlegi Phase 11 Height Field receptjeinek (11.1–11.4) hatóköre. Explicit módon nem aktuális, nincs sürgetve — pusztán jelzett jövőbeli irány.
 
 (2026-08-13: a korábbi három tétel lezárult — az 1. és 3. a ROADMAP.md Phase 7 hatókörébe került, a 2. véglegesen törölve, a projektgazda döntése alapján nem valósul meg.)
 
 (2026-08-23: az 1., 3., 4., 5. és 6. tétel a ROADMAP.md Phase 10 (Hullámforma-variánsok és eljárásos zajmoduláció) hatókörébe került és törlésre került a Backlogból; a fent megmaradt egyetlen tétel emiatt 1. sorszámra került át.)
+
+(2026-08-24: a megmaradt 1. tétel a ROADMAP.md Phase 11 (Procedurális Height Field receptek) hatókörébe került és törlésre került a Backlogból.)

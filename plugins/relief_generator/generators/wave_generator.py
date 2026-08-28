@@ -20,6 +20,7 @@ docs/plugins/relief_generator/WAVE_EXTENSION_IMPLEMENTATION_PLAN.md.
 """
 
 import math
+from dataclasses import dataclass
 from typing import Callable
 
 from plugins.relief_generator.domain.deterministic_components import (
@@ -237,3 +238,16 @@ class WaveGenerator:
                 raw_min = min(raw_min, value)
                 raw_max = max(raw_max, value)
         return raw_min, raw_max
+
+
+@dataclass(frozen=True)
+class WaveHeightFieldSource:
+    """A `HeightFieldSource` szerződés (ROADMAP Phase 11.1,
+    `relief_generator_parameters.py`) Wave-megvalósítása — a
+    `WaveParameters`-t és a `WaveGenerator`-t fogja össze.
+    """
+
+    parameters: WaveParameters
+
+    def build_height_field(self) -> HeightField:
+        return WaveGenerator().generate(self.parameters)

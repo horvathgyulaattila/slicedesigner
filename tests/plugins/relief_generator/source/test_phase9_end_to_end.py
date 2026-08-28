@@ -32,6 +32,9 @@ from plugins.relief_generator.domain.procedural_distortion import (  # noqa: E40
     SwirlDistortion,
 )
 from plugins.relief_generator.domain.wave_parameters import WaveParameters  # noqa: E402
+from plugins.relief_generator.generators.wave_generator import (  # noqa: E402
+    WaveHeightFieldSource,
+)
 from plugins.relief_generator.source.relief_generator_mesh_source import (  # noqa: E402
     ReliefGeneratorMeshSource,
 )
@@ -88,7 +91,7 @@ def _make_mixed_phase9_parameters() -> ReliefGeneratorParameters:
         base_thickness=2.0,
         relief_height=3.0,
         sampling_distance=1.0,
-        wave=wave,
+        height_field_source=WaveHeightFieldSource(wave),
     )
 
 

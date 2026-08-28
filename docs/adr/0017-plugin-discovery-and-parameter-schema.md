@@ -123,3 +123,47 @@ alakja változatlan marad.
 értékétől függő) mezőláthatóság — a csoportosítás statikus, a `parameters`
 tuple összeállításakor rögzített, nem futásidőben, widget-eseményekre
 változó.
+
+## Kiegészítés (2026-08-24): feltételes mezőláthatóság (`visible_when`)
+
+A ROADMAP Phase 11 11.0 tétele feloldja a jelen ADR korábbi, explicit
+"hatókörön kívül" kikötését: a `ParameterSpec` egy hetedik mezővel,
+`visible_when: tuple[str, str] | None = None`-nal bővült — additív
+dataclass-mező, nem érinti a `build()`-szemantikát vagy a `values()`
+visszatérési alakját, ezért ez kiegészítés, nem új ADR (a `group`
+kiegészítés mintáját követve).
+
+Az igényt a projektgazda vetette fel: a meglévő `envelope_type`/
+`distortion_type` enum-mezőknél minden almező mindig látható volt a
+GUI-n, típustól függetlenül — ez a `folytatás 41` bejegyzésben
+dokumentált, elfogadott korlátként szerepelt, és a program jelenlegi
+legzavaróbb tulajdonságává vált.
+
+Egy mező csak akkor jelenik meg, ha a `visible_when`-ben megnevezett
+vezérlő mező jelenlegi értéke megegyezik az elvárt értékkel, ÉS a
+vezérlő mező maga is effektíven látható — ez a rekurzív kiértékelés
+(`_GeneratorParameterForm._effective_visible()`) kétszintű vagy mélyebb
+láncokat is helyesen kezel (pl. `envelope_sharpness` csak akkor látható,
+ha `envelope_falloff == "Gaussian"` ÉS `envelope_type == "Radial"`),
+külön, összetett feltétel-szintaxis bevezetése nélkül — minden mezőn
+elég egyetlen, közvetlen szülőre mutató `visible_when`.
+
+A core GUI generikus form-builderje
+(`src/slicedesigner/gui/parameter_panel.py::_GeneratorParameterForm`) a
+vezérlő enum-widgetek (`QComboBox`) értékváltozására (`currentIndexChanged`)
+minden érintett sor (felirat + beviteli widget) láthatóságát újraszámolja.
+A `_ListParameterWidget` soronkénti, beágyazott `_GeneratorParameterForm`-
+jai a mechanizmust automatikusan, önállóan érvényesítik a saját
+`item_schema`-jukon belül — nincs szükség a `_ListParameterWidget` saját
+módosítására.
+
+Visszamenőlegesen alkalmazva (`plugins/relief_generator/source/registration.py`):
+az "Envelope" csoport `envelope_type`/`envelope_falloff`/
+`envelope_noise_type` almezői, a "Torzítás" csoport `distortion_type`
+almezői, és a `sources` `item_schema`-ban a `source_type` almezői
+(`direction` vs. `source_x`/`source_y`) — a pontos hozzárendelést l. a
+végrehajtó prompt `_PARAMETERS` tuple-jében.
+
+A meglévő négy mező (`group`-ig) és minden meglévő `_PARAMETERS` tuple
+`visible_when` nélkül (`None` alapértelmezéssel) változatlan viselkedésű
+marad — teljes backward compatibility.

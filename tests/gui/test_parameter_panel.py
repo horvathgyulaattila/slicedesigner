@@ -518,3 +518,86 @@ def test_generator_parameter_form_handles_list_type(qtbot: QtBot) -> None:
     from slicedesigner.gui.parameter_panel import _ListParameterWidget
 
     assert isinstance(form._list_widgets["sources"], _ListParameterWidget)
+
+
+# --- feltételes mezőláthatóság (`visible_when`, ADR-0017 kiegészítés, 2026-08-24) ---
+
+
+def _make_visible_when_form(qtbot: QtBot) -> _GeneratorParameterForm:
+    """Kétszintű `visible_when`-lánc: `leaf` a `mid`-től, `mid` a
+    `top`-tól függ."""
+    parameters = (
+        ParameterSpec(
+            name="top", label="Top", type="enum", default="A", choices=("A", "B")
+        ),
+        ParameterSpec(
+            name="mid",
+            label="Mid",
+            type="enum",
+            default="X",
+            choices=("X", "Y"),
+            visible_when=("top", "B"),
+        ),
+        ParameterSpec(
+            name="leaf",
+            label="Leaf",
+            type="float",
+            default=1.0,
+            visible_when=("mid", "X"),
+        ),
+    )
+    form = _GeneratorParameterForm(parameters)
+    qtbot.addWidget(form)
+    # `isVisible()` a teljes ős-láncot figyeli — a láthatósági asszerciókhoz
+    # a formot ténylegesen meg kell jeleníteni (a `_make_panel` mintáját
+    # követve).
+    form.show()
+    return form
+
+
+def test_visible_when_field_initially_hidden_when_controller_mismatches(
+    qtbot: QtBot,
+) -> None:
+    form = _make_visible_when_form(qtbot)
+
+    assert not form._row_widgets["mid"][0].isVisible()
+
+
+def test_visible_when_field_toggles_with_controller_value_change(
+    qtbot: QtBot,
+) -> None:
+    form = _make_visible_when_form(qtbot)
+
+    assert not form._row_widgets["mid"][0].isVisible()
+
+    form._enum_widgets["top"].setCurrentIndex(form._enum_widgets["top"].findData("B"))
+    assert form._row_widgets["mid"][0].isVisible()
+
+    form._enum_widgets["top"].setCurrentIndex(form._enum_widgets["top"].findData("A"))
+    assert not form._row_widgets["mid"][0].isVisible()
+
+
+def test_visible_when_two_level_chain_stays_hidden_if_top_level_mismatches(
+    qtbot: QtBot,
+) -> None:
+    """`leaf` saját feltétele (`mid == "X"`) a kezdeti állapotban teljesül,
+    de mivel `mid` maga rejtve van (`top != "B"`), `leaf`-nek is rejtve kell
+    maradnia — ez igazolja a rekurzív kaszkádolást."""
+    form = _make_visible_when_form(qtbot)
+
+    assert form._enum_widgets["mid"].currentData() == "X"
+    assert not form._row_widgets["leaf"][0].isVisible()
+
+    form._enum_widgets["top"].setCurrentIndex(form._enum_widgets["top"].findData("B"))
+    assert form._row_widgets["leaf"][0].isVisible()
+
+
+def test_visible_when_values_includes_hidden_field_values(qtbot: QtBot) -> None:
+    form = _make_visible_when_form(qtbot)
+
+    assert not form._row_widgets["mid"][0].isVisible()
+    assert form.values() == {
+        "top": "A",
+        "mid": "X",
+        "leaf": pytest.approx(1.0),
+    }

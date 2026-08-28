@@ -33,6 +33,7 @@ _EXPECTED_PARAMETER_NAMES = (
     "base_thickness",
     "relief_height",
     "sampling_distance",
+    "generator_type",
     "wavelength",
     "amplitude",
     "direction",
@@ -65,13 +66,31 @@ _EXPECTED_PARAMETER_NAMES = (
     "distortion_noise_strength",
     "sources",
     "include_automatic",
+    "voronoi_scale",
+    "voronoi_seed",
+    "crater_scale",
+    "crater_seed",
+    "crater_radius",
+    "crater_power",
+    "crater_octaves",
+    "crater_lacunarity",
+    "dune_spacing",
+    "dune_asymmetry",
+    "dune_segment_scale",
+    "dune_ripple_wavelength",
+    "dune_ripple_amplitude",
+    "dune_warp_scale",
+    "dune_warp_strength",
+    "dune_direction",
+    "dune_slope_sensitivity",
+    "dune_seed",
 )
 
 
 def test_build_mesh_source_descriptor_has_expected_display_name() -> None:
     descriptor = build_mesh_source_descriptor()
 
-    assert descriptor.display_name == "Relief Generator (Wave)"
+    assert descriptor.display_name == "Relief Generator"
 
 
 def test_build_mesh_source_descriptor_has_expected_parameters() -> None:
@@ -91,6 +110,7 @@ _EXPECTED_PARAMETER_GROUPS = {
     "base_thickness": None,
     "relief_height": None,
     "sampling_distance": None,
+    "generator_type": None,
     "wavelength": "Automatikus hullám",
     "amplitude": "Automatikus hullám",
     "direction": "Automatikus hullám",
@@ -123,6 +143,24 @@ _EXPECTED_PARAMETER_GROUPS = {
     "distortion_noise_strength": "Torzítás",
     "sources": None,
     "include_automatic": "Automatikus hullám",
+    "voronoi_scale": "Voronoi",
+    "voronoi_seed": "Voronoi",
+    "crater_scale": "Holdkráter",
+    "crater_seed": "Holdkráter",
+    "crater_radius": "Holdkráter",
+    "crater_power": "Holdkráter",
+    "crater_octaves": "Holdkráter",
+    "crater_lacunarity": "Holdkráter",
+    "dune_spacing": "Dűne",
+    "dune_asymmetry": "Dűne",
+    "dune_segment_scale": "Dűne",
+    "dune_ripple_wavelength": "Dűne",
+    "dune_ripple_amplitude": "Dűne",
+    "dune_warp_scale": "Dűne",
+    "dune_warp_strength": "Dűne",
+    "dune_direction": "Dűne",
+    "dune_slope_sensitivity": "Dűne",
+    "dune_seed": "Dűne",
 }
 
 
@@ -523,3 +561,207 @@ def test_build_with_include_automatic_nem_and_no_sources_raises() -> None:
 
     with pytest.raises(WaveSetValueError):
         descriptor.build(values).get_mesh()
+
+
+# --- feltételes mezőláthatóság (`visible_when`, ADR-0017 kiegészítés, 2026-08-24) ---
+
+_EXPECTED_PARAMETER_VISIBLE_WHEN: dict[str, tuple[str, str] | None] = {
+    "width": None,
+    "height": None,
+    "base_thickness": None,
+    "relief_height": None,
+    "sampling_distance": None,
+    "generator_type": None,
+    "wavelength": ("generator_type", "Wave"),
+    "amplitude": ("generator_type", "Wave"),
+    "direction": ("generator_type", "Wave"),
+    "direction_spread": ("generator_type", "Wave"),
+    "irregularity": ("generator_type", "Wave"),
+    "complexity": ("generator_type", "Wave"),
+    "function": ("generator_type", "Wave"),
+    "envelope_type": ("generator_type", "Wave"),
+    "envelope_center_x": ("envelope_type", "Radial"),
+    "envelope_center_y": ("envelope_type", "Radial"),
+    "envelope_radius": ("envelope_type", "Radial"),
+    "envelope_falloff": ("envelope_type", "Radial"),
+    "envelope_sharpness": ("envelope_falloff", "Gaussian"),
+    "envelope_noise_type": ("envelope_type", "Noise"),
+    "envelope_noise_scale": ("envelope_type", "Noise"),
+    "envelope_noise_seed": ("envelope_type", "Noise"),
+    "envelope_noise_octaves": ("envelope_noise_type", "Gradient"),
+    "envelope_noise_persistence": ("envelope_noise_type", "Gradient"),
+    "envelope_noise_lacunarity": ("envelope_noise_type", "Gradient"),
+    "distortion_type": ("generator_type", "Wave"),
+    "distortion_center_x": ("distortion_type", "Swirl"),
+    "distortion_center_y": ("distortion_type", "Swirl"),
+    "distortion_radius": ("distortion_type", "Swirl"),
+    "distortion_strength": ("distortion_type", "Swirl"),
+    "distortion_noise_scale": ("distortion_type", "Noise"),
+    "distortion_noise_seed": ("distortion_type", "Noise"),
+    "distortion_noise_octaves": ("distortion_type", "Noise"),
+    "distortion_noise_persistence": ("distortion_type", "Noise"),
+    "distortion_noise_lacunarity": ("distortion_type", "Noise"),
+    "distortion_noise_strength": ("distortion_type", "Noise"),
+    "sources": ("generator_type", "Wave"),
+    "include_automatic": ("generator_type", "Wave"),
+    "voronoi_scale": ("generator_type", "Voronoi"),
+    "voronoi_seed": ("generator_type", "Voronoi"),
+    "crater_scale": ("generator_type", "Crater"),
+    "crater_seed": ("generator_type", "Crater"),
+    "crater_radius": ("generator_type", "Crater"),
+    "crater_power": ("generator_type", "Crater"),
+    "crater_octaves": ("generator_type", "Crater"),
+    "crater_lacunarity": ("generator_type", "Crater"),
+    "dune_spacing": ("generator_type", "Dune"),
+    "dune_asymmetry": ("generator_type", "Dune"),
+    "dune_segment_scale": ("generator_type", "Dune"),
+    "dune_ripple_wavelength": ("generator_type", "Dune"),
+    "dune_ripple_amplitude": ("generator_type", "Dune"),
+    "dune_warp_scale": ("generator_type", "Dune"),
+    "dune_warp_strength": ("generator_type", "Dune"),
+    "dune_direction": ("generator_type", "Dune"),
+    "dune_slope_sensitivity": ("generator_type", "Dune"),
+    "dune_seed": ("generator_type", "Dune"),
+}
+
+
+def test_parameters_have_expected_visible_when_assignment() -> None:
+    descriptor = build_mesh_source_descriptor()
+
+    visible_when = {spec.name: spec.visible_when for spec in descriptor.parameters}
+
+    assert visible_when == _EXPECTED_PARAMETER_VISIBLE_WHEN
+
+
+def test_sources_item_schema_visible_when_assignment() -> None:
+    descriptor = build_mesh_source_descriptor()
+
+    sources_spec = next(s for s in descriptor.parameters if s.name == "sources")
+    visible_when = {item.name: item.visible_when for item in sources_spec.item_schema}
+
+    assert visible_when == {
+        "source_type": None,
+        "amplitude": None,
+        "wavelength": None,
+        "phase": None,
+        "weight": None,
+        "function": None,
+        "irregularity": None,
+        "complexity": None,
+        "direction": ("source_type", "Directional"),
+        "source_x": ("source_type", "Radial"),
+        "source_y": ("source_type", "Radial"),
+    }
+
+
+# --- generator_type / Voronoi bekötés (ROADMAP Phase 11.1) ---
+
+
+def test_generator_type_parameter_has_expected_choices() -> None:
+    descriptor = build_mesh_source_descriptor()
+
+    spec = next(s for s in descriptor.parameters if s.name == "generator_type")
+
+    assert spec.default == "Wave"
+    assert spec.choices == ("Wave", "Voronoi", "Crater", "Dune")
+    assert spec.group is None
+    assert spec.visible_when is None
+
+
+def test_build_with_generator_type_voronoi_returns_working_mesh_source() -> None:
+    descriptor = build_mesh_source_descriptor()
+    values = {spec.name: spec.default for spec in descriptor.parameters}
+    values["generator_type"] = "Voronoi"
+
+    mesh_source = descriptor.build(values)
+    mesh = mesh_source.get_mesh()
+
+    assert isinstance(mesh_source, ReliefGeneratorMeshSource)
+    assert mesh.is_valid is True
+    assert len(mesh.vertices) > 0
+    assert len(mesh.triangles) > 0
+
+
+def test_build_with_generator_type_voronoi_uses_voronoi_scale_and_seed() -> None:
+    # Két, csak voronoi_scale-ben eltérő build eltérő mesh-t kell adjon —
+    # ez közvetve igazolja, hogy a _build ténylegesen a voronoi_scale/
+    # voronoi_seed értékeket használja fel, nem csak egy hardkódolt
+    # VoronoiParameters-t.
+    descriptor = build_mesh_source_descriptor()
+    values_a = {spec.name: spec.default for spec in descriptor.parameters}
+    values_a["generator_type"] = "Voronoi"
+    values_b = dict(values_a)
+    values_b["voronoi_scale"] = values_a["voronoi_scale"] * 2.0
+
+    mesh_a = descriptor.build(values_a).get_mesh()
+    mesh_b = descriptor.build(values_b).get_mesh()
+
+    assert mesh_a.vertices != mesh_b.vertices
+
+
+# --- generator_type / Crater bekötés (ROADMAP Phase 11.2) ---
+
+
+def test_build_with_generator_type_crater_returns_working_mesh_source() -> None:
+    descriptor = build_mesh_source_descriptor()
+    values = {spec.name: spec.default for spec in descriptor.parameters}
+    values["generator_type"] = "Crater"
+
+    mesh_source = descriptor.build(values)
+    mesh = mesh_source.get_mesh()
+
+    assert isinstance(mesh_source, ReliefGeneratorMeshSource)
+    assert mesh.is_valid is True
+    assert len(mesh.vertices) > 0
+    assert len(mesh.triangles) > 0
+
+
+def test_build_with_generator_type_crater_uses_crater_scale_seed_power() -> None:
+    # Két, csak crater_power-ben eltérő build eltérő mesh-t kell adjon —
+    # ez közvetve igazolja, hogy a _build ténylegesen a crater_scale/
+    # crater_seed/crater_power értékeket használja fel, nem csak egy
+    # hardkódolt CraterParameters-t.
+    descriptor = build_mesh_source_descriptor()
+    values_a = {spec.name: spec.default for spec in descriptor.parameters}
+    values_a["generator_type"] = "Crater"
+    values_b = dict(values_a)
+    values_b["crater_power"] = values_a["crater_power"] * 2.0
+
+    mesh_a = descriptor.build(values_a).get_mesh()
+    mesh_b = descriptor.build(values_b).get_mesh()
+
+    assert mesh_a.vertices != mesh_b.vertices
+
+
+# --- generator_type / Dune bekötés (ROADMAP Phase 11.3) ---
+
+
+def test_build_with_generator_type_dune_returns_working_mesh_source() -> None:
+    descriptor = build_mesh_source_descriptor()
+    values = {spec.name: spec.default for spec in descriptor.parameters}
+    values["generator_type"] = "Dune"
+
+    mesh_source = descriptor.build(values)
+    mesh = mesh_source.get_mesh()
+
+    assert isinstance(mesh_source, ReliefGeneratorMeshSource)
+    assert mesh.is_valid is True
+    assert len(mesh.vertices) > 0
+    assert len(mesh.triangles) > 0
+
+
+def test_build_with_generator_type_dune_uses_dune_parameters() -> None:
+    # Két, csak ripple_amplitude-ban eltérő build eltérő mesh-t kell
+    # adjon — ez közvetve igazolja, hogy a _build ténylegesen a
+    # dune_* értékeket használja fel, nem csak egy hardkódolt
+    # DuneParameters-t.
+    descriptor = build_mesh_source_descriptor()
+    values_a = {spec.name: spec.default for spec in descriptor.parameters}
+    values_a["generator_type"] = "Dune"
+    values_b = dict(values_a)
+    values_b["dune_ripple_amplitude"] = values_a["dune_ripple_amplitude"] * 2.0
+
+    mesh_a = descriptor.build(values_a).get_mesh()
+    mesh_b = descriptor.build(values_b).get_mesh()
+
+    assert mesh_a.vertices != mesh_b.vertices
