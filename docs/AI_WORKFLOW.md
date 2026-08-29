@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos:
 Létrehozva: 2026-07-30
-Utolsó módosítás: 2026-08-01
+Utolsó módosítás: 2026-08-28
 Kapcsolódó dokumentumok: [PROJECT_CONSTITUTION.md](PROJECT_CONSTITUTION.md), [ROADMAP.md](ROADMAP.md), [PROMPT_STANDARD.md](PROMPT_STANDARD.md), [CODING_STANDARDS.md](CODING_STANDARDS.md), [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## Cél
@@ -36,6 +36,8 @@ Minden jelentős változtatás ugyanazt a folyamatot követi, lépések átugrá
 4. **Dokumentáció módosítása** — a jóváhagyott tartalom bekerül a megfelelő dokumentumba (ide tartozik a Claude Code-nak szánt prompt elkészítése is).
 5. **Implementáció** — az Implementációs modell végrehajtja a promptot.
 6. **Review** — a Projektgazda (és szükség esetén a Szoftverarchitekt) ellenőrzi az eredményt a dokumentáció alapján.
+
+**Kiegészítés procedurális Height Field receptekhez:** ha a Döntési javaslat egy `height_function`-t definiáló, procedurális Height Field receptre vonatkozik (pl. a `plugins/relief_generator` alatti generátor-típusok, ROADMAP Phase 11 és további), a Szoftverarchitekt — a Dokumentáció módosítása (4. lépés), azon belül a Claude Code-nak szánt implementációs prompt elkészítése előtt — köteles egy statikus előnézetet készíteni: a `height_function` Python-megfelelőjét saját eszközeivel (nem promptként) lefuttatja, és egy `matplotlib`-heightmap-képet rendereli (pl. 256×256 rácson). Implementációs prompt csak azután készíthető, hogy a Projektgazda ezt az előnézetet a Projektgazdai jóváhagyás (3. lépés) részeként jóváhagyta.
 
 ## 5. A ROADMAP szerepe a munkafolyamatban
 
