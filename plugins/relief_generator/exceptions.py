@@ -175,3 +175,14 @@ class DuneParametersValueError(ReliefGeneratorError):
     docs/plugins/relief_generator/DUNE_RELIEF_GENERATOR.md,
     ROADMAP Phase 11.3).
     """
+
+
+class WoodGrainParametersValueError(ReliefGeneratorError):
+    """Érvénytelen `WoodGrainParameters` mezőérték.
+
+    Akkor dobódik, ha a `WoodGrainParameters` létrehozásakor bármelyik
+    mező kívül esik a dokumentált érvényességi tartományán (l.
+    `WoodGrainParameters` osztály docstringje,
+    docs/plugins/relief_generator/WOOD_GRAIN_RELIEF_GENERATOR.md,
+    ROADMAP Phase 11.4).
+    """

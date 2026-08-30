@@ -163,20 +163,22 @@ class _GeneratorParameterForm(QWidget):
         }
         self._row_widgets: dict[str, tuple[QWidget, QFormLayout]] = {}
 
-        sections: dict[str, _CollapsibleSection] = {}
+        self._sections: dict[str, _CollapsibleSection] = {}
+        self._group_members: dict[str, list[str]] = {}
         for spec in parameters:
             widget = self._build_widget(spec)
             if spec.group is None:
                 layout.addRow(f"{spec.label}:", widget)
                 self._row_widgets[spec.name] = (widget, layout)
                 continue
-            section = sections.get(spec.group)
+            section = self._sections.get(spec.group)
             if section is None:
                 section = _CollapsibleSection(spec.group)
-                sections[spec.group] = section
+                self._sections[spec.group] = section
                 layout.addRow(section)
             section.content_layout.addRow(f"{spec.label}:", widget)
             self._row_widgets[spec.name] = (widget, section.content_layout)
+            self._group_members.setdefault(spec.group, []).append(spec.name)
 
         for combo in self._enum_widgets.values():
             combo.currentIndexChanged.connect(self._update_conditional_visibility)
@@ -264,7 +266,15 @@ class _GeneratorParameterForm(QWidget):
     def _update_conditional_visibility(self) -> None:
         """Minden `visible_when`-nel rendelkező mező sorának (felirat +
         beviteli widget) láthatóságát frissíti, a jelenlegi vezérlő-
-        értékek alapján. Vezérlő-widget értékváltozásra (`currentIndexChanged`)
+        értékek alapján, majd minden `_CollapsibleSection`-t elrejt,
+        ha egyetlen benne lévő mező sem effektíven látható — enélkül
+        egy aktuálisan nem releváns generátor (pl. Dune) csoportjai
+        üresen, összecsukva, de láthatóan maradnának a formban, még
+        akkor is, ha egyik mezőjük sem érhető el (2026-08-29-i
+        kiegészítés, a projektgazda élő tesztelés közben jelzett
+        visszajelzése alapján).
+
+        Vezérlő-widget értékváltozásra (`currentIndexChanged`)
         hívódik, és egyszer, a form felépítésekor is, a kezdeti állapot
         beállításához."""
         for name, (widget, owning_layout) in self._row_widgets.items():
@@ -273,6 +283,9 @@ class _GeneratorParameterForm(QWidget):
             label = owning_layout.labelForField(widget)
             if label is not None:
                 label.setVisible(visible)
+        for group, members in self._group_members.items():
+            section = self._sections[group]
+            section.setVisible(any(self._effective_visible(m) for m in members))
 
 
 class _ListParameterWidget(QWidget):
@@ -616,6 +629,7 @@ class ParameterPanel(QTabWidget):
 
             self.generate_mesh_button = QPushButton("Generálás")
             self.generate_mesh_button.clicked.connect(self._on_generate_mesh_clicked)
+            self.generate_mesh_button.setVisible(False)
 
             self._generator_source_container.setVisible(False)
             layout.addRow(self._generator_source_container)
@@ -625,13 +639,17 @@ class ParameterPanel(QTabWidget):
     def _on_mesh_source_changed(self, index: int) -> None:
         """A "Forrás" legördülő váltásának kezelése: STL fájl vs. egy
         felfedezett MeshSource plugin (ADR-0017) — a megfelelő konténer
-        láthatóságát és a generátor-form-stack aktív lapját állítja be."""
+        láthatóságát és a generátor-form-stack aktív lapját állítja be.
+        A "Generálás" gomb is ide tartozik (2026-08-29-i kiegészítés) —
+        STL fájl forrásnál nincs funkciója."""
         if self.mesh_source_combo is None:
             return
         is_stl = self.mesh_source_combo.itemData(index) is None
         self._stl_source_container.setVisible(is_stl)
         if self._generator_source_container is not None:
             self._generator_source_container.setVisible(not is_stl)
+        if self.generate_mesh_button is not None:
+            self.generate_mesh_button.setVisible(not is_stl)
         if not is_stl and self._generator_forms_stack is not None:
             self._generator_forms_stack.setCurrentIndex(index - 1)
 

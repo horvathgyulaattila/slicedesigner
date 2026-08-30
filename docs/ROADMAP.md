@@ -424,7 +424,7 @@ Kilépési feltétel: mind a hat tétel (10.1–10.6) elkészült, a szükséges
 
 ### Phase 11 – Procedurális Height Field receptek
 
-Állapot: 🟡 In Progress
+Állapot: ✅ Approved
 
 Feladata:
 
@@ -432,7 +432,7 @@ Feladata:
 * ~~11.1 — Voronoi-felszín, önálló generátorként a relief_generator pluginon belül, a Phase 10.4-es `VoronoiNoiseField`-re építve — `BACKLOG.md` 1. tétel~~ — kész: `VoronoiParameters`/`VoronoiGenerator` (`domain/voronoi_parameters.py`, `generators/voronoi_generator.py`) — a `VoronoiNoiseField` (Phase 10.4) közvetlen becsomagolása, normalizálás nélkül, mivel már `[0,1]`-be esik. A generátor-választás egy új `HeightFieldSource` Protocol-lal (`relief_generator_parameters.py`) oldódott meg — a korábbi kötelező `wave: WaveParameters` mező `height_field_source: HeightFieldSource`-ra cserélődött; `WaveHeightFieldSource`/`VoronoiHeightFieldSource` adapterek fogják össze a saját paramétereiket a generátorukkal, a `ReliefGeneratorMeshSource` így sosem szembesül konkrét generátor-típussal — a 11.2–11.4 emiatt e két fájl módosítása nélkül csatlakozhat majd be. A GUI-n egy új `generator_type` enum (`registration.py`) választ Wave/Voronoi között, a 11.0-ban épült `visible_when` mechanizmuson keresztül kaszkádoltan elrejtve a nem releváns mezőket (11 meglévő Wave-mező + 2 új Voronoi-mező). Új domain-contract dokumentum: `VORONOI_RELIEF_GENERATOR.md`. Öt tesztfájl (2 új, 3 módosított) fedi le. Teljes tesztkészlet (657 teszt) regresszió nélkül zöld, `ruff`/`mypy --strict --explicit-package-bases` hibamentes. A projektgazda élőben tesztelte, működik.
 * ~~11.2 — Holdkráter-felszín (Voronoi-távolság alapú, hatványfüggvénnyel torzított)~~ — kész: `CraterParameters`/`CraterGenerator` (`domain/crater_parameters.py`, `generators/crater_generator.py`), a `HeightFieldSource` Protocol (11.1) harmadik megvalósítása. Három élő tesztelési kör vezetett a végleges formához: (1) az első tervezet (`sample(x,y) ** power`) csak a magasságprofilt torzította, a kráter a teljes Voronoi-cellahatárig ért, sokszögletes maradt — ezt egy `radius` küszöb oldotta meg (a kráter csak a radiálisan szimmetrikus tartományig terjed, azon túl `h=1.0`); (2) egyetlen réteg minden krátert azonos méretűvé tett — ezt a `GradientNoiseField` mintáját követő `octaves`/`lacunarity` rétegzés oldotta meg, `min`-kombinálással (nem összegzéssel, mivel fizikailag különálló kráter-generációk rétegződnek egymásra, nem zaj finomodik); (3) minden réteg egyformán mélyre ment, függetlenül a mérettől — ezt a `lacunarity` újrahasznosítása oldotta meg mélység-skálázásra is (`depth_i = 1/lacunarity^i`), új paraméter bevezetése nélkül, a valódi holdkráterek átmérő-arányos mélységét modellezve. `generator_type` GUI-választó: `"Wave"`/`"Voronoi"`/`"Crater"`; a Holdkráter-specifikus mezők (`crater_scale`/`crater_seed`/`crater_radius`/`crater_power`/`crater_octaves`/`crater_lacunarity`) a 11.0-as `visible_when` mechanizmuson keresztül csak `generator_type=="Crater"` esetén látszanak. Új domain-contract dokumentum: `CRATER_RELIEF_GENERATOR.md`. Teljes tesztkészlet (686 teszt) regresszió nélkül zöld, `ruff`/`mypy --strict --explicit-package-bases` hibamentes. A projektgazda élőben tesztelte és elfogadta a végeredményt.
 * ~~11.3 — Dűne-felszín (kétrétegű, anizotróp domb-alap + elülső/hátsó, kétszintű foltossággal modulált hullámfodor)~~ — kész: `DuneParameters`/`DuneGenerator` (`domain/dune_parameters.py`, `generators/dune_generator.py`), a `HeightFieldSource` Protocol (11.1) negyedik megvalósítása. Öt egymást követő tervezet vezetett a végleges formához — az első négy mind élő tesztelés (a negyediknél emellett statikus, chat-en belüli előnézet) során bizonyult elégtelennek: (1) koordináta-alapú fodor-fázis — teljesen független volt a domb-alaktól; (2) magasság-alapú fodor-fázis — koncentrikus gyűrűkbe zárt minden dombot; (3) szélirányú fodor izotróp domb-alappal — a domb-alap nem volt anizotróp; (4) periodikus, aszimmetrikus 1D gerinc-profil — "steril, csupa párhuzamos vonalakból álló szinuszhullámmá" tette a domborzatot, elnyomva a szerves zaj-karaktert. Az ötödik, végleges tervezet egy kétrétegű domb-alapra épül (egyoktávos, lejtés-alapú aszimmetria-warppal torzított durva réteg + torzítás nélküli finomréteg), transzverzális elrendezésben, elülső/hátsó irányban eltérő, kétszintű (domb-szintű és dombon-belüli) foltossággal modulált hullámfodorral. `generator_type` GUI-választó: `"Wave"`/`"Voronoi"`/`"Crater"`/`"Dune"`; a Dűne-specifikus mezők (23 db, három alcsoportban: "Dűne — alap"/"Dűne — fodor"/"Dűne — foltosság") a 11.0-as `visible_when` mechanizmuson keresztül csak `generator_type=="Dune"` esetén látszanak. Frissített domain-contract dokumentum: `DUNE_RELIEF_GENERATOR.md`. A projektgazda élőben tesztelte és lezárta a fázist — visszajelzése szerint a paraméterezés rendkívül gazdag ("nagyon sok mindent lehet állítani rajta... milliónyi variáció van"), tökéletesen "szép" domborzatot élőben még nem sikerült vele összeállítani, de ez további finomhangolás (számok állítása), nem architektúra-csere tárgya — l. `DUNE_RELIEF_GENERATOR.md` 4. szakasz "Nyíltan jelzett bizonytalanság".
-* 11.4 — Faerezet-felszín (körkörös gradiens, Perlin-zajjal torzítva, gyűrűzve)
+* ~~11.4 — Faerezet-felszín (deszkánként hash-elt flóderosságú, irányított/anizotróp, fraktál-kombinált évgyűrű-mintázat, a fő mezővel interpolált csomókkal)~~ — kész: `WoodGrainParameters`/`WoodGrainGenerator` (`domain/wood_grain_parameters.py`, `generators/wood_grain_generator.py`), a `HeightFieldSource` Protocol (11.1) ötödik megvalósítása. A ROADMAP eredeti, egy mondatos leírása ("körkörös gradiens, Perlin-zajjal torzítva, gyűrűzve") jelentősen alulbecsülte a témát — a projektgazda két valós faerezet-fénykép feltöltésével és alapos elemzésével (metszet-profilok, csúcstávolság-statisztika, csomó-közeli kivágatok) derült ki, hogy a deszkán nem "bütü" (koncentrikus kör), hanem "szál menti" nézet látszik, a gyűrűtávolság erősen szórt (mért CV≈0,4–0,5, fraktál-kombinációt igénylő), és a csomók a szálakat beívelik, nem csak eltérítik. A végleges modell: irányított (`direction`), erősen anizotróp (`elongation`) távolság egy eltolt "bél"-ponttól (nem izotróp középpontú "bütü"-nézet); 4 oktávos fraktál-kombinált gyűrűtávolság; `board_width` szerinti deszka-tagolás, determinisztikus, tisztán aritmetikai `_hash01(board_idx, slot, seed)`-alapú (NEM Python `random`) deszkánkénti flóderosság-/csomó-jellemzőkkel; a csomók a fő és a saját izotróp mezejük közti interpolációval (nem rátett torzítással) adják a "macskaszem" beívelést, méret- és láthatóság-szórással (szellem-csomók: csak gyűrődés, mag/repedés nélkül); `ring_contrast` paraméter a relief mélységéhez. `generator_type` ötödik értéke: `"WoodGrain"`, 16 mező két csoportban ("Faerezet — alap"/"Faerezet — csomók"). Frissített domain-contract dokumentum: `WOOD_GRAIN_RELIEF_GENERATOR.md`. A projektgazda élőben tesztelte és lezárta a fázist — visszajelzése szerint hibát vagy javítanivalót nem talált benne.
 
 Kilépési feltétel: mind az öt tétel (11.0–11.4) elkészült, a szükséges domain-contract dokumentumok/ADR-kiegészítések Elfogadva státusszal a végleges helyükön vannak, az implementáció automatizált teszttel lefedve és a projektgazda élő tesztelésével megerősítve.
 
@@ -440,6 +440,30 @@ Kilépési feltétel: mind az öt tétel (11.0–11.4) elkészült, a szüksége
 > tesztelése lezárult, a projektgazda megerősítette a végeredményt (l.
 > a 11.3 kész-jelölésének részletei a Feladata-listában). A Phase 11
 > aktív tétele mostantól a 11.4 (Faerezet-felszín).
+
+> **Megjegyzés (2026-08-29, folytatás 58):** A 11.4 (Faerezet-felszín)
+> élő tesztelése lezárult, a projektgazda megerősítette a
+> végeredményt (l. a 11.4 kész-jelölésének részletei a Feladata-
+> listában). Ezzel a Phase 11 (Procedurális Height Field receptek)
+> mind az öt tétele (11.0–11.4) elkészült, review-n átment, a
+> szükséges domain-contract dokumentumok (VORONOI_RELIEF_GENERATOR.md,
+> CRATER_RELIEF_GENERATOR.md, DUNE_RELIEF_GENERATOR.md,
+> WOOD_GRAIN_RELIEF_GENERATOR.md) Elfogadva státusszal a végleges
+> helyükön vannak, az implementáció automatizált teszttel lefedve és
+> a projektgazda többkörös élő tesztelésével megerősítve. A Kilépési
+> feltétel teljesült. A Phase 11 ezért ✅ Approved-ra került.
+>
+> A lezárás előtt, a projektgazda kifejezett kérésére, két, a Phase
+> 11 hatókörén kívül eső, kisebb GUI-javítás is megtörtént (nem
+> relief-generátor-specifikus, a Sprint szabály explicit
+> projektgazdai-kérés kivétele alapján): a Szeletelt összeállítás
+> nézet túl sötét alaptestének korrekciója (`ambient` fény
+> hozzáadása a `preview_panel.py::_add_solid_with_edges()`-hez) és a
+> Mesh Import kártya tisztítása (üres, inaktív generátor-csoportok
+> elrejtése, a "Generálás" gomb elrejtése STL fájl forrásnál,
+> `parameter_panel.py`).
+>
+> A ROADMAP-ban emiatt egyelőre nem nyílik meg új fázis.
 
 ---
 

@@ -97,6 +97,22 @@ _EXPECTED_PARAMETER_NAMES = (
     "dune_patch_dune_low",
     "dune_patch_dune_high",
     "dune_patch_within_scale",
+    "wood_direction",
+    "wood_seed",
+    "wood_board_width",
+    "wood_ring_spacing",
+    "wood_ring_octaves",
+    "wood_ring_persistence",
+    "wood_ring_lacunarity",
+    "wood_elongation_min",
+    "wood_elongation_max",
+    "wood_warp_scale",
+    "wood_warp_strength",
+    "wood_ring_contrast",
+    "wood_knot_count_max",
+    "wood_knot_size_min",
+    "wood_knot_size_max",
+    "wood_knot_ghost_probability",
 )
 
 
@@ -187,6 +203,22 @@ _EXPECTED_PARAMETER_GROUPS = {
     "dune_patch_dune_low": "Dűne — foltosság",
     "dune_patch_dune_high": "Dűne — foltosság",
     "dune_patch_within_scale": "Dűne — foltosság",
+    "wood_direction": "Faerezet — alap",
+    "wood_seed": "Faerezet — alap",
+    "wood_board_width": "Faerezet — alap",
+    "wood_ring_spacing": "Faerezet — alap",
+    "wood_ring_octaves": "Faerezet — alap",
+    "wood_ring_persistence": "Faerezet — alap",
+    "wood_ring_lacunarity": "Faerezet — alap",
+    "wood_elongation_min": "Faerezet — alap",
+    "wood_elongation_max": "Faerezet — alap",
+    "wood_warp_scale": "Faerezet — alap",
+    "wood_warp_strength": "Faerezet — alap",
+    "wood_ring_contrast": "Faerezet — alap",
+    "wood_knot_count_max": "Faerezet — csomók",
+    "wood_knot_size_min": "Faerezet — csomók",
+    "wood_knot_size_max": "Faerezet — csomók",
+    "wood_knot_ghost_probability": "Faerezet — csomók",
 }
 
 
@@ -661,6 +693,22 @@ _EXPECTED_PARAMETER_VISIBLE_WHEN: dict[str, tuple[str, str] | None] = {
     "dune_patch_dune_low": ("generator_type", "Dune"),
     "dune_patch_dune_high": ("generator_type", "Dune"),
     "dune_patch_within_scale": ("generator_type", "Dune"),
+    "wood_direction": ("generator_type", "WoodGrain"),
+    "wood_seed": ("generator_type", "WoodGrain"),
+    "wood_board_width": ("generator_type", "WoodGrain"),
+    "wood_ring_spacing": ("generator_type", "WoodGrain"),
+    "wood_ring_octaves": ("generator_type", "WoodGrain"),
+    "wood_ring_persistence": ("generator_type", "WoodGrain"),
+    "wood_ring_lacunarity": ("generator_type", "WoodGrain"),
+    "wood_elongation_min": ("generator_type", "WoodGrain"),
+    "wood_elongation_max": ("generator_type", "WoodGrain"),
+    "wood_warp_scale": ("generator_type", "WoodGrain"),
+    "wood_warp_strength": ("generator_type", "WoodGrain"),
+    "wood_ring_contrast": ("generator_type", "WoodGrain"),
+    "wood_knot_count_max": ("generator_type", "WoodGrain"),
+    "wood_knot_size_min": ("generator_type", "WoodGrain"),
+    "wood_knot_size_max": ("generator_type", "WoodGrain"),
+    "wood_knot_ghost_probability": ("generator_type", "WoodGrain"),
 }
 
 
@@ -702,7 +750,7 @@ def test_generator_type_parameter_has_expected_choices() -> None:
     spec = next(s for s in descriptor.parameters if s.name == "generator_type")
 
     assert spec.default == "Wave"
-    assert spec.choices == ("Wave", "Voronoi", "Crater", "Dune")
+    assert spec.choices == ("Wave", "Voronoi", "Crater", "Dune", "WoodGrain")
     assert spec.group is None
     assert spec.visible_when is None
 
@@ -801,6 +849,40 @@ def test_build_with_generator_type_dune_uses_dune_parameters() -> None:
     values_b["dune_ripple_amplitude_front"] = (
         values_a["dune_ripple_amplitude_front"] * 2.0 + 0.1
     )
+
+    mesh_a = descriptor.build(values_a).get_mesh()
+    mesh_b = descriptor.build(values_b).get_mesh()
+
+    assert mesh_a.vertices != mesh_b.vertices
+
+
+# --- generator_type / WoodGrain bekötés (ROADMAP Phase 11.4) ---
+
+
+def test_build_with_generator_type_wood_grain_returns_working_mesh_source() -> None:
+    descriptor = build_mesh_source_descriptor()
+    values = {spec.name: spec.default for spec in descriptor.parameters}
+    values["generator_type"] = "WoodGrain"
+
+    mesh_source = descriptor.build(values)
+    mesh = mesh_source.get_mesh()
+
+    assert isinstance(mesh_source, ReliefGeneratorMeshSource)
+    assert mesh.is_valid is True
+    assert len(mesh.vertices) > 0
+    assert len(mesh.triangles) > 0
+
+
+def test_build_with_generator_type_wood_grain_uses_wood_grain_parameters() -> None:
+    # Két, csak wood_ring_contrast-ban eltérő build eltérő mesh-t kell
+    # adjon — ez közvetve igazolja, hogy a _build ténylegesen a wood_*
+    # értékeket használja fel, nem csak egy hardkódolt
+    # WoodGrainParameters-t.
+    descriptor = build_mesh_source_descriptor()
+    values_a = {spec.name: spec.default for spec in descriptor.parameters}
+    values_a["generator_type"] = "WoodGrain"
+    values_b = dict(values_a)
+    values_b["wood_ring_contrast"] = values_a["wood_ring_contrast"] * 2.0 + 0.1
 
     mesh_a = descriptor.build(values_a).get_mesh()
     mesh_b = descriptor.build(values_b).get_mesh()

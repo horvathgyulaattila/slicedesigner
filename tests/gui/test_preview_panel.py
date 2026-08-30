@@ -858,6 +858,48 @@ def test_sliced_assembly_does_not_use_smooth_shading(
     assert "specular" not in edge_kwargs
 
 
+def test_sliced_assembly_base_layer_uses_ambient_lighting(
+    preview_panel: PreviewPanel, monkeypatch: pytest.MonkeyPatch, qtbot: QtBot
+) -> None:
+    """A `enable_lightkit()`-tel visszaállított irányított megvilágítás
+    mellett a "Szeletelt összeállítás" nézet alaptestének
+    (`"#7E4B26"`) fénytől elforduló, facettázott felületei túl
+    sötétnek látszottak (élő tesztelés) — a `_render_geometry_bundle()`
+    ezért `ambient=0.3`-at ad át az alaptestnek. A kiemelt szelet
+    (`"navy"`, `highlight_polydata`) NEM kap `ambient`-et — a
+    projektgazda kizárólag az alaptestet jelezte problémásnak."""
+    _show_sliced_assembly_sync(qtbot, preview_panel, _slice_set(5))
+    preview_panel.highlight_spinbox.setValue(3)
+    _wait_for_interactive_render(qtbot, preview_panel)
+
+    calls = _record_add_mesh_calls(preview_panel, monkeypatch)
+    preview_panel.highlight_checkbox.setChecked(True)
+    _wait_for_interactive_render(qtbot, preview_panel)
+
+    grouped = _group_calls_by_color(calls)
+    base_kwargs = grouped["#7E4B26"][0]
+    assert base_kwargs["ambient"] == 0.3
+
+    highlight_kwargs = grouped["navy"][0]
+    assert "ambient" not in highlight_kwargs
+
+
+def test_original_mesh_does_not_use_ambient_lighting(
+    preview_panel: PreviewPanel, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Az "Eredeti Mesh" nézet (`"lightgray"`) a `smooth_shading` +
+    `specular` révén már megfelelően árnyékolt (2026-08-21-i
+    kiegészítés) — az `ambient` bevezetése ezt a hívást változatlanul
+    hagyja."""
+    calls = _record_add_mesh_calls(preview_panel, monkeypatch)
+
+    preview_panel.show_mesh(_empty_mesh())
+
+    grouped = _group_calls_by_color(calls)
+    base_kwargs = grouped["lightgray"][0]
+    assert "ambient" not in base_kwargs
+
+
 def test_enable_depth_peeling_called_with_number_of_peels_zero(
     qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
 ) -> None:

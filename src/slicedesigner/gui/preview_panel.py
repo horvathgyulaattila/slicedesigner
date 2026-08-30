@@ -764,6 +764,7 @@ class PreviewPanel(QWidget):
             color="#7E4B26",
             opacity=bundle.other_layers_opacity,
             edge_color="#1A1719",
+            ambient=0.3,
         )
         if bundle.highlight_polydata is not None:
             self._add_solid_with_edges(bundle.highlight_polydata, color="navy")
@@ -858,6 +859,7 @@ class PreviewPanel(QWidget):
         opacity: float = 1.0,
         edge_color: str = "dimgray",
         smooth_shading: bool = False,
+        ambient: float = 0.0,
     ) -> None:
         """Egy szolid test hozzáadása, valódi (nem háromszögesítési-
         diagonál) kontúréleivel.
@@ -895,12 +897,24 @@ class PreviewPanel(QWidget):
         keltene zavaró, a tényleges geometriától idegen fényes csíkokat.
         A kontúrél-réteg (egyszerű vonalgeometria) SOSEM kap
         `smooth_shading`/`specular`-t — ott nincs értelme.
+
+        Az `ambient` (alapértelmezetten `0.0` — nincs hatása, a
+        korábbi viselkedést megőrzi) iránytól független alap-
+        megvilágítást ad hozzá — a `smooth_shading`-től eltérően NEM
+        interpolál normálvektorokat, ezért nem hozza vissza a rétegek
+        közti hamis fénycsíkozást. Bevezetése: a 2026-08-21-i
+        fényforrás-hiba javítása (`enable_lightkit()`) óta a "Szeletelt
+        összeállítás" nézet fénytől elforduló, facettázott felületei
+        (a `smooth_shading=False` miatt) túl sötétnek látszottak —
+        élő tesztelés jelezte.
         """
         solid_kwargs: dict[str, object] = {}
         if smooth_shading:
             solid_kwargs["smooth_shading"] = True
             solid_kwargs["specular"] = 0.5
             solid_kwargs["specular_power"] = 15
+        if ambient != 0.0:
+            solid_kwargs["ambient"] = ambient
         self.plotter.add_mesh(polydata, color=color, opacity=opacity, **solid_kwargs)
         edges = polydata.extract_feature_edges(
             feature_angle=30,

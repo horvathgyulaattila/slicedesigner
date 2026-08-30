@@ -601,3 +601,90 @@ def test_visible_when_values_includes_hidden_field_values(qtbot: QtBot) -> None:
         "mid": "X",
         "leaf": pytest.approx(1.0),
     }
+
+
+# --- üres csoportok elrejtése (`visible_when` + `group`, 2026-08-29-i kiegészítés) ---
+
+
+def _make_visible_when_group_form(qtbot: QtBot) -> _GeneratorParameterForm:
+    """Egy `group`-hoz tartozó egyetlen mező, `visible_when`-nel — a
+    szakasz láthatóságának a mező effektív láthatóságát kell követnie."""
+    parameters = (
+        ParameterSpec(
+            name="top", label="Top", type="enum", default="A", choices=("A", "B")
+        ),
+        ParameterSpec(
+            name="member",
+            label="Member",
+            type="float",
+            default=1.0,
+            group="G",
+            visible_when=("top", "B"),
+        ),
+    )
+    form = _GeneratorParameterForm(parameters)
+    qtbot.addWidget(form)
+    form.show()
+    return form
+
+
+def test_group_section_hidden_when_all_members_effectively_invisible(
+    qtbot: QtBot,
+) -> None:
+    form = _make_visible_when_group_form(qtbot)
+
+    assert not form._sections["G"].isVisible()
+
+
+def test_group_section_becomes_visible_when_a_member_becomes_visible(
+    qtbot: QtBot,
+) -> None:
+    form = _make_visible_when_group_form(qtbot)
+
+    form._enum_widgets["top"].setCurrentIndex(form._enum_widgets["top"].findData("B"))
+    assert form._sections["G"].isVisible()
+
+    form._enum_widgets["top"].setCurrentIndex(form._enum_widgets["top"].findData("A"))
+    assert not form._sections["G"].isVisible()
+
+
+def test_generator_parameter_form_without_groups_does_not_break_on_empty_group_members(
+    qtbot: QtBot,
+) -> None:
+    parameters = (
+        ParameterSpec(name="a", label="A", type="float", default=1.0),
+        ParameterSpec(name="b", label="B", type="int", default=3),
+    )
+    form = _GeneratorParameterForm(parameters)
+    qtbot.addWidget(form)
+
+    assert form._group_members == {}
+    assert form._sections == {}
+    assert form.values() == {"a": pytest.approx(1.0), "b": 3}
+
+
+# --- "Generálás" gomb STL forrásnál (2026-08-29-i kiegészítés) ---
+
+
+def test_generate_mesh_button_initially_hidden_with_stl_as_default_source(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    panel, _ = _make_panel_with_stub_descriptor(qtbot, monkeypatch)
+
+    assert panel.generate_mesh_button is not None
+    assert not panel.generate_mesh_button.isVisible()
+
+
+def test_generate_mesh_button_toggles_with_source_selection(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    panel, _ = _make_panel_with_stub_descriptor(qtbot, monkeypatch)
+    combo = panel.mesh_source_combo
+    assert combo is not None
+    assert panel.generate_mesh_button is not None
+
+    combo.setCurrentIndex(1)
+    assert panel.generate_mesh_button.isVisible()
+
+    combo.setCurrentIndex(0)
+    assert not panel.generate_mesh_button.isVisible()

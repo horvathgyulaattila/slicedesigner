@@ -31,6 +31,12 @@ A ROADMAP Phase 11.3 ötödik (végleges) tervezete a Dűne-specifikus
 mezőket 10-ről 23-ra bővítette, három alcsoportba rendezve ("Dűne —
 alap" / "Dűne — fodor" / "Dűne — foltosság") — l.
 docs/plugins/relief_generator/DUNE_RELIEF_GENERATOR.md.
+
+A ROADMAP Phase 11.4 a `generator_type`-ot egy ötödik választással,
+`"WoodGrain"`-nel bővítette — a Faerezet-specifikus mezők (16 db, két
+alcsoportba rendezve: "Faerezet — alap" / "Faerezet — csomók") csak
+`generator_type=="WoodGrain"` esetén látszanak a GUI-n; a meglévő
+Wave/Voronoi/Crater/Dune mezők semmilyen módosítást nem igényeltek.
 """
 
 from __future__ import annotations
@@ -58,6 +64,9 @@ from plugins.relief_generator.domain.procedural_noise import (
 from plugins.relief_generator.domain.voronoi_parameters import VoronoiParameters
 from plugins.relief_generator.domain.wave import AmplitudeEnvelope, Distortion
 from plugins.relief_generator.domain.wave_parameters import WaveParameters
+from plugins.relief_generator.domain.wood_grain_parameters import (
+    WoodGrainParameters,
+)
 from plugins.relief_generator.generators.crater_generator import (
     CraterHeightFieldSource,
 )
@@ -66,6 +75,9 @@ from plugins.relief_generator.generators.voronoi_generator import (
     VoronoiHeightFieldSource,
 )
 from plugins.relief_generator.generators.wave_generator import WaveHeightFieldSource
+from plugins.relief_generator.generators.wood_grain_generator import (
+    WoodGrainHeightFieldSource,
+)
 from plugins.relief_generator.source.relief_generator_mesh_source import (
     ReliefGeneratorMeshSource,
 )
@@ -124,7 +136,7 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         label="Generátor",
         type="enum",
         default="Wave",
-        choices=("Wave", "Voronoi", "Crater", "Dune"),
+        choices=("Wave", "Voronoi", "Crater", "Dune", "WoodGrain"),
     ),
     ParameterSpec(
         name="wavelength",
@@ -755,6 +767,151 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         group="Dűne — foltosság",
         visible_when=("generator_type", "Dune"),
     ),
+    ParameterSpec(
+        name="wood_direction",
+        label="Szálirány",
+        type="float",
+        default=90.0,
+        minimum=0.0,
+        maximum=360.0,
+        unit="°",
+        group="Faerezet — alap",
+        visible_when=("generator_type", "WoodGrain"),
+    ),
+    ParameterSpec(
+        name="wood_seed",
+        label="Faerezet seed",
+        type="int",
+        default=0,
+        group="Faerezet — alap",
+        visible_when=("generator_type", "WoodGrain"),
+    ),
+    ParameterSpec(
+        name="wood_board_width",
+        label="Deszkaszélesség",
+        type="float",
+        default=0.42,
+        minimum=0.0001,
+        group="Faerezet — alap",
+        visible_when=("generator_type", "WoodGrain"),
+    ),
+    ParameterSpec(
+        name="wood_ring_spacing",
+        label="Gyűrűtávolság",
+        type="float",
+        default=0.09,
+        minimum=0.0001,
+        group="Faerezet — alap",
+        visible_when=("generator_type", "WoodGrain"),
+    ),
+    ParameterSpec(
+        name="wood_ring_octaves",
+        label="Gyűrű oktávok",
+        type="int",
+        default=4,
+        minimum=1,
+        group="Faerezet — alap",
+        visible_when=("generator_type", "WoodGrain"),
+    ),
+    ParameterSpec(
+        name="wood_ring_persistence",
+        label="Gyűrű persistence",
+        type="float",
+        default=0.55,
+        minimum=0.0001,
+        group="Faerezet — alap",
+        visible_when=("generator_type", "WoodGrain"),
+    ),
+    ParameterSpec(
+        name="wood_ring_lacunarity",
+        label="Gyűrű lacunarity",
+        type="float",
+        default=2.3,
+        minimum=1.0001,
+        group="Faerezet — alap",
+        visible_when=("generator_type", "WoodGrain"),
+    ),
+    ParameterSpec(
+        name="wood_elongation_min",
+        label="Flóderosság — minimum",
+        type="float",
+        default=5.0,
+        minimum=0.0001,
+        group="Faerezet — alap",
+        visible_when=("generator_type", "WoodGrain"),
+    ),
+    ParameterSpec(
+        name="wood_elongation_max",
+        label="Flóderosság — maximum",
+        type="float",
+        default=50.0,
+        minimum=0.0001,
+        group="Faerezet — alap",
+        visible_when=("generator_type", "WoodGrain"),
+    ),
+    ParameterSpec(
+        name="wood_warp_scale",
+        label="Bél-vonal hullámzás skála",
+        type="float",
+        default=0.35,
+        minimum=0.0001,
+        group="Faerezet — alap",
+        visible_when=("generator_type", "WoodGrain"),
+    ),
+    ParameterSpec(
+        name="wood_warp_strength",
+        label="Bél-vonal hullámzás mértéke",
+        type="float",
+        default=0.02,
+        group="Faerezet — alap",
+        visible_when=("generator_type", "WoodGrain"),
+    ),
+    ParameterSpec(
+        name="wood_ring_contrast",
+        label="Kontraszt",
+        type="float",
+        default=0.6,
+        minimum=0.0,
+        group="Faerezet — alap",
+        visible_when=("generator_type", "WoodGrain"),
+    ),
+    ParameterSpec(
+        name="wood_knot_count_max",
+        label="Csomók max. száma deszkánként",
+        type="int",
+        default=3,
+        minimum=0,
+        group="Faerezet — csomók",
+        visible_when=("generator_type", "WoodGrain"),
+    ),
+    ParameterSpec(
+        name="wood_knot_size_min",
+        label="Csomóméret — minimum",
+        type="float",
+        default=0.006,
+        minimum=0.0001,
+        group="Faerezet — csomók",
+        visible_when=("generator_type", "WoodGrain"),
+    ),
+    ParameterSpec(
+        name="wood_knot_size_max",
+        label="Csomóméret — maximum",
+        type="float",
+        default=0.06,
+        minimum=0.0001,
+        group="Faerezet — csomók",
+        visible_when=("generator_type", "WoodGrain"),
+    ),
+    ParameterSpec(
+        name="wood_knot_ghost_probability",
+        label="Szellem-csomó valószínűség",
+        type="float",
+        default=0.3,
+        minimum=0.0,
+        maximum=1.0,
+        group="Faerezet — csomók",
+        visible_when=("generator_type", "WoodGrain"),
+    ),
 )
 
 
@@ -949,6 +1106,27 @@ def _build(values: dict[str, Any]) -> ReliefGeneratorMeshSource:
                 patch_dune_low=values["dune_patch_dune_low"],
                 patch_dune_high=values["dune_patch_dune_high"],
                 patch_within_scale=values["dune_patch_within_scale"],
+            )
+        )
+    elif values["generator_type"] == "WoodGrain":
+        height_field_source = WoodGrainHeightFieldSource(
+            WoodGrainParameters(
+                direction=values["wood_direction"],
+                seed=values["wood_seed"],
+                board_width=values["wood_board_width"],
+                ring_spacing=values["wood_ring_spacing"],
+                ring_octaves=values["wood_ring_octaves"],
+                ring_persistence=values["wood_ring_persistence"],
+                ring_lacunarity=values["wood_ring_lacunarity"],
+                elongation_min=values["wood_elongation_min"],
+                elongation_max=values["wood_elongation_max"],
+                warp_scale=values["wood_warp_scale"],
+                warp_strength=values["wood_warp_strength"],
+                knot_count_max=values["wood_knot_count_max"],
+                knot_size_min=values["wood_knot_size_min"],
+                knot_size_max=values["wood_knot_size_max"],
+                knot_ghost_probability=values["wood_knot_ghost_probability"],
+                ring_contrast=values["wood_ring_contrast"],
             )
         )
     else:
