@@ -74,16 +74,29 @@ _EXPECTED_PARAMETER_NAMES = (
     "crater_power",
     "crater_octaves",
     "crater_lacunarity",
-    "dune_spacing",
-    "dune_asymmetry",
-    "dune_segment_scale",
-    "dune_ripple_wavelength",
-    "dune_ripple_amplitude",
-    "dune_warp_scale",
-    "dune_warp_strength",
     "dune_direction",
-    "dune_slope_sensitivity",
     "dune_seed",
+    "dune_coarse_scale",
+    "dune_ridge_spacing",
+    "dune_ridge_length",
+    "dune_asymmetry_strength",
+    "dune_fine_scale",
+    "dune_fine_octaves",
+    "dune_fine_persistence",
+    "dune_fine_lacunarity",
+    "dune_detail_weight",
+    "dune_ripple_wavelength_front",
+    "dune_ripple_amplitude_front",
+    "dune_ripple_wavelength_back",
+    "dune_ripple_amplitude_back",
+    "dune_ripple_warp_scale",
+    "dune_ripple_warp_strength",
+    "dune_blend_low",
+    "dune_blend_high",
+    "dune_patch_dune_scale",
+    "dune_patch_dune_low",
+    "dune_patch_dune_high",
+    "dune_patch_within_scale",
 )
 
 
@@ -151,16 +164,29 @@ _EXPECTED_PARAMETER_GROUPS = {
     "crater_power": "Holdkráter",
     "crater_octaves": "Holdkráter",
     "crater_lacunarity": "Holdkráter",
-    "dune_spacing": "Dűne",
-    "dune_asymmetry": "Dűne",
-    "dune_segment_scale": "Dűne",
-    "dune_ripple_wavelength": "Dűne",
-    "dune_ripple_amplitude": "Dűne",
-    "dune_warp_scale": "Dűne",
-    "dune_warp_strength": "Dűne",
-    "dune_direction": "Dűne",
-    "dune_slope_sensitivity": "Dűne",
-    "dune_seed": "Dűne",
+    "dune_direction": "Dűne — alap",
+    "dune_seed": "Dűne — alap",
+    "dune_coarse_scale": "Dűne — alap",
+    "dune_ridge_spacing": "Dűne — alap",
+    "dune_ridge_length": "Dűne — alap",
+    "dune_asymmetry_strength": "Dűne — alap",
+    "dune_fine_scale": "Dűne — alap",
+    "dune_fine_octaves": "Dűne — alap",
+    "dune_fine_persistence": "Dűne — alap",
+    "dune_fine_lacunarity": "Dűne — alap",
+    "dune_detail_weight": "Dűne — alap",
+    "dune_ripple_wavelength_front": "Dűne — fodor",
+    "dune_ripple_amplitude_front": "Dűne — fodor",
+    "dune_ripple_wavelength_back": "Dűne — fodor",
+    "dune_ripple_amplitude_back": "Dűne — fodor",
+    "dune_ripple_warp_scale": "Dűne — fodor",
+    "dune_ripple_warp_strength": "Dűne — fodor",
+    "dune_blend_low": "Dűne — fodor",
+    "dune_blend_high": "Dűne — fodor",
+    "dune_patch_dune_scale": "Dűne — foltosság",
+    "dune_patch_dune_low": "Dűne — foltosság",
+    "dune_patch_dune_high": "Dűne — foltosság",
+    "dune_patch_within_scale": "Dűne — foltosság",
 }
 
 
@@ -612,16 +638,29 @@ _EXPECTED_PARAMETER_VISIBLE_WHEN: dict[str, tuple[str, str] | None] = {
     "crater_power": ("generator_type", "Crater"),
     "crater_octaves": ("generator_type", "Crater"),
     "crater_lacunarity": ("generator_type", "Crater"),
-    "dune_spacing": ("generator_type", "Dune"),
-    "dune_asymmetry": ("generator_type", "Dune"),
-    "dune_segment_scale": ("generator_type", "Dune"),
-    "dune_ripple_wavelength": ("generator_type", "Dune"),
-    "dune_ripple_amplitude": ("generator_type", "Dune"),
-    "dune_warp_scale": ("generator_type", "Dune"),
-    "dune_warp_strength": ("generator_type", "Dune"),
     "dune_direction": ("generator_type", "Dune"),
-    "dune_slope_sensitivity": ("generator_type", "Dune"),
     "dune_seed": ("generator_type", "Dune"),
+    "dune_coarse_scale": ("generator_type", "Dune"),
+    "dune_ridge_spacing": ("generator_type", "Dune"),
+    "dune_ridge_length": ("generator_type", "Dune"),
+    "dune_asymmetry_strength": ("generator_type", "Dune"),
+    "dune_fine_scale": ("generator_type", "Dune"),
+    "dune_fine_octaves": ("generator_type", "Dune"),
+    "dune_fine_persistence": ("generator_type", "Dune"),
+    "dune_fine_lacunarity": ("generator_type", "Dune"),
+    "dune_detail_weight": ("generator_type", "Dune"),
+    "dune_ripple_wavelength_front": ("generator_type", "Dune"),
+    "dune_ripple_amplitude_front": ("generator_type", "Dune"),
+    "dune_ripple_wavelength_back": ("generator_type", "Dune"),
+    "dune_ripple_amplitude_back": ("generator_type", "Dune"),
+    "dune_ripple_warp_scale": ("generator_type", "Dune"),
+    "dune_ripple_warp_strength": ("generator_type", "Dune"),
+    "dune_blend_low": ("generator_type", "Dune"),
+    "dune_blend_high": ("generator_type", "Dune"),
+    "dune_patch_dune_scale": ("generator_type", "Dune"),
+    "dune_patch_dune_low": ("generator_type", "Dune"),
+    "dune_patch_dune_high": ("generator_type", "Dune"),
+    "dune_patch_within_scale": ("generator_type", "Dune"),
 }
 
 
@@ -751,15 +790,17 @@ def test_build_with_generator_type_dune_returns_working_mesh_source() -> None:
 
 
 def test_build_with_generator_type_dune_uses_dune_parameters() -> None:
-    # Két, csak ripple_amplitude-ban eltérő build eltérő mesh-t kell
-    # adjon — ez közvetve igazolja, hogy a _build ténylegesen a
-    # dune_* értékeket használja fel, nem csak egy hardkódolt
-    # DuneParameters-t.
+    # Két, csak dune_ripple_amplitude_front-ban eltérő build eltérő
+    # mesh-t kell adjon — ez közvetve igazolja, hogy a _build
+    # ténylegesen a dune_* értékeket használja fel, nem csak egy
+    # hardkódolt DuneParameters-t.
     descriptor = build_mesh_source_descriptor()
     values_a = {spec.name: spec.default for spec in descriptor.parameters}
     values_a["generator_type"] = "Dune"
     values_b = dict(values_a)
-    values_b["dune_ripple_amplitude"] = values_a["dune_ripple_amplitude"] * 2.0
+    values_b["dune_ripple_amplitude_front"] = (
+        values_a["dune_ripple_amplitude_front"] * 2.0 + 0.1
+    )
 
     mesh_a = descriptor.build(values_a).get_mesh()
     mesh_b = descriptor.build(values_b).get_mesh()
