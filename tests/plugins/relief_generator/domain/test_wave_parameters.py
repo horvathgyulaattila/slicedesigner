@@ -210,6 +210,21 @@ def test_function_accepts_explicit_value(function: str) -> None:
     assert parameters.function == function
 
 
+def test_asymmetry_strength_defaults_to_zero() -> None:
+    parameters = WaveParameters(**_VALID_KWARGS)
+
+    assert parameters.asymmetry_strength == 0.0
+
+
+@pytest.mark.parametrize("asymmetry_strength", [-2.5, -1.0, 1.0, 3.7])
+def test_asymmetry_strength_accepts_values_beyond_unit_range(
+    asymmetry_strength: float,
+) -> None:
+    parameters = WaveParameters(**_VALID_KWARGS, asymmetry_strength=asymmetry_strength)
+
+    assert parameters.asymmetry_strength == asymmetry_strength
+
+
 def test_include_automatic_can_be_set_to_false() -> None:
     parameters = WaveParameters(
         wavelength=0.3,

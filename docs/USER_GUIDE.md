@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-08-09
-Utolsó módosítás: 2026-08-09
+Utolsó módosítás: 2026-08-29
 Kapcsolódó dokumentumok: [PROJECT_VISION.md](PROJECT_VISION.md), [WORKFLOW.md](WORKFLOW.md), [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)
 
 ## Cél
@@ -34,13 +34,13 @@ Ez megnyitja a Slice Designer főablakát.
 
 **Opcionális plugin — Relief Generator:**
 
-A Slice Designer plugin nélkül is teljes értékű. Az opcionális Relief Generator plugin (parametrikus, hullám-alapú modellgenerátor) külön telepíthető:
+A Slice Designer plugin nélkül is teljes értékű. Az opcionális Relief Generator plugin (parametrikus, procedurális modellgenerátor) külön telepíthető:
 
 ```
 uv pip install -e plugins/relief_generator
 ```
 
-Ezután az alkalmazás (újra)indításakor a "Mesh Import" fülön megjelenik egy "Forrás" legördülő, "STL fájl" mellett "Relief Generator (Wave)" opcióval — l. 4.1 szakasz.
+Ezután az alkalmazás (újra)indításakor a "Mesh Import" fülön megjelenik egy "Forrás" legördülő, "STL fájl" mellett "Relief Generator" opcióval — l. 4.1 szakasz. A plugin öt, egymástól teljesen eltérő procedurális generátort kínál, egy belső "Generátor" legördülőn választva: **Automatikus hullám** (az eredeti, hullámhossz/amplitúdó/irány-alapú recept, opcionális amplitúdó-modulációval, koordináta-torzítással és több hullámforrással), **Voronoi-felszín**, **Holdkráter-felszín**, **Dűne-felszín** és **Faerezet-felszín** — mindegyiknek saját, csak rá vonatkozó paraméter-csoportjai vannak, amik csak az adott generátor kiválasztásakor jelennek meg.
 
 A plugin eltávolítása: `uv pip uninstall slicedesigner-relief-generator`, vagy egyszerűen `uv sync` (ami a venv-et a lockfile szerinti, plugin nélküli állapotra állítja vissza, mivel a plugin telepítése nem a lockfile-on keresztül történik).
 
@@ -81,9 +81,9 @@ Betöltéskor a rendszer:
 
 ### 4.1 Alternatív modellforrás: MeshSource pluginok (opcionális)
 
-Ha van telepített MeshSource plugin (l. 1. szakasz, "Opcionális plugin"), a "Mesh Import" fül tetején megjelenik egy "Forrás" legördülő, "STL fájl" mellett a plugin nevével (pl. "Relief Generator (Wave)").
+Ha van telepített MeshSource plugin (l. 1. szakasz, "Opcionális plugin"), a "Mesh Import" fül tetején megjelenik egy "Forrás" legördülő, "STL fájl" mellett a plugin nevével (pl. "Relief Generator").
 
-Plugin kiválasztásakor a fájl-választó helyett a plugin paraméterei jelennek meg, a plugin által megadott formában (pl. Szélesség, Magasság, Hullámhossz). A paraméterek kitöltése után a "Generálás" gomb elindítja a modell előállítását — ez a 3D előnézetben ugyanúgy megjelenik, mint egy importált STL. A generálás egy háttérszálon fut; amíg tart, a "Generálás" és a "Futtatás" gomb, valamint a "Fájl" menü letiltott.
+Plugin kiválasztásakor a fájl-választó helyett a plugin paraméterei jelennek meg, a plugin által megadott formában. A Relief Generator esetén ez első lépésben egy "Generátor" legördülőt jelent (Automatikus hullám / Voronoi / Holdkráter / Dűne / Faerezet), majd a kiválasztott generátorra jellemző mezőket (a nem releváns mezők/mezőcsoportok automatikusan rejtve maradnak). A paraméterek kitöltése után a "Generálás" gomb elindítja a modell előállítását — ez a 3D előnézetben ugyanúgy megjelenik, mint egy importált STL. A generálás egy háttérszálon fut; amíg tart, a "Generálás" és a "Futtatás" gomb, valamint a "Fájl" menü letiltott.
 
 A "Futtatás" gomb ekkor a legutóbb sikeresen generált modellt használja — ha még nem volt sikeres generálás, a Futtatás konfigurációs hibával leáll ("Nincs generált modell — előbb kattints a 'Generálás' gombra."). Paraméter módosítása után újra rá kell kattintani a "Generálás" gombra, hogy az új értékek érvényesüljenek.
 

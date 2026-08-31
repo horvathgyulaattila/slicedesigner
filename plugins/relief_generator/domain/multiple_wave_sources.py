@@ -68,6 +68,12 @@ class WaveSourceSpec:
             egyedileg állítható, az `amplitude`/`wavelength`/`phase`
             mintájára — nem az `envelope`/`distortion`-hoz hasonlóan
             megosztott (ROADMAP Phase 10.2).
+        asymmetry_strength: a forrás fázistorzítási erőssége (ROADMAP
+            Phase 12.2) — l. `AsymmetricPhase` osztály docstringje,
+            WAVE_DOMAIN_MODEL.md 6.4 szakasz. Alapértelmezett: `0.0`
+            (nincs torzítás). Forrásonként egyedileg állítható, az
+            `amplitude`/`wavelength`/`phase`/`function` mintájára.
+            Bármely véges valós érték érvényes.
         irregularity: a koncentrikus rétegek amplitúdójának,
             hullámhosszának és fázisának determinisztikus szórási
             mértéke, a `[0.0, 1.0]` zárt intervallumból. Alapértelmezett:
@@ -102,6 +108,7 @@ class WaveSourceSpec:
     phase: float
     weight: float = 1.0
     function: WaveFunctionName = "Sinusoidal"
+    asymmetry_strength: float = 0.0
     irregularity: float = 0.0
     complexity: float = 0.0
     direction: float | None = None
@@ -224,7 +231,7 @@ def build_waves(
                 amplitude=amplitude,
                 wavelength=wavelength,
                 phase=phase,
-                function=build_wave_function(spec.function),
+                function=build_wave_function(spec.function, spec.asymmetry_strength),
                 propagation=propagation,
                 envelope=resolved_envelope,
                 weight=spec.weight,

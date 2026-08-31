@@ -31,6 +31,7 @@ from plugins.relief_generator.domain.radial_wave_source import (  # noqa: E402
     RadialPropagation,
 )
 from plugins.relief_generator.domain.wave import (  # noqa: E402
+    AsymmetricPhase,
     DirectionalPropagation,
     Sinusoidal,
     Square,
@@ -372,6 +373,69 @@ def test_complexity_out_of_range_raises(complexity: float) -> None:
             direction=0.0,
             complexity=complexity,
         )
+
+
+# --- fázistorzítás: asymmetry_strength (ROADMAP Phase 12.2) ---
+
+
+def test_asymmetry_strength_defaults_to_zero() -> None:
+    spec = WaveSourceSpec(
+        source_type="Directional",
+        amplitude=1.0,
+        wavelength=0.5,
+        phase=0.2,
+        direction=45.0,
+    )
+
+    assert spec.asymmetry_strength == 0.0
+
+
+@pytest.mark.parametrize("asymmetry_strength", [-2.5, -1.0, 1.0, 3.7])
+def test_asymmetry_strength_accepts_values_beyond_unit_range(
+    asymmetry_strength: float,
+) -> None:
+    spec = WaveSourceSpec(
+        source_type="Directional",
+        amplitude=1.0,
+        wavelength=0.5,
+        phase=0.2,
+        direction=45.0,
+        asymmetry_strength=asymmetry_strength,
+    )
+
+    assert spec.asymmetry_strength == asymmetry_strength
+
+
+def test_build_waves_with_zero_asymmetry_strength_does_not_wrap_function() -> None:
+    spec = WaveSourceSpec(
+        source_type="Directional",
+        amplitude=1.0,
+        wavelength=0.4,
+        phase=0.0,
+        direction=0.0,
+    )
+
+    wave = build_waves(spec)[0]
+
+    assert isinstance(wave.function, Sinusoidal)
+
+
+def test_build_waves_with_nonzero_asymmetry_strength_wraps_function() -> None:
+    spec = WaveSourceSpec(
+        source_type="Directional",
+        amplitude=1.0,
+        wavelength=0.4,
+        phase=0.0,
+        direction=0.0,
+        function="Square",
+        asymmetry_strength=0.6,
+    )
+
+    wave = build_waves(spec)[0]
+
+    assert isinstance(wave.function, AsymmetricPhase)
+    assert isinstance(wave.function.inner, Square)
+    assert wave.function.asymmetry_strength == 0.6
 
 
 def test_build_waves_with_default_complexity_returns_single_layer() -> None:

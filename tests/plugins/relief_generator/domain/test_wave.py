@@ -17,6 +17,7 @@ if _REPO_ROOT in sys.path:
 sys.path.insert(0, _REPO_ROOT)
 
 from plugins.relief_generator.domain.wave import (  # noqa: E402
+    AsymmetricPhase,
     DirectionalPropagation,
     Sawtooth,
     Sinusoidal,
@@ -122,6 +123,81 @@ def test_build_wave_function_returns_matching_type(
     function = build_wave_function(name)  # type: ignore[arg-type]
 
     assert isinstance(function, expected_type)
+
+
+def test_asymmetric_phase_matches_formula() -> None:
+    inner = Sinusoidal()
+    function = AsymmetricPhase(inner=inner, asymmetry_strength=0.4)
+
+    phase_position, wavelength, phase = 0.3, 2.0, 0.5
+    result = function.evaluate(phase_position, wavelength, phase)
+
+    theta = 2.0 * math.pi / wavelength * phase_position + phase
+    distorted_position = phase_position + (
+        wavelength / (2.0 * math.pi) * 0.4 * math.sin(theta)
+    )
+    expected = inner.evaluate(distorted_position, wavelength, phase)
+    assert result == pytest.approx(expected)
+
+
+def test_asymmetric_phase_zero_strength_matches_inner_directly() -> None:
+    inner = Triangle()
+    function = AsymmetricPhase(inner=inner, asymmetry_strength=0.0)
+
+    phase_position, wavelength, phase = 0.6, 1.5, 0.2
+    result = function.evaluate(phase_position, wavelength, phase)
+
+    assert result == pytest.approx(inner.evaluate(phase_position, wavelength, phase))
+
+
+@pytest.mark.parametrize("asymmetry_strength", [-3.5, -1.5, 1.5, 5.0])
+def test_asymmetric_phase_with_large_strength_stays_finite_and_deterministic(
+    asymmetry_strength: float,
+) -> None:
+    # |k| >= 1 esetén a P -> P' leképezés nem monoton (WAVE_DOMAIN_MODEL.md
+    # 6.4 szakasz), de ettől a kimenetnek még mindig végesnek és
+    # determinisztikusnak kell maradnia — nincs semmilyen korlátozott
+    # tartomány, amibe esnie kellene.
+    function = AsymmetricPhase(
+        inner=Sinusoidal(), asymmetry_strength=asymmetry_strength
+    )
+
+    first = function.evaluate(0.3, 1.0, 0.0)
+    second = function.evaluate(0.3, 1.0, 0.0)
+
+    assert math.isfinite(first)
+    assert first == second
+
+
+def test_build_wave_function_with_zero_asymmetry_matches_unwrapped_call() -> None:
+    wrapped = build_wave_function("Sinusoidal", 0.0)
+    unwrapped = build_wave_function("Sinusoidal")
+
+    assert isinstance(wrapped, Sinusoidal)
+    assert type(wrapped) is type(unwrapped)
+    for phase_position in (-1.0, 0.0, 0.3, 1.7):
+        assert wrapped.evaluate(phase_position, 1.0, 0.0) == pytest.approx(
+            unwrapped.evaluate(phase_position, 1.0, 0.0)
+        )
+
+
+@pytest.mark.parametrize(
+    ("name", "expected_inner_type"),
+    [
+        ("Sinusoidal", Sinusoidal),
+        ("Triangle", Triangle),
+        ("Sawtooth", Sawtooth),
+        ("Square", Square),
+    ],
+)
+def test_build_wave_function_with_nonzero_asymmetry_wraps_in_asymmetric_phase(
+    name: str, expected_inner_type: type
+) -> None:
+    function = build_wave_function(name, 0.7)  # type: ignore[arg-type]
+
+    assert isinstance(function, AsymmetricPhase)
+    assert isinstance(function.inner, expected_inner_type)
+    assert function.asymmetry_strength == 0.7
 
 
 def test_directional_propagation_matches_formula() -> None:

@@ -61,6 +61,14 @@ class WaveParameters:
             viselkedés). Az `envelope`/`distortion` mintájára egységesen
             vonatkozik minden automatikusan generált komponensre — nem
             komponensenként eltérő (ROADMAP Phase 10.2).
+        asymmetry_strength: az automatikusan generált komponensek közös
+            fázistorzítási erőssége (ROADMAP Phase 12.2, `BACKLOG.md`
+            2. tétel) — l. `AsymmetricPhase` osztály docstringje,
+            WAVE_DOMAIN_MODEL.md 6.4 szakasz. Alapértelmezett: `0.0`
+            (nincs torzítás, Phase 8/9.1–12.1-kompatibilis viselkedés).
+            Az `envelope`/`distortion` mintájára egységesen vonatkozik
+            minden automatikusan generált komponensre. Bármely véges
+            valós érték érvényes.
         envelope: opcionális, az összes komponensre — automatikusan
             generáltakra ÉS `sources`-ból épülőkre egyaránt — egységesen
             alkalmazott `AmplitudeEnvelope` (pl.
@@ -91,6 +99,7 @@ class WaveParameters:
     irregularity: float
     complexity: float
     function: WaveFunctionName = "Sinusoidal"
+    asymmetry_strength: float = 0.0
     envelope: AmplitudeEnvelope | None = None
     distortion: Distortion | None = None
     sources: tuple[WaveSourceSpec, ...] = ()

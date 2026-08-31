@@ -193,7 +193,9 @@ class WaveGenerator:
                         amplitude=amplitude,
                         wavelength=wavelength,
                         phase=phase,
-                        function=build_wave_function(parameters.function),
+                        function=build_wave_function(
+                            parameters.function, parameters.asymmetry_strength
+                        ),
                         propagation=DirectionalPropagation(
                             direction_rad=math.radians(direction_deg)
                         ),

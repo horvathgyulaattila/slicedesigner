@@ -41,6 +41,7 @@ _EXPECTED_PARAMETER_NAMES = (
     "irregularity",
     "complexity",
     "function",
+    "asymmetry_strength",
     "envelope_type",
     "envelope_center_x",
     "envelope_center_y",
@@ -147,6 +148,7 @@ _EXPECTED_PARAMETER_GROUPS = {
     "irregularity": "Automatikus hullám",
     "complexity": "Automatikus hullám",
     "function": "Automatikus hullám",
+    "asymmetry_strength": "Automatikus hullám",
     "envelope_type": "Envelope",
     "envelope_center_x": "Envelope",
     "envelope_center_y": "Envelope",
@@ -256,6 +258,63 @@ def test_sources_item_schema_has_function_field_without_group() -> None:
     assert function_spec.group is None
     assert function_spec.default == "Sinusoidal"
     assert function_spec.choices == ("Sinusoidal", "Triangle", "Sawtooth", "Square")
+
+
+def test_asymmetry_strength_parameter_is_present_in_automatic_wave_group() -> None:
+    descriptor = build_mesh_source_descriptor()
+
+    spec = next(s for s in descriptor.parameters if s.name == "asymmetry_strength")
+
+    assert spec.default == 0.0
+    assert spec.group == "Automatikus hullám"
+    assert spec.visible_when == ("generator_type", "Wave")
+
+
+def test_sources_item_schema_has_asymmetry_strength_field() -> None:
+    descriptor = build_mesh_source_descriptor()
+
+    sources_spec = next(s for s in descriptor.parameters if s.name == "sources")
+    item = next(i for i in sources_spec.item_schema if i.name == "asymmetry_strength")
+
+    assert item.group is None
+    assert item.default == 0.0
+    assert item.visible_when is None
+
+
+def test_build_sources_uses_asymmetry_strength_field() -> None:
+    sources = _build_sources(
+        [
+            {
+                "source_type": "Directional",
+                "amplitude": 0.4,
+                "wavelength": 0.2,
+                "phase": 0.0,
+                "weight": 1.0,
+                "function": "Sinusoidal",
+                "asymmetry_strength": 0.9,
+                "irregularity": 0.0,
+                "complexity": 0.0,
+                "direction": 90.0,
+                "source_x": 0.3,
+                "source_y": 0.7,
+            }
+        ]
+    )
+
+    assert len(sources) == 1
+    assert sources[0].asymmetry_strength == 0.9
+
+
+def test_build_uses_asymmetry_strength_for_automatic_components() -> None:
+    descriptor = build_mesh_source_descriptor()
+    values_a = {spec.name: spec.default for spec in descriptor.parameters}
+    values_b = dict(values_a)
+    values_b["asymmetry_strength"] = 0.9
+
+    mesh_a = descriptor.build(values_a).get_mesh()
+    mesh_b = descriptor.build(values_b).get_mesh()
+
+    assert mesh_a.vertices != mesh_b.vertices
 
 
 def test_sources_item_schema_has_irregularity_and_complexity_fields() -> None:
@@ -418,6 +477,7 @@ def test_build_sources_directional_omits_radial_fields() -> None:
                 "phase": 0.0,
                 "weight": 1.0,
                 "function": "Sinusoidal",
+                "asymmetry_strength": 0.0,
                 "irregularity": 0.0,
                 "complexity": 0.0,
                 "direction": 90.0,
@@ -443,6 +503,7 @@ def test_build_sources_radial_omits_direction() -> None:
                 "phase": 0.0,
                 "weight": 1.0,
                 "function": "Sinusoidal",
+                "asymmetry_strength": 0.0,
                 "irregularity": 0.0,
                 "complexity": 0.0,
                 "direction": 90.0,
@@ -468,6 +529,7 @@ def test_build_sources_uses_function_field() -> None:
                 "phase": 0.0,
                 "weight": 1.0,
                 "function": "Square",
+                "asymmetry_strength": 0.0,
                 "irregularity": 0.0,
                 "complexity": 0.0,
                 "direction": 90.0,
@@ -491,6 +553,7 @@ def test_build_sources_uses_irregularity_and_complexity_fields() -> None:
                 "phase": 0.0,
                 "weight": 1.0,
                 "function": "Sinusoidal",
+                "asymmetry_strength": 0.0,
                 "irregularity": 0.6,
                 "complexity": 0.8,
                 "direction": 90.0,
@@ -518,6 +581,7 @@ def test_build_with_full_phase9_configuration_returns_working_mesh_source() -> N
             "phase": 0.0,
             "weight": 1.0,
             "function": "Sinusoidal",
+            "asymmetry_strength": 0.0,
             "irregularity": 0.0,
             "complexity": 0.0,
             "direction": 0.0,
@@ -594,6 +658,7 @@ def test_build_with_include_automatic_nem_and_sources_returns_working_mesh_sourc
             "phase": 0.0,
             "weight": 1.0,
             "function": "Sinusoidal",
+            "asymmetry_strength": 0.0,
             "irregularity": 0.0,
             "complexity": 0.0,
             "direction": 0.0,
@@ -637,6 +702,7 @@ _EXPECTED_PARAMETER_VISIBLE_WHEN: dict[str, tuple[str, str] | None] = {
     "irregularity": ("generator_type", "Wave"),
     "complexity": ("generator_type", "Wave"),
     "function": ("generator_type", "Wave"),
+    "asymmetry_strength": ("generator_type", "Wave"),
     "envelope_type": ("generator_type", "Wave"),
     "envelope_center_x": ("envelope_type", "Radial"),
     "envelope_center_y": ("envelope_type", "Radial"),
@@ -733,6 +799,7 @@ def test_sources_item_schema_visible_when_assignment() -> None:
         "phase": None,
         "weight": None,
         "function": None,
+        "asymmetry_strength": None,
         "irregularity": None,
         "complexity": None,
         "direction": ("source_type", "Directional"),

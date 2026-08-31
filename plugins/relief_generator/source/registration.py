@@ -208,6 +208,14 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         visible_when=("generator_type", "Wave"),
     ),
     ParameterSpec(
+        name="asymmetry_strength",
+        label="Aszimmetria erőssége",
+        type="float",
+        default=0.0,
+        group="Automatikus hullám",
+        visible_when=("generator_type", "Wave"),
+    ),
+    ParameterSpec(
         name="envelope_type",
         label="Envelope típusa",
         type="enum",
@@ -442,6 +450,12 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
                 type="enum",
                 default="Sinusoidal",
                 choices=("Sinusoidal", "Triangle", "Sawtooth", "Square"),
+            ),
+            ParameterSpec(
+                name="asymmetry_strength",
+                label="Aszimmetria erőssége",
+                type="float",
+                default=0.0,
             ),
             ParameterSpec(
                 name="irregularity",
@@ -1038,6 +1052,7 @@ def _build_sources(source_values: list[dict[str, Any]]) -> tuple[WaveSourceSpec,
                     function=item["function"],
                     irregularity=item["irregularity"],
                     complexity=item["complexity"],
+                    asymmetry_strength=item["asymmetry_strength"],
                     direction=item["direction"],
                 )
             )
@@ -1052,6 +1067,7 @@ def _build_sources(source_values: list[dict[str, Any]]) -> tuple[WaveSourceSpec,
                     function=item["function"],
                     irregularity=item["irregularity"],
                     complexity=item["complexity"],
+                    asymmetry_strength=item["asymmetry_strength"],
                     source_x=item["source_x"],
                     source_y=item["source_y"],
                 )
@@ -1138,6 +1154,7 @@ def _build(values: dict[str, Any]) -> ReliefGeneratorMeshSource:
             irregularity=values["irregularity"],
             complexity=values["complexity"],
             function=values["function"],
+            asymmetry_strength=values["asymmetry_strength"],
             envelope=_build_envelope(values),
             distortion=_build_distortion(values),
             sources=_build_sources(values["sources"]),

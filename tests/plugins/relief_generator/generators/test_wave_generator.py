@@ -146,6 +146,41 @@ def test_generate_uses_function_field_for_automatic_components() -> None:
     assert triangle.query(x, y) != pytest.approx(sinusoidal.query(x, y))
 
 
+# --- WaveParameters.asymmetry_strength (ROADMAP Phase 12.2) ---
+
+
+def test_generate_with_asymmetry_strength_differs_but_stays_in_unit_interval() -> None:
+    parameters = WaveParameters(
+        wavelength=0.25,
+        amplitude=1.0,
+        direction=35.0,
+        direction_spread=40.0,
+        irregularity=0.6,
+        complexity=0.7,
+    )
+    without_asymmetry = WaveGenerator().generate(parameters)
+    with_asymmetry = WaveGenerator().generate(
+        WaveParameters(
+            wavelength=0.25,
+            amplitude=1.0,
+            direction=35.0,
+            direction_spread=40.0,
+            irregularity=0.6,
+            complexity=0.7,
+            asymmetry_strength=0.8,
+        )
+    )
+
+    sample_points = [(0.0, 0.0), (0.2, 0.9), (0.5, 0.5), (0.9, 0.2), (1.0, 1.0)]
+    differs_somewhere = any(
+        with_asymmetry.query(x, y) != pytest.approx(without_asymmetry.query(x, y))
+        for x, y in sample_points
+    )
+    assert differs_somewhere
+    for x, y in sample_points:
+        assert 0.0 <= with_asymmetry.query(x, y) <= 1.0
+
+
 # --- WaveParameters.envelope/distortion/sources tényleges bekötése (9.7.c) ---
 
 _BASE_KWARGS = {

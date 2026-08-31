@@ -201,6 +201,46 @@ W(θ) = −1, egyébként
 
 A választás a felhasználói szintű `WaveParameters.function` (automatikus komponensek, egységes) és `WaveSourceSpec.function` (explicit forrás, forrásonként egyedi) mezőn keresztül érhető el — l. [MULTIPLE_WAVE_SOURCES.md](MULTIPLE_WAVE_SOURCES.md) 4. szakasz.
 
+### 6.4 AsymmetricPhase
+
+Egy negyedik, a Sinusoidal/Triangle/Sawtooth/Square-től eltérő jellegű
+`WaveFunction` (ROADMAP Phase 12.2, `BACKLOG.md` 2. tétel): nem egy
+önálló alapalak, hanem egy MÁSIK `WaveFunction`-t becsomagoló
+fázistorzítás — tetszőleges alap-alakkal kombinálható, irányfüggően
+lankás/meredek ("dűneszerű") aszimmetrikus profilt ad.
+
+```text
+θ = 2π/λ·P + φ                          — ugyanaz, mint a becsomagolt függvény θ-ja
+θ' = θ + k·sin(θ)                       — fázistorzítás, k = asymmetry_strength
+P' = P + (λ/2π)·k·sin(θ)                — ezzel ekvivalens, torzított phase_position
+W'(P,λ,φ) = W_inner(P', λ, φ)
+```
+
+`k` bármely véges valós érték lehet, szándékosan korlátozás nélkül.
+`|k| < 1` esetén a `P → P'` leképezés monoton (a derivált,
+`1 + k·cos(θ)`, mindenhol nemnegatív); `|k| ≥ 1` esetén nem monoton, de
+a `HeightField` ettől még mindig tökéletesen érvényes, egyértékű marad
+— minden `(x,y)`-hoz pontosan egy `P'`, tehát pontosan egy magasság
+tartozik. Élő, chat-en belüli előnézettel validálva: `|k|` 1 fölé
+emelése megfigyelhetően nem "elromlik", hanem a profil finom
+aszimmetriájából fokozatosan egy magasabb-harmonikus, ismétlődő
+ripple-mintázatba vált át. Ez egy folytonos, érdekes átmenet, nem egy
+hiba — a Szoftverarchitekt kezdetben `|k|<1`-re korlátozta volna, de a
+projektgazda rámutatott, hogy ez ugyanolyan mesterséges korlát lenne,
+mint amilyet a projekt más "erősség" paraméterein (pl. Dune
+`asymmetry_strength`/`ripple_warp_strength`, Wood Grain
+`warp_strength`) sem alkalmazunk.
+
+**Fontos, tudatos korlát a modellen belül:** egy `AsymmetricPhase`
+semmilyen `k` érték mellett sem tud valódi, "átbukó" (self-overlapping,
+egy `(x,y)`-hoz több magasságértéket rendelő) hullámalakot előállítani
+— ez a `HeightField = z(x,y)` reprezentáció alapvető, szerkezeti
+korlátja, nem ennek a `WaveFunction`-nek a hiányossága.
+
+A választás a felhasználói szintű `WaveParameters.asymmetry_strength`
+(automatikus komponensek, egységes) és `WaveSourceSpec.asymmetry_strength`
+(explicit forrás, forrásonként egyedi) mezőn keresztül érhető el.
+
 ## 7. PropagationModel
 
 ### 7.1 Definíció
@@ -318,7 +358,7 @@ A 9.1 domainmodellnek lehetővé kell tennie további modellek hozzáadását az
 
 ### 16.1 WaveFunction
 
-A Sinusoidal mellett a Triangle, Sawtooth és Square `WaveFunction` (6.3 szakasz, ROADMAP Phase 10.2) megvalósult. További periodikus matematikai függvény később is hozzáadható.
+A Sinusoidal mellett a Triangle, Sawtooth és Square `WaveFunction` (6.3 szakasz, ROADMAP Phase 10.2), valamint az `AsymmetricPhase` fázistorzító `WaveFunction` (6.4 szakasz, ROADMAP Phase 12.2) megvalósult. További periodikus matematikai függvény, illetve további becsomagoló/torzító `WaveFunction` később is hozzáadható.
 
 ### 16.2 PropagationModel
 

@@ -92,6 +92,60 @@ class Square:
         return 1.0 if t < 0.5 else -1.0
 
 
+@dataclass(frozen=True)
+class AsymmetricPhase:
+    """Egy másik `WaveFunction`-t becsomagoló, a fázisszöget torzító
+    `WaveFunction` — tetszőleges alap-alakkal (Sinusoidal/Triangle/
+    Sawtooth/Square) kombinálható, irányfüggően lankás/meredek
+    ("dűneszerű") aszimmetrikus profilt ad (ROADMAP Phase 12.2,
+    `BACKLOG.md` 2. tétel).
+
+    Lásd: WAVE_DOMAIN_MODEL.md 6.4 szakasz. A klasszikus "fázistorzítás"
+    (phase distortion) technika: legyen `θ = 2π/λ·P + φ` (ugyanaz, amit
+    a becsomagolt függvény is használna); a torzított fázisszög
+    `θ' = θ + k·sin(θ)` (`k = asymmetry_strength`), amit a becsomagolt
+    függvény egy ezzel ekvivalens, torzított `phase_position'`-ön
+    keresztül kap meg (mivel a `WaveFunction.evaluate` szignatúrája
+    `phase_position`-t vár, nem közvetlenül `θ`-t):
+
+    ```text
+    P' = P + (λ/2π)·k·sin(θ)
+    W'(P,λ,φ) = W_inner(P', λ, φ)
+    ```
+
+    `|k| < 1` esetén a `P → P'` leképezés mindenhol monoton; `|k| ≥ 1`
+    esetén nem monoton (a leképezés "visszahajlik"), de a `HeightField`
+    ettől még mindig tökéletesen érvényes, egyértékű marad — minden
+    `(x,y)`-hoz pontosan egy `P'`, tehát pontosan egy magasság tartozik.
+    `|k|` 1 fölé emelése megfigyelhetően (chat-en belüli előnézettel
+    validálva) nem "elromlik", hanem a profil finom aszimmetriájából
+    fokozatosan egy magasabb-harmonikus, ismétlődő ripple-mintázatba
+    vált át — ez szándékosan nincs korlátozva, ugyanúgy, ahogy a
+    `Dune`/`WoodGrain` hasonló "erősség" paraméterei (`asymmetry_strength`,
+    `ripple_warp_strength`, `warp_strength`) sem korlátozottak.
+
+    Attributes:
+        inner: a becsomagolt, alap `WaveFunction` (bármelyik a négy
+            meglévő közül, vagy akár egy másik `AsymmetricPhase`).
+        asymmetry_strength: a fázistorzítás mértéke (`k`) — pozitív
+            érték a hullám egyik oldalát, negatív a másikat teszi
+            meredekebbé/keskenyebbé, miközben az ellentétes oldal
+            lankásabbá/szélesebbé válik. `0` esetén nincs torzítás (a
+            becsomagolt függvénnyel azonos kimenetet ad). Bármely véges
+            valós érték érvényes.
+    """
+
+    inner: WaveFunction
+    asymmetry_strength: float
+
+    def evaluate(self, phase_position: float, wavelength: float, phase: float) -> float:
+        theta = 2.0 * math.pi / wavelength * phase_position + phase
+        distorted_position = phase_position + (
+            wavelength / (2.0 * math.pi) * self.asymmetry_strength * math.sin(theta)
+        )
+        return self.inner.evaluate(distorted_position, wavelength, phase)
+
+
 WaveFunctionName = Literal["Sinusoidal", "Triangle", "Sawtooth", "Square"]
 """A GUI-n és a felhasználói szintű paramétereken (`WaveParameters.function`,
 `WaveSourceSpec.function`) választható `WaveFunction`-nevek (ROADMAP Phase 10.2)."""
@@ -104,16 +158,28 @@ _WAVE_FUNCTION_FACTORIES: dict[WaveFunctionName, Callable[[], "WaveFunction"]] =
 }
 
 
-def build_wave_function(name: WaveFunctionName) -> WaveFunction:
+def build_wave_function(
+    name: WaveFunctionName, asymmetry_strength: float = 0.0
+) -> WaveFunction:
     """A `WaveFunctionName` alapján egy konkrét `WaveFunction`-példányt épít.
 
     Args:
         name: a választott hullámalak neve.
+        asymmetry_strength: opcionális fázistorzítás mértéke (ROADMAP
+            Phase 12.2) — ha nem nulla, a visszaadott függvényt egy
+            `AsymmetricPhase` csomagolja be. Alapértelmezett: `0.0` —
+            ekkor a visszaadott függvény pontosan a korábbi (Phase
+            10.2-kompatibilis) viselkedést adja, nincs becsomagolás.
 
     Returns:
-        A megfelelő `WaveFunction`-implementáció új példánya.
+        A megfelelő `WaveFunction`-implementáció új példánya, `0.0`-tól
+        eltérő `asymmetry_strength` esetén `AsymmetricPhase`-be
+        csomagolva.
     """
-    return _WAVE_FUNCTION_FACTORIES[name]()
+    base = _WAVE_FUNCTION_FACTORIES[name]()
+    if asymmetry_strength == 0.0:
+        return base
+    return AsymmetricPhase(inner=base, asymmetry_strength=asymmetry_strength)
 
 
 class PropagationModel(Protocol):

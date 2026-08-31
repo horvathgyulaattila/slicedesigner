@@ -3,7 +3,7 @@
 Státusz: Elfogadva
 Tulajdonos: Horváth Gyula Attila
 Létrehozva: 2026-08-09
-Utolsó módosítás: 2026-08-09
+Utolsó módosítás: 2026-08-29
 Kapcsolódó dokumentumok: [ROADMAP.md](ROADMAP.md), [USER_GUIDE.md](USER_GUIDE.md), [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## Cél
@@ -14,7 +14,7 @@ Ez a dokumentum rögzíti a Slice Designer jelenlegi kiadási állapotát: a ver
 
 **Verzió:** `0.1.0` (`pyproject.toml`)
 
-**Állapot:** A ROADMAP mind a nyolc fázisa (Phase 0–8) lezárult. A domain-logika (mind a nyolc engine), a Project-réteg, a teljes GUI és az első opcionális MeshSource plugin (Relief Generator) elkészült, automatizált teszttel lefedve és élő teszttel megerősítve.
+**Állapot:** A ROADMAP Phase 0–11 lezárult (Phase 12 folyamatban). A domain-logika (mind a nyolc core engine), a Project-réteg, a teljes GUI és az opcionális Relief Generator MeshSource plugin elkészült, automatizált teszttel lefedve és élő teszttel megerősítve. A Relief Generator plugin a Phase 9–11 során jelentősen bővült: amplitúdó-moduláció, koordináta-torzítás és több hullámforrás (Phase 9); további hullámalakok és egy megosztott, procedurális zajmező-primitív (Phase 10); négy új, önálló generátor-típus — Voronoi, Holdkráter, Dűne, Faerezet — a Wave Generator mellett (Phase 11).
 
 ## 2. Rendszerkövetelmények
 
@@ -75,8 +75,9 @@ A korábban azonosított, valódi felhasználói modelleken ("Wobbly Toad", "fac
 
 *Példaprojektek:* négy, önállóan reprodukálható példaprojekt (`examples/basic_example/`, `complex_example/`, `nesting_example/`, `reference_project/`), mindegyik saját `generate_example.py`-jal (ROADMAP Phase 6, 6.5–6.9 tétel).
 
-*Opcionális pluginok (ROADMAP Phase 8):*
+*Opcionális pluginok (ROADMAP Phase 8–11):*
 
-* Első opcionális MeshSource plugin: **Relief Generator** (parametrikus, hullám-alapú modellgenerátor, `plugins/relief_generator/`) — a SliceDesigner core plugin nélkül is teljes értékű marad (ADR-0014, ADR-0015, ADR-0016).
-* Plugin discovery Python entry points alapján, generikus GUI paraméter-sémával (ADR-0017) — valódi Qt-integráció a "Mesh Import" fülön (Forrás-választó, generikus paraméter-form, "Generálás" gomb, háttérszálas generálás).
-* A generált Mesh közvetlenül, fájl-köztes lépés nélkül kerül a slicing pipeline-ba.
+* Első opcionális MeshSource plugin: **Relief Generator** (`plugins/relief_generator/`) — a SliceDesigner core plugin nélkül is teljes értékű marad (ADR-0014, ADR-0015, ADR-0016). Plugin discovery Python entry points alapján, generikus GUI paraméter-sémával (ADR-0017) — valódi Qt-integráció a "Mesh Import" fülön (Forrás-választó, generikus paraméter-form, "Generálás" gomb, háttérszálas generálás). A generált Mesh közvetlenül, fájl-köztes lépés nélkül kerül a slicing pipeline-ba (Phase 8).
+* A Wave Generator amplitúdó-modulációval (Envelope: Radial/Noise), koordináta-torzítással (Distortion: Swirl/Noise) és több, egyénileg paraméterezhető, egyidejű hullámforrással bővült (Phase 9).
+* Négy `WaveFunction` (Sinusoidal/Triangle/Sawtooth/Square), explicit hullámforrásonkénti szabálytalanság/komplexitás, és egy megosztott, procedurális zajmező-primitív (`GradientNoiseField`, `VoronoiNoiseField`) — utóbbi amplitúdó-modulációként és koordináta-torzításként is felhasználva (Phase 10).
+* Négy új, önálló procedurális Height Field recept a Wave Generator mellett, egy közös `generator_type` GUI-választón keresztül, feltételes mezőláthatósággal (`ParameterSpec.visible_when`, ADR-0017 kiegészítés): **Voronoi-felszín** (nyers cellás/Worley-zaj), **Holdkráter-felszín** (Voronoi-távolság, hatványfüggvénnyel torzítva, rétegzett méret-/mélység-változatossággal), **Dűne-felszín** (irányított, anizotróp domb-alap, elülső/hátsó irányfüggő hullámfodorral) és **Faerezet-felszín** (deszkánként hash-elt flóderosságú, szál menti évgyűrű-mintázat, a fő mezővel interpolált csomókkal) (Phase 11).

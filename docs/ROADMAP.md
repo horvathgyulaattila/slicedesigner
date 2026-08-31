@@ -465,6 +465,59 @@ Kilépési feltétel: mind az öt tétel (11.0–11.4) elkészült, a szüksége
 >
 > A ROADMAP-ban emiatt egyelőre nem nyílik meg új fázis.
 
+> **Megjegyzés (2026-08-29, folytatás 59):** A projektgazdával
+> lezajlott egyeztetés nyomán megnyílt a Phase 12 (Dokumentáció-
+> frissítés és Backlog-lezárás). Az indíttatás kettős: (1) a
+> projektgazda felvetése, hogy a Phase 9–11 óta a felhasználó-szintű
+> dokumentáció (README, USER_GUIDE, RELEASE_NOTES) elavulttá vált; (2)
+> a `docs/BACKLOG.md` két, korábban "nem aktuális" jelzésű tétele. A
+> Szoftverarchitekt előzetes felmérése szerint a `WORKFLOW.md`,
+> `PROJECT_STRUCTURE.md`, `ARCHITECTURE.md`, `MESH_SOURCE.md` és a
+> `PROJECT_VISION.md` NEM igényel módosítást — ezek generikusan
+> hivatkoznak a MeshSource-pluginokra/generátorokra, nem sorolják fel
+> egyenként őket, ezért új generátor hozzáadásától nem évülnek el. A
+> `BACKLOG.md` két tételének becsült mérete jelentősen eltér: a 2.
+> tétel (Wave Generator aszimmetrikus profil) kicsi-közepes — a
+> meglévő `Directional` propagáció és `Sawtooth` `WaveFunction`
+> kombinációja feltehetően már eleve közel áll a kívánt archoz; az 1.
+> tétel (nem téglalap/áttört relief-testek) nagy — új domain-fogalmat
+> (footprint/maszk) igényel, a `ReliefGeometry`/`MeshGenerator`
+> szintjén, valószínűleg saját ADR-rel. A projektgazda jóváhagyta a
+> négy alfázisos sorrendet: 12.1 dokumentáció-frissítés (gyors,
+> előre felmért), 12.2 Wave aszimmetrikus profil (kicsi, gyors
+> győzelem), 12.3 nem téglalap/áttört relief-testek (a nagy, végére
+> hagyott tétel), 12.4 záró dokumentáció-igazítás (a 12.2/12.3
+> eredményének Changelog-bejegyzése). A Phase 12 ezért 🟡 In Progress
+> állapotban megnyílt, első aktív tételként a 12.1
+> (dokumentáció-frissítés) tervezésével.
+
+---
+
+### Phase 12 – Dokumentáció-frissítés és Backlog-lezárás
+
+Állapot: ✅ Approved
+
+Feladata:
+
+* ~~12.1 — Dokumentáció-frissítés: `README.md` ("Jelenlegi állapot"), `USER_GUIDE.md` (1. szakasz, "Opcionális plugin"), `RELEASE_NOTES.md` ("Állapot" + Changelog) a Phase 9–11 tükrözésére.~~ — kész: mindhárom fájl frissült — a `README.md` "Jelenlegi állapot" szakasza két új bekezdéssel bővült (Phase 9–11 tömör összefoglalója, illetve a folyamatban lévő Phase 12 rövid említése); a `USER_GUIDE.md` 1. és 4.1 szakasza a mára öt generátor-típusos (`"Wave"`/`"Voronoi"`/`"Crater"`/`"Dune"`/`"WoodGrain"`) valóságot tükrözi, az elavult "Relief Generator (Wave)" megnevezés helyett; a `RELEASE_NOTES.md` "Állapot" sora és a Changelog "Opcionális pluginok" blokkja bővült a Phase 9–11 összefoglalójával — a verziószám (`0.1.0`) szándékosan változatlan maradt (a projektgazda döntésére bízva). A `WORKFLOW.md`/`PROJECT_STRUCTURE.md`/`ARCHITECTURE.md`/`MESH_SOURCE.md`/`PROJECT_VISION.md` a Szoftverarchitekt felmérése szerint nem igényelt módosítást.
+* ~~12.2 — Wave Generator aszimmetrikus/anizotróp profil-kiegészítés — `BACKLOG.md` 2. tétel.~~ — kész: egy `AsymmetricPhase` nevű, MÁSIK `WaveFunction`-t becsomagoló (nem önálló alapalak) fázistorzítás — tetszőleges alap-alakkal (Sinusoidal/Triangle/Sawtooth/Square) kombinálható, irányfüggően lankás/meredek ("dűneszerű") profilt ad, a klasszikus "fázistorzítás" (phase distortion) technikával (`θ' = θ + k·sin(θ)`). A Szoftverarchitekt chat-en belüli `matplotlib`-előnézettel validálta a technikát, mielőtt implementációra került volna sor — először egy tiszta fűrészfog-próbálkozás bizonyult alkalmatlannak (állandó dőlésű, "lapos" hillshade), a fázistorzítás viszont sima, szervesen görbült, mégis aszimmetrikus profilt adott. Az érvényességi tartományról élő egyeztetés döntött: a Szoftverarchitekt kezdetben `|k|<1`-re korlátozta volna (ahol a fázis-leképezés monoton marad), de a projektgazda rámutatott, hogy ez mesterséges korlát lenne — a `HeightField` `|k|≥1` esetén is tökéletesen érvényes, egyértékű marad, csak a hatás jellege vált át (folytonosan) finom aszimmetriából egy magasabb-harmonikus ripple-mintázatba; ezt a Szoftverarchitekt egy újabb előnézettel igazolta, és a paraméter végül — a projekt más hasonló "erősség" paramétereivel (Dune `asymmetry_strength`, Wood Grain `warp_strength`) konzisztensen — korlátozás nélküli maradt. Egyetlen új `build_wave_function()`-bővítés (opcionális második argumentum) és két új, `0.0` alapértékű mező (`WaveParameters.asymmetry_strength`, `WaveSourceSpec.asymmetry_strength`) elég volt — a `WaveFunction` Protocol és a négy meglévő implementáció (Sinusoidal/Triangle/Sawtooth/Square) érintetlen maradt. Frissített domain-contract dokumentum: `WAVE_DOMAIN_MODEL.md` 6.4 szakasz. A projektgazda élőben tesztelte és elfogadta a végeredményt.
+Kilépési feltétel: mind a két tétel (12.1–12.2) elkészült, a szükséges domain-contract dokumentumok Elfogadva státusszal a végleges helyükön vannak, az implementáció automatizált teszttel lefedve és a projektgazda élő tesztelésével megerősítve.
+
+> **Megjegyzés (2026-08-29, folytatás 60):** A projektgazda
+> újragondolta a 12.3 tételt (nem téglalap alaprajzú / áttört
+> relief-testek) a Szoftverarchitekt tervezési javaslata (Footprint-
+> mechanizmus, "tömbös" rács-konform határfal-algoritmus) után, és
+> úgy döntött, hogy ez jelenleg nem időszerű — a tétel visszakerül a
+> `BACKLOG.md`-be (ahol egyébként is változatlanul jelen maradt, mivel
+> a Phase 12 megnyitása csak a `ROADMAP.md`-t módosította). A 12.4
+> tétel (a 12.2/12.3 közös záró dokumentáció-igazítása) emiatt szintén
+> törlésre került — a 12.2 önmagában nem igényelt külön záró lépést.
+> A Phase 12 kilépési feltétele ennek megfelelően a megmaradt két
+> tételre (12.1–12.2) szűkült; mindkettő korábban elkészült, review-n
+> és élő teszten átment. A Kilépési feltétel ezzel teljesült — a
+> Phase 12 ✅ Approved-ra került. A ROADMAP-ban emiatt egyelőre nem
+> nyílik meg új fázis.
+
 ---
 
 ## Általános szabályok
