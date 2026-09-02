@@ -220,3 +220,16 @@ class RegionResolutionError(ReliefGeneratorError):
     docs/plugins/relief_generator/IMAGE_RELIEF_REGION_RESOLUTION.md 4.
     szakasz).
     """
+
+
+class EffectProcessingConflictError(ReliefGeneratorError):
+    """Nem-rokon, ellentétes irányú EffectSpec-ütközés, egyértelmű
+    feloldás nélkül.
+
+    Akkor dobódik, ha a `combine` hívása során egy adott ponton
+    legalább egy pozitív és legalább egy negatív `elevation`-ű,
+    egymással nem rokon EffectSpec aktív, és egyikük sem rendelkezik
+    egyértelmű, a többiek között maximális `TieBreakPriority`-val (l.
+    docs/plugins/relief_generator/IMAGE_RELIEF_EFFECT_PROCESSING.md
+    5–6. szakasz).
+    """
