@@ -186,3 +186,12 @@ class WoodGrainParametersValueError(ReliefGeneratorError):
     docs/plugins/relief_generator/WOOD_GRAIN_RELIEF_GENERATOR.md,
     ROADMAP Phase 11.4).
     """
+
+
+class RegionValueError(ReliefGeneratorError):
+    """Érvénytelen `Region` mezőérték.
+
+    Akkor dobódik, ha a `Region` létrehozásakor a `contribution` negatív
+    (l. `Region` osztály docstringje,
+    docs/plugins/relief_generator/IMAGE_RELIEF_REGION_MODEL.md 4. szakasz).
+    """

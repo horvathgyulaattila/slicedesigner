@@ -526,16 +526,18 @@ Kilépési feltétel: mind a két tétel (12.1–12.2) elkészült, a szüksége
 
 Feladata:
 
-* 13.1 — Region modell + Image Interpretation (Semantic World)
-* 13.2 — Region Resolution (`elevation`/`ParentRef`/`TieBreakPriority`)
-* 13.3 — Effect Processing (`combine`)
-* 13.4 — Relief Representation
-* 13.5 — `GeometricSurface` (Relief → Geometry) — új, `HeightField`-del párhuzamos kontraktus
-* 13.6 — Raw Mesh generálás (a `docs/AI_WORKFLOW.md` "Kiegészítés procedurális Height Field receptekhez" pontja szerint, matplotlib-előnézet kötelező jóváhagyás a Claude Code-nak szánt implementációs prompt előtt)
-* 13.7 — Orchestration adapter (`ImageReliefGeneratorMeshSource`) + GUI-integráció, új `"file"` `ParameterType` (ADR-0017 kiegészítés)
-* 13.8 — Integrációs teszt a teljes SliceDesigner pipeline-nal
+* ~~13.1 — Region modell (kontraktus: `Region`, `Mask`, `DepthBehavior`) — Semantic World adatmodell~~ — kész: `docs/plugins/relief_generator/IMAGE_RELIEF_REGION_MODEL.md` (Elfogadva) rögzíti a `Region { Mask, Contribution, DepthBehavior, Children }` kontraktust, a tervezési dokumentum 4–6. szakaszának és a 17.1 lezárt tervezési lépésnek STABLE tartalma alapján, explicit réteghatárral a 13.2/13.3/13.6 felé. Kód-szinten: `plugins/relief_generator/domain/region.py` (`Mask` Protocol, `DepthBehavior` enum, `Region` frozen dataclass, fail-fast `contribution ≥ 0` validáció), `plugins/relief_generator/exceptions.py` bővítése (`RegionValueError`), `tests/plugins/relief_generator/domain/test_region.py` (6 teszt-függvény, 8 gyűjtött teszt-item). Teljes tesztkészlet (824 teszt) regresszió nélkül zöld.
+* 13.2 — Image Interpretation — automatikus régió-detektálás színkódolt képből, ideiglenes fájl-alapú hozzárendeléssel (Contribution/DepthBehavior/hierarchia) a köztes teszteléshez
+* 13.3 — Region Resolution (`elevation`/`ParentRef`/`TieBreakPriority`)
+* 13.4 — Effect Processing (`combine`)
+* 13.5 — Relief Representation
+* 13.6 — `GeometricSurface` (Relief → Geometry) — új, `HeightField`-del párhuzamos kontraktus
+* 13.7 — Raw Mesh generálás (a `docs/AI_WORKFLOW.md` "Kiegészítés procedurális Height Field receptekhez" pontja szerint, matplotlib-előnézet kötelező jóváhagyás a Claude Code-nak szánt implementációs prompt előtt)
+* 13.8 — Orchestration adapter (`ImageReliefGeneratorMeshSource`) + alap GUI-integráció, új `"file"` `ParameterType` (ADR-0017 kiegészítés) — a 13.2 ideiglenes, fájl-alapú hozzárendelésével
+* 13.9 — Interaktív GUI a régió-hozzárendeléshez (kép megjelenítése, kattintható foltok kijelölése, hierarchia interaktív felépítése) — a 13.2 ideiglenes fájl-alapú mechanizmusát váltja ki
+* 13.10 — Integrációs teszt a teljes SliceDesigner pipeline-nal
 
-Kilépési feltétel: mind a nyolc tétel (13.1–13.8) elkészült, a szükséges domain-contract dokumentumok Elfogadva státusszal a `docs/plugins/relief_generator/` alá kerültek, az implementáció automatizált teszttel lefedve és a projektgazda élő tesztelésével megerősítve.
+Kilépési feltétel: mind a tíz tétel (13.1–13.10) elkészült, a szükséges domain-contract dokumentumok Elfogadva státusszal a `docs/plugins/relief_generator/` alá kerültek, az implementáció automatizált teszttel lefedve és a projektgazda élő tesztelésével megerősítve.
 
 > **Megjegyzés (2026-09-02, folytatás 61):** A projektgazdával
 > lezajlott tervezési egyeztetés nyomán megnyílt a Phase 13 (Image
@@ -560,6 +562,50 @@ Kilépési feltétel: mind a nyolc tétel (13.1–13.8) elkészült, a szükség
 > került hozzá. A Phase 13 ezért 🟡 In Progress állapotban megnyílt,
 > első aktív tételként a 13.1 (Region modell + Image Interpretation)
 > tervezésével.
+
+> **Megjegyzés (2026-09-02, folytatás 62):** A 13.1 tervezése közben
+> kiderült, hogy a jóváhagyott nyolctételes ütemterv hiányos volt: a
+> tervezési dokumentum az Image Interpretation konkrét stratégiáját
+> (hogyan lesz egy tényleges képből Region-fa) explicit módon nyitva
+> hagyta, és egyik tétel sem foglalkozott vele — enélkül a pipeline nem
+> tudna Region-fát előállítani egy valódi képből. A projektgazda
+> jelezte a hiányt; a Szoftverarchitekt saját mulasztásaként ismerte el
+> (a Phase 13 megnyitásakor kellett volna észrevennie). A stratégia
+> irányáról lezajlott egyeztetés eredménye: színkódolt régió-térkép
+> (flat-color kép, régiónként egyedi szín) automatikus
+> foltdetektálással — a hierarchiát (`Children`) és a viselkedést
+> (`Contribution`, `DepthBehavior`) a tervezési dokumentum 17.2 STABLE
+> tétele szerint ("térbeli átfedés/közelség önmagában nem indokolja a
+> parent-child kapcsolatot") semmilyen automatikus módszer nem tudná a
+> képi adatból levezetni, ezért ehhez mindig explicit hozzárendelés
+> szükséges. A projektgazda javaslatára ez a hozzárendelés végül nem
+> egy kézzel írt adatfájl, hanem egy interaktív GUI-lépés lesz
+> (kattintható foltok, húzással épített hierarchia) — ez azonban
+> jelentősen nagyobb, egyedi widget-fejlesztés, mint a meglévő
+> generikus `ParameterSpec`-alapú form-builder (ADR-0017), ezért két,
+> egymásra épülő alfázisra bomlik: 13.2 (automatikus foltdetektálás +
+> ideiglenes, fájl-alapú hozzárendelés a köztes teszteléshez) és egy
+> későbbi, önálló 13.9 (a végleges, interaktív GUI, amely a 13.2
+> ideiglenes mechanizmusát váltja ki) — a 13.8 (Orchestration + alap
+> GUI-integráció) és a záró integrációs teszt közé beékelve. Az
+> ütemterv ennek megfelelően tíz tételre bővült (13.1–13.10); az
+> ADR-0018 (`GeometricSurface`, 13.6) és ADR-0019 (Depth/Occlusion
+> szemantika, 13.3) alfázis-hivatkozása a párhuzamos, önálló prompt
+> szerint frissül — az új 13.9 mindkettő után ékelődik be, egyiket sem
+> tolja el. A Phase 13 aktív tétele változatlanul a 13.1.
+
+> **Megjegyzés (2026-09-02, folytatás 63):** A 13.1 tétel (Region
+> modell) elkészült, review-n átment — a Szoftverarchitekt a
+> jóváhagyott prompt "Cél" szakasza ellenében ellenőrizte mind a négy
+> érintett fájlt, szó szerinti egyezéssel. A `docs/plugins/
+> relief_generator/IMAGE_RELIEF_REGION_MODEL.md` Elfogadva státusszal
+> a végleges helyén van; a kód-szintű kontraktus
+> (`Region`/`Mask`/`DepthBehavior`) a `plugins/relief_generator/
+> domain/` alá került, `RegionValueError` kiegészítéssel; a teljes
+> tesztkészlet (824 teszt) regresszió nélkül zöld. A tétel tisztán
+> domain-szintű, GUI-hoz még nem kötött, ezért élő tesztelést nem
+> igényelt. A Phase 13 aktív tétele mostantól a 13.2 (Image
+> Interpretation — automatikus régió-detektálás).
 
 ---
 
