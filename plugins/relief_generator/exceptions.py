@@ -195,3 +195,28 @@ class RegionValueError(ReliefGeneratorError):
     (l. `Region` osztály docstringje,
     docs/plugins/relief_generator/IMAGE_RELIEF_REGION_MODEL.md 4. szakasz).
     """
+
+
+class ImageInterpretationError(ReliefGeneratorError):
+    """Érvénytelen hozzárendelési fájl, olvashatatlan kép, vagy nem
+    hozzárendelt szín a képen.
+
+    Akkor dobódik, ha a `interpret_image` hívása során a hozzárendelési
+    JSON érvénytelen (üres `regions`, duplikált szín, negatív
+    `color_tolerance`, hiányzó vagy köröket tartalmazó `parent`-
+    hivatkozás), a kép/fájl nem olvasható be, vagy a képen olyan
+    pixel található, amely sem egy deklarált régiószínhez, sem a
+    háttérhez nem rendelhető a toleranciával (l.
+    docs/plugins/relief_generator/IMAGE_RELIEF_INTERPRETATION.md 4.
+    szakasz).
+    """
+
+
+class RegionResolutionError(ReliefGeneratorError):
+    """A Region Resolver kontraktussértést észlelt.
+
+    Akkor dobódik, ha a `resolve_regions` hívása során egy top-level
+    Region `DepthBehavior`-ja `Inherit` (l.
+    docs/plugins/relief_generator/IMAGE_RELIEF_REGION_RESOLUTION.md 4.
+    szakasz).
+    """

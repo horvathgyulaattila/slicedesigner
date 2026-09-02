@@ -527,8 +527,8 @@ Kilépési feltétel: mind a két tétel (12.1–12.2) elkészült, a szüksége
 Feladata:
 
 * ~~13.1 — Region modell (kontraktus: `Region`, `Mask`, `DepthBehavior`) — Semantic World adatmodell~~ — kész: `docs/plugins/relief_generator/IMAGE_RELIEF_REGION_MODEL.md` (Elfogadva) rögzíti a `Region { Mask, Contribution, DepthBehavior, Children }` kontraktust, a tervezési dokumentum 4–6. szakaszának és a 17.1 lezárt tervezési lépésnek STABLE tartalma alapján, explicit réteghatárral a 13.2/13.3/13.6 felé. Kód-szinten: `plugins/relief_generator/domain/region.py` (`Mask` Protocol, `DepthBehavior` enum, `Region` frozen dataclass, fail-fast `contribution ≥ 0` validáció), `plugins/relief_generator/exceptions.py` bővítése (`RegionValueError`), `tests/plugins/relief_generator/domain/test_region.py` (6 teszt-függvény, 8 gyűjtött teszt-item). Teljes tesztkészlet (824 teszt) regresszió nélkül zöld.
-* 13.2 — Image Interpretation — automatikus régió-detektálás színkódolt képből, ideiglenes fájl-alapú hozzárendeléssel (Contribution/DepthBehavior/hierarchia) a köztes teszteléshez
-* 13.3 — Region Resolution (`elevation`/`ParentRef`/`TieBreakPriority`)
+* ~~13.2 — Image Interpretation — automatikus régió-detektálás színkódolt képből, ideiglenes fájl-alapú hozzárendeléssel (Contribution/DepthBehavior/hierarchia) a köztes teszteléshez~~ — kész: `docs/plugins/relief_generator/IMAGE_RELIEF_INTERPRETATION.md` (Elfogadva) rögzíti az Image Interpretation absztrakt kontraktusát (17.2 STABLE formalizálva) és a konkrét, színkódolt-régiótérkép stratégiát (hozzárendelési JSON, `color_tolerance` alapú színkvantálás, kötegelt hibajelentés nem hozzárendelt színekre). Kód-szinten: `plugins/relief_generator/domain/image_interpretation.py` (`PixelSetMask`, `interpret_image`, determinisztikus színkvantálás és hierarchia-építés), `plugins/relief_generator/exceptions.py` bővítése (`ImageInterpretationError`), új plugin-szintű függőség (`Pillow`, `plugins/relief_generator/pyproject.toml`), `tests/plugins/relief_generator/domain/test_image_interpretation.py` (11 teszt). Teljes tesztkészlet (835 teszt) regresszió nélkül zöld.
+* ~~13.3 — Region Resolution (`elevation`/`ParentRef`/`TieBreakPriority`)~~ — kész: `docs/plugins/relief_generator/IMAGE_RELIEF_REGION_RESOLUTION.md` (Elfogadva) rögzíti a Region Resolver kontraktusát (`ParentContext`, `DepthBehavior=Inherit` öröklés, `elevation` szülőlánc menti additív felhalmozása); az `ADR-0019` (Depth/Occlusion szemantika) `Státusz: Elfogadva`-ra frissült — a lineage-menti occlusion nem külön mechanizmus, hanem az additív `elevation` emergens következménye. Kód-szinten: `plugins/relief_generator/domain/region_resolution.py` (`EffectSpec`, `resolve_regions`, rekurzív preorder bejárás), `plugins/relief_generator/exceptions.py` bővítése (`RegionResolutionError`), `tests/plugins/relief_generator/domain/test_region_resolution.py` (10 teszt, köztük a tervezési dokumentum House/Window példájának pontos numerikus visszaadása). A `TieBreakPriority` mező a Resolver kimenetén tudatosan mindig `None` — a tényleges beállítási mechanizmus jövőbeli, nyitott kérdés (l. ADR-0019 "Következmények"). Teljes tesztkészlet (845 teszt) regresszió nélkül zöld.
 * 13.4 — Effect Processing (`combine`)
 * 13.5 — Relief Representation
 * 13.6 — `GeometricSurface` (Relief → Geometry) — új, `HeightField`-del párhuzamos kontraktus
@@ -606,6 +606,41 @@ Kilépési feltétel: mind a tíz tétel (13.1–13.10) elkészült, a szükség
 > domain-szintű, GUI-hoz még nem kötött, ezért élő tesztelést nem
 > igényelt. A Phase 13 aktív tétele mostantól a 13.2 (Image
 > Interpretation — automatikus régió-detektálás).
+
+> **Megjegyzés (2026-09-02, folytatás 64):** A 13.2 tétel (Image
+> Interpretation) elkészült, review-n átment — a Szoftverarchitekt a
+> jóváhagyott prompt "Cél" szakasza ellenében ellenőrizte mind az öt
+> érintett fájlt, szó szerinti egyezéssel. A `docs/plugins/
+> relief_generator/IMAGE_RELIEF_INTERPRETATION.md` Elfogadva
+> státusszal a végleges helyén van; a kód-szintű mechanizmus
+> (színkódolt régió-térkép + JSON hozzárendelés, `color_tolerance`
+> alapú kvantálás, kötegelt hibajelentés) a `plugins/relief_generator/
+> domain/` alá került, `ImageInterpretationError` kiegészítéssel és
+> egy új plugin-szintű függőséggel (Pillow); a teljes tesztkészlet
+> (835 teszt) regresszió nélkül zöld. A tétel tisztán domain-szintű,
+> fájl-alapú mechanizmus (nincs GUI, ezt a 13.9 pótolja majd), ezért
+> élő tesztelést nem igényelt. A Phase 13 aktív tétele mostantól a
+> 13.3 (Region Resolution, ADR-0019).
+
+> **Megjegyzés (2026-09-02, folytatás 65):** A 13.3 tétel (Region
+> Resolution, ADR-0019) elkészült, review-n átment. A Szoftverarchitekt
+> a jóváhagyott prompt "Cél" szakasza ellenében ellenőrizte mind az öt
+> érintett fájlt; négy szó szerint egyezett, az ötödiknél (ADR-0019)
+> egy hibát talált — a Szoftverarchitekt saját, korábbi promptjának
+> belső ellentmondása miatt (a "Cél" teljes cserét írt elő, a
+> "Korlátozások" tévesen a Kontextus szakasz megtartását sugallta)
+> Claude Code a stub-állapotból két, immár elavult mondatot
+> megtartott a Kontextus szakasz elején. Ezt egy külön, célzott
+> korrekciós prompt javította — az ADR-0019 Kontextus szakasza most
+> szó szerint egyezik a jóváhagyott tartalommal. A `docs/plugins/
+> relief_generator/IMAGE_RELIEF_REGION_RESOLUTION.md` Elfogadva
+> státusszal a végleges helyén van; a kód-szintű Resolver
+> (`EffectSpec`, `resolve_regions`) a `plugins/relief_generator/
+> domain/` alá került, `RegionResolutionError` kiegészítéssel; a
+> teljes tesztkészlet (845 teszt) regresszió nélkül zöld. A tétel
+> tisztán domain-szintű, GUI-hoz még nem kötött, ezért élő tesztelést
+> nem igényelt. A Phase 13 aktív tétele mostantól a 13.4 (Effect
+> Processing, `combine`).
 
 ---
 
