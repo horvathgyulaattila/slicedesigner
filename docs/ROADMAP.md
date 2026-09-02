@@ -520,6 +520,49 @@ Kilépési feltétel: mind a két tétel (12.1–12.2) elkészült, a szüksége
 
 ---
 
+### Phase 13 – Image Relief Generator
+
+Állapot: 🟡 In Progress
+
+Feladata:
+
+* 13.1 — Region modell + Image Interpretation (Semantic World)
+* 13.2 — Region Resolution (`elevation`/`ParentRef`/`TieBreakPriority`)
+* 13.3 — Effect Processing (`combine`)
+* 13.4 — Relief Representation
+* 13.5 — `GeometricSurface` (Relief → Geometry) — új, `HeightField`-del párhuzamos kontraktus
+* 13.6 — Raw Mesh generálás (a `docs/AI_WORKFLOW.md` "Kiegészítés procedurális Height Field receptekhez" pontja szerint, matplotlib-előnézet kötelező jóváhagyás a Claude Code-nak szánt implementációs prompt előtt)
+* 13.7 — Orchestration adapter (`ImageReliefGeneratorMeshSource`) + GUI-integráció, új `"file"` `ParameterType` (ADR-0017 kiegészítés)
+* 13.8 — Integrációs teszt a teljes SliceDesigner pipeline-nal
+
+Kilépési feltétel: mind a nyolc tétel (13.1–13.8) elkészült, a szükséges domain-contract dokumentumok Elfogadva státusszal a `docs/plugins/relief_generator/` alá kerültek, az implementáció automatizált teszttel lefedve és a projektgazda élő tesztelésével megerősítve.
+
+> **Megjegyzés (2026-09-02, folytatás 61):** A projektgazdával
+> lezajlott tervezési egyeztetés nyomán megnyílt a Phase 13 (Image
+> Relief Generator). A tervezési alap a korábban kizárólag chat-alapú
+> Project Knowledge-ként létező, 0–9.4 tervezési lépéseken átment
+> dokumentum, amely mostantól `docs/drafts/image_relief_generator/
+> IMAGE_RELIEF_GENERATOR_PLANNING.md` néven, `Státusz: Tervezet`
+> fejléccel hivatalos repó-fájl. Az indíttatás előzménye a Phase 8
+> lezárásakor (l. "folytatás 24") már jelzett jövőbeli
+> generátor-bővítés, valamint a `RELIEF_GENERATOR_DOMAIN.md` 30.
+> szakaszának 15. pontja, amely elvárásként rögzítette a későbbi
+> kép-, heightmap- és vektoralapú generátorok bevezethetőségét. A
+> Szoftverarchitekt két erős ADR-jelöltet azonosított — a
+> `GeometricSurface` mint a meglévő `HeightField`/`ReliefGeometry`
+> melletti új, párhuzamos kontraktus, illetve a Depth/Occlusion
+> szemantika (`elevation`/`ParentRef`/`TieBreakPriority`) —, ezek
+> pontos tartalma a 13.2/13.5 alfázisok saját tervezési körének
+> feladata; az ADR-0018 és ADR-0019 sorszámok fenntartva, stub
+> állapotban. A `docs/BACKLOG.md` 1. tétele (footprint/mask)
+> fogalmilag rokon a tervezési dokumentum `Region.Mask` fogalmával, de
+> a Phase 13 nem oldja meg — kizárólag egy kereszthivatkozás-jegyzet
+> került hozzá. A Phase 13 ezért 🟡 In Progress állapotban megnyílt,
+> első aktív tételként a 13.1 (Region modell + Image Interpretation)
+> tervezésével.
+
+---
+
 ## Általános szabályok
 
 * Egyszerre csak egy fázis lehet aktív.
