@@ -50,3 +50,58 @@ Ezzel a 17.7 STABLE/REJECTED döntése (a Raw Mesh nem ismerheti a kép natív p
 - Új domain-contract dokumentum: `docs/plugins/relief_generator/IMAGE_RELIEF_RAW_MESH.md` (Phase 13.7).
 - Új kód: `plugins/relief_generator/mesh/geometric_surface_mesh_generator.py` (`GeometricSurfaceMeshGenerator`), `GeometricSurfaceMeshGenerationError` kivétel.
 - A meglévő `MeshGenerator`, `HeightField`, `ReliefGeometry` és mind az öt meglévő generátor-típus (Wave/Voronoi/Crater/Dune/WoodGrain) érintetlen — tisztán additív bővítés.
+
+## Kiegészítés (2026-09-03): a `raw_relief` closure pixel-mapping képlete
+
+A ROADMAP Phase 13.8 (Orchestration) lezárta a jelen ADR által nyitva hagyott
+kérdést — a normalizált `(x_norm, y_norm) ∈ [0,1]²` → kép abszolút
+pixel-koordináta `(px, py)` leképezés pontos képletét:
+
+```text
+px = x_norm * (image_width - 1)
+py = y_norm * (image_height - 1)
+```
+
+**Szemantika.** A Raw Mesh normalizált mintapontjai a kép diszkrét
+pixel-rácsának **határpontjaihoz** vannak leképezve: `x_norm = 0` az első
+pixelre, `x_norm = 1` az utolsó pixelre esik, közte lineárisan — nem egy
+folytonos `[0, image_width)` cella-tartomány mintájára (ami `x_norm = 1`-nél
+`px = image_width`-et adna, egy érvénytelen indexet, clamp-et igényelve).
+
+**Indoklás:**
+
+1. **Konzisztencia a Raw Mesh saját rács-konvenciójával.** A Raw Mesh már a
+   fizikai vertex-koordinátákra is pontosan ezt az elvet alkalmazza
+   (`IMAGE_RELIEF_RAW_MESH.md` 3. szakasz: `X_i = x_norm · width`,
+   `x_norm = 0` a panel bal szélét, `x_norm = 1` a jobb szélét jelenti) — a
+   kép diszkrét pixel-rácsát ugyanezen elv szerint kezelve nincs kétféle
+   rács-szemantika a rendszerben.
+2. **Nincs szegély-kivétel.** A képlet minden `x_norm ∈ [0,1]`-re érvényes,
+   `[0, image_width−1]`-en belüli eredményt ad — nincs szükség clamp-re vagy
+   külön kezelt szegély-esetre a pontos `x_norm = 1.0` határon.
+3. **Degenerált eset (1 pixel széles/magas kép) helyesen viselkedik.**
+   `image_width − 1 = 0` esetén `px = 0` minden `x_norm`-ra — szorzás, nem
+   osztás, nullával osztás nélkül.
+4. **A `Mask` Protocol réteghatára megmarad.** Az Orchestration folytonos
+   `px`/`py` értéket ad át a `relief_representation`/`combine`-nak — nem
+   kerekít vagy csonkol maga. Az egész-pixel értelmezés
+   (`PixelSetMask.member`: `(int(x), int(y)) in pixels`) továbbra is
+   Image Interpretation belső, backend-specifikus döntés marad (l.
+   `region.py`, `Mask` Protocol docstring).
+
+Ez a jelen ADR "Döntés" 1. pontjának ("Az Image Relief Generator esetében a
+normalizált `(x,y)` → kép abszolút pixel-koordináta leképezés az
+Orchestration felelőssége") közvetlen konkretizálása, nem felülbírálása —
+ezért kiegészítés, nem új ADR (a `list`/`group`/`visible_when` ADR-0017
+kiegészítés-precedens mintáját követve).
+
+### Következmények
+
+- `plugins/relief_generator/source/image_relief_generator_mesh_source.py`
+  (`ImageReliefGeneratorMeshSource`, Phase 13.8) a fenti képletet
+  implementálja a `raw_relief` closure-ben.
+- `docs/plugins/relief_generator/IMAGE_RELIEF_ORCHESTRATION.md` (Phase 13.8,
+  új dokumentum) a végleges closure-kódot és ezt az indoklást tartalmazza.
+- A Raw Mesh réteg (13.7, Elfogadva) és a `GeometricSurface` (13.6,
+  Elfogadva) kontraktusa változatlan — a képlet kizárólag az Orchestration
+  belső implementációja.

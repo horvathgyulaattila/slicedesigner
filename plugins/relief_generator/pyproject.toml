@@ -11,6 +11,7 @@ dependencies = ["Pillow"]
 
 [project.entry-points."slicedesigner.mesh_sources"]
 relief_generator = "plugins.relief_generator.source.registration:build_mesh_source_descriptor"
+image_relief_generator = "plugins.relief_generator.source.image_relief_generator_registration:build_mesh_source_descriptor"
 
 [tool.hatch.build.targets.wheel]
 dev-mode-dirs = ["../.."]

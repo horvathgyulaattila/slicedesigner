@@ -157,6 +157,7 @@ class _GeneratorParameterForm(QWidget):
         self._str_widgets: dict[str, QLineEdit] = {}
         self._enum_widgets: dict[str, QComboBox] = {}
         self._list_widgets: dict[str, _ListParameterWidget] = {}
+        self._file_widgets: dict[str, QLabel] = {}
 
         self._spec_by_name: dict[str, ParameterSpec] = {
             spec.name: spec for spec in parameters
@@ -218,6 +219,12 @@ class _GeneratorParameterForm(QWidget):
             list_widget = _ListParameterWidget(spec.item_schema)
             self._list_widgets[spec.name] = list_widget
             return list_widget
+        if spec.type == "file":
+            file_picker, _browse_button, path_label = _build_file_picker(
+                f"{spec.label} kiválasztása"
+            )
+            self._file_widgets[spec.name] = path_label
+            return file_picker
         combo = QComboBox()
         for choice in spec.choices:
             combo.addItem(choice, choice)
@@ -240,6 +247,9 @@ class _GeneratorParameterForm(QWidget):
             result[name] = combo_widget.currentData()
         for name, list_widget in self._list_widgets.items():
             result[name] = list_widget.values()
+        for name, path_label in self._file_widgets.items():
+            text = path_label.text()
+            result[name] = "" if text == "(nincs kiválasztva)" else text
         return result
 
     def _effective_visible(self, name: str) -> bool:

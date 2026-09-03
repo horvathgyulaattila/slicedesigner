@@ -962,6 +962,13 @@ surface = GeometricSurface(width, height, base_thickness,
 
 > **Megjegyzés (2026-09-03, ADR-0020):** a fenti closure elavult — a bemutatott `raw_relief(x, y)` pass-through nem old fel egy időközben azonosított ellentmondást (a `Mask` abszolút kép-pixel-koordinátái vs. a Raw Mesh réteg deklarált pixel-agnosztikussága, 15.2/17.7). A helyes closure normalizált `(x,y) ∈ [0,1]²` bemenetet vár, és belsejében végzi el a kép-pixel-koordinátákra való leképezést — ld. `ADR-0020`. A tényleges, végleges closure-kód a Phase 13.8 (Orchestration) implementációjának tárgya; a fenti kód történeti, ez a jegyzet nem írja át, csak elavultnak jelöli.
 
+> **Megjegyzés (2026-09-03, 13.8 lezárása):** a fenti nyitott kérdés
+> lezárult — a végleges `raw_relief` closure és a normalizált→pixel
+> leképezés (`px = x_norm · (image_width − 1)`, `py = y_norm ·
+> (image_height − 1)`) a `docs/plugins/relief_generator/
+> IMAGE_RELIEF_ORCHESTRATION.md`-ben (Phase 13.8) és az `ADR-0020`
+> kiegészítésében található.
+
 ## 16.4 Paraméterátadás
 
 Az öt fizikai paraméter és a `sampling_distance` egy `ImageReliefGeneratorParameters`-szerű carrier dataclass-on keresztül érkezik, a meglévő `ParameterSpec`/`MeshSourceDescriptor` mechanizmuson (ADR-0017) keresztül.

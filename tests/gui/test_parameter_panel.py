@@ -688,3 +688,40 @@ def test_generate_mesh_button_toggles_with_source_selection(
 
     combo.setCurrentIndex(0)
     assert not panel.generate_mesh_button.isVisible()
+
+
+# --- `"file"` típus (ADR-0017 kiegészítés, 2026-09-03, ROADMAP Phase 13.8) ---
+
+
+def test_generator_parameter_form_builds_widget_for_file_type(qtbot: QtBot) -> None:
+    parameters = (
+        ParameterSpec(name="image_path", label="Kép fájl", type="file", default=""),
+    )
+    form = _GeneratorParameterForm(parameters)
+    qtbot.addWidget(form)
+
+    assert "image_path" in form._file_widgets
+
+
+def test_file_type_values_is_empty_string_initially(qtbot: QtBot) -> None:
+    parameters = (
+        ParameterSpec(name="image_path", label="Kép fájl", type="file", default=""),
+    )
+    form = _GeneratorParameterForm(parameters)
+    qtbot.addWidget(form)
+
+    assert form.values() == {"image_path": ""}
+
+
+def test_file_type_values_reflects_simulated_selection(qtbot: QtBot) -> None:
+    parameters = (
+        ParameterSpec(name="image_path", label="Kép fájl", type="file", default=""),
+    )
+    form = _GeneratorParameterForm(parameters)
+    qtbot.addWidget(form)
+
+    # A `QFileDialog`-ot közvetlenül nem hívjuk — a sikeres fájlválasztás
+    # eredményét a belső `path_label` szövegének beállításával szimuláljuk.
+    form._file_widgets["image_path"].setText("C:/tmp/image.png")
+
+    assert form.values() == {"image_path": "C:/tmp/image.png"}

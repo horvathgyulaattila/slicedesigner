@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 _ENTRY_POINT_GROUP = "slicedesigner.mesh_sources"
 
-ParameterType = Literal["float", "int", "str", "enum", "list"]
+ParameterType = Literal["float", "int", "str", "enum", "list", "file"]
 
 
 @dataclass(frozen=True)

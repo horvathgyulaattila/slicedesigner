@@ -167,3 +167,32 @@ végrehajtó prompt `_PARAMETERS` tuple-jében.
 A meglévő négy mező (`group`-ig) és minden meglévő `_PARAMETERS` tuple
 `visible_when` nélkül (`None` alapértelmezéssel) változatlan viselkedésű
 marad — teljes backward compatibility.
+
+## Kiegészítés (2026-09-03): `file` típus
+
+A ROADMAP Phase 13.8 a `ParameterType`-ot egy hatodik értékkel, `"file"`-lal
+bővítette — additív `Literal`-bővítés, nem érinti a `build()`-szemantikát
+vagy a meglévő öt típus viselkedését, ezért kiegészítés, nem új ADR (a
+`list`/`group`/`visible_when` kiegészítések mintáját követve).
+
+Az igényt az Image Relief Generator (Phase 13) vetette fel: a generátornak
+két kötelező fájl-bemenetre van szüksége (színkódolt régió-térkép kép,
+hozzárendelési JSON) — ezekre az eddigi öt típus egyike sem alkalmas.
+
+A core GUI generikus form-builderje
+(`src/slicedesigner/gui/parameter_panel.py::_GeneratorParameterForm`) a már
+meglévő, korábban kizárólag az STL mesh-import útvonalhoz bekötött
+`_build_file_picker` segédfüggvényt használja fel újra a `"file"` típusú
+mezőkhöz (fájlválasztó gomb + útvonal-felirat) — nincs szükség új
+widget-osztályra.
+
+**Üres fájlválasztás kezelése:** a `path_label` kezdőállapota
+(`"(nincs kiválasztva)"`) a `values()`-ben üres stringre képződik le — a
+form-builder ezt **nem** akadályozza meg (nincs GUI-szintű tiltás,
+"Generálás" gomb letiltása stb.), a validáció a plugin `build()`/`get_mesh()`
+szintjén, fail-fast elven történik (a projekt meglévő fail-fast
+filozófiájával összhangban).
+
+A meglévő öt típus (`float`/`int`/`str`/`enum`/`list`) és minden meglévő
+`_PARAMETERS` tuple (`relief_generator`) változatlan — a `file` tisztán
+additív bővítés.
