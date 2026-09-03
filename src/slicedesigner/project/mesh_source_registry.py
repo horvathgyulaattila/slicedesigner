@@ -35,9 +35,11 @@ class ParameterSpec:
             `values` dict-jének kulcsa).
         label: a paraméter felhasználó felé megjelenő felirata.
         type: a widget-típus kiválasztásához
-            ("float"/"int"/"str"/"enum"/"list").
-        default: a paraméter alapértéke. `"list"` típusnál nem használt — a
-            lista mindig üresen indul.
+            ("float"/"int"/"str"/"enum"/"list"/"file").
+        default: a paraméter alapértéke. `"list"` és `"file"` típusnál nem
+            használt — a lista mindig üresen indul, a fájl-mező
+            kezdőállapota mindig "(nincs kiválasztva)" (ADR-0017
+            kiegészítés, 2026-09-03, ROADMAP Phase 13.8).
         minimum: opcionális alsó korlát ("float"/"int" típusnál értelmezett).
         maximum: opcionális felső korlát ("float"/"int" típusnál értelmezett).
         unit: opcionális mértékegység-felirat (pl. "mm", "°").
