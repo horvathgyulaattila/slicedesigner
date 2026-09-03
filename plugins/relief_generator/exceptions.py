@@ -233,3 +233,28 @@ class EffectProcessingConflictError(ReliefGeneratorError):
     docs/plugins/relief_generator/IMAGE_RELIEF_EFFECT_PROCESSING.md
     5–6. szakasz).
     """
+
+
+class GeometricSurfaceValueError(ReliefGeneratorError):
+    """Érvénytelen `GeometricSurface` mezőérték.
+
+    Akkor dobódik, ha a `GeometricSurface` létrehozásakor a
+    `base_thickness - relief_height_recessed` különbség nem szigorúan
+    pozitív (l. `GeometricSurface` osztály docstringje,
+    docs/plugins/relief_generator/IMAGE_RELIEF_GEOMETRIC_SURFACE.md 6.
+    szakasz).
+    """
+
+
+class GeometricSurfaceMeshGenerationError(ReliefGeneratorError):
+    """Érvénytelen sampling-paraméter vagy túl nagy mintapontszám a
+    `GeometricSurfaceMeshGenerator` hívásakor.
+
+    Akkor dobódik, ha a `GeometricSurfaceMeshGenerator.generate` hívásakor
+    a `sampling_distance` nem szigorúan pozitív, az ebből számított `Nx`
+    vagy `Ny` mintaszám 2-nél kisebb, vagy a `Nx * Ny` szorzat meghaladja
+    a modul saját `MAX_SAMPLE_COUNT` korlátját. Önálló a meglévő
+    `MeshGenerationError`-tól — l.
+    docs/adr/0020-image-relief-raw-mesh-sampling-and-generator-independence.md
+    ("Döntés" 2. pont).
+    """

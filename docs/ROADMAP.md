@@ -530,9 +530,9 @@ Feladata:
 * ~~13.2 — Image Interpretation — automatikus régió-detektálás színkódolt képből, ideiglenes fájl-alapú hozzárendeléssel (Contribution/DepthBehavior/hierarchia) a köztes teszteléshez~~ — kész: `docs/plugins/relief_generator/IMAGE_RELIEF_INTERPRETATION.md` (Elfogadva) rögzíti az Image Interpretation absztrakt kontraktusát (17.2 STABLE formalizálva) és a konkrét, színkódolt-régiótérkép stratégiát (hozzárendelési JSON, `color_tolerance` alapú színkvantálás, kötegelt hibajelentés nem hozzárendelt színekre). Kód-szinten: `plugins/relief_generator/domain/image_interpretation.py` (`PixelSetMask`, `interpret_image`, determinisztikus színkvantálás és hierarchia-építés), `plugins/relief_generator/exceptions.py` bővítése (`ImageInterpretationError`), új plugin-szintű függőség (`Pillow`, `plugins/relief_generator/pyproject.toml`), `tests/plugins/relief_generator/domain/test_image_interpretation.py` (11 teszt). Teljes tesztkészlet (835 teszt) regresszió nélkül zöld.
 * ~~13.3 — Region Resolution (`elevation`/`ParentRef`/`TieBreakPriority`)~~ — kész: `docs/plugins/relief_generator/IMAGE_RELIEF_REGION_RESOLUTION.md` (Elfogadva) rögzíti a Region Resolver kontraktusát (`ParentContext`, `DepthBehavior=Inherit` öröklés, `elevation` szülőlánc menti additív felhalmozása); az `ADR-0019` (Depth/Occlusion szemantika) `Státusz: Elfogadva`-ra frissült — a lineage-menti occlusion nem külön mechanizmus, hanem az additív `elevation` emergens következménye. Kód-szinten: `plugins/relief_generator/domain/region_resolution.py` (`EffectSpec`, `resolve_regions`, rekurzív preorder bejárás), `plugins/relief_generator/exceptions.py` bővítése (`RegionResolutionError`), `tests/plugins/relief_generator/domain/test_region_resolution.py` (10 teszt, köztük a tervezési dokumentum House/Window példájának pontos numerikus visszaadása). A `TieBreakPriority` mező a Resolver kimenetén tudatosan mindig `None` — a tényleges beállítási mechanizmus jövőbeli, nyitott kérdés (l. ADR-0019 "Következmények"). Teljes tesztkészlet (845 teszt) regresszió nélkül zöld.
 * ~~13.4 — Effect Processing (`combine`)~~ — kész: `docs/plugins/relief_generator/IMAGE_RELIEF_EFFECT_PROCESSING.md` (Elfogadva) rögzíti a `combine` algoritmust — az `S'` szűrő (lineage-menti occlusion, automatikusan az additív `elevation`-ból adódik), az `envelope` (azonos irányú, nem-rokon átfedés, legnagyobb `|elevation|`) és a `tiebreak` (a maradék, nem-rokon ellentétes irányú ütközés) háromlépcsős logikáját. Két, a tervezési dokumentum által explicit implementációs kérdésnek jelölt döntés is itt született: a konfliktus kivétellel (`EffectProcessingConflictError`) jelződik; két azonos, maximális `TieBreakPriority`-jú, ellentétes irányú tag is konfliktusnak számít (Szoftverarchitekt-kiegészítés, a tervezési dokumentum ezt nem definiálja). Kód-szinten: `plugins/relief_generator/domain/effect_processing.py` (`combine`, `_filter_without_active_descendant`, `_is_ancestor`, `_envelope`, `_tiebreak`), `plugins/relief_generator/exceptions.py` bővítése (`EffectProcessingConflictError`), `tests/plugins/relief_generator/domain/test_effect_processing.py` (10 teszt). Ezzel a Semantic World réteg (13.1–13.4) implementációs szempontból lezárult. Teljes tesztkészlet (855 teszt) regresszió nélkül zöld.
-* 13.5 — Relief Representation
-* 13.6 — `GeometricSurface` (Relief → Geometry) — új, `HeightField`-del párhuzamos kontraktus
-* 13.7 — Raw Mesh generálás (a `docs/AI_WORKFLOW.md` "Kiegészítés procedurális Height Field receptekhez" pontja szerint, matplotlib-előnézet kötelező jóváhagyás a Claude Code-nak szánt implementációs prompt előtt)
+* ~~13.5 — Relief Representation~~ — kész: `docs/plugins/relief_generator/IMAGE_RELIEF_RELIEF_REPRESENTATION.md` (Elfogadva) rögzíti a Relief Representation kontraktusát — a hidat az Effect Processing és a Geometry World között — egy "pont → ReliefValue" funkcionális kontraktusként, reprezentációfüggetlenül, analóg a Mask funkcionális kontraktusával. Kód-szinten: `plugins/relief_generator/domain/relief_representation.py` (`ReliefRepresentation` típusalias, `build_relief_representation`, ami a `combine`-t csomagolja be egy `(x, y) -> ReliefValue` függvénybe). `plugins/relief_generator/exceptions.py` érintetlen — nincs új kivétel, a `combine` esetleges `EffectProcessingConflictError`-ja természetesen átterjed a becsomagolt függvényen. `tests/plugins/relief_generator/domain/test_relief_representation.py` (6 teszt). Ezzel a Relief World réteg (13.4–13.5: Effect Processing, Relief Representation) implementációs szempontból lezárult. Teljes tesztkészlet (861 teszt) regresszió nélkül zöld.
+* ~~13.6 — `GeometricSurface` (Relief → Geometry) — új, `HeightField`-del párhuzamos kontraktus~~ — kész: `ADR-0018` (`GeometricSurface` kontraktus) `Státusz: Elfogadva`-ra frissült — a kontraktus két részre bomlik (`raw_relief` pass-through a Relief Representationből + tiszta, mintavételezés-mentes `physical_z(raw_value, v_min, v_max) -> Z` képlet), nullponthoz rögzített, kétirányú, egymástól független normalizálással. `docs/plugins/relief_generator/IMAGE_RELIEF_GEOMETRIC_SURFACE.md` (Elfogadva) rögzíti a kontraktust részletesen. A réteg tudatosan kizárólag egyetlen fail-fast kényszert érvényesít (`base_thickness − relief_height_recessed > 0`) — a projektgazda explicit döntése alapján nincs `width`/`height`/`relief_height_raised`/`relief_height_recessed` nem-negativitási ellenőrzés ezen felül (l. `ADR-0018` "Mérlegelt alternatívák"). Kód-szinten: `plugins/relief_generator/domain/geometric_surface.py` (`GeometricSurface` frozen dataclass, `physical_z` metódus), `plugins/relief_generator/exceptions.py` bővítése (`GeometricSurfaceValueError`), `tests/plugins/relief_generator/domain/test_geometric_surface.py` (8 teszt). Teljes tesztkészlet (869 teszt) regresszió nélkül zöld.
+* ~~13.7 — Raw Mesh generálás (a `docs/AI_WORKFLOW.md` "Kiegészítés procedurális Height Field receptekhez" pontja szerint, matplotlib-előnézet kötelező jóváhagyás a Claude Code-nak szánt implementációs prompt előtt)~~ — kész: a matplotlib-előnézet (szintetikus House/Window/Door példa, a Szoftverarchitekt saját eszközeivel futtatva) a projektgazda által jóváhagyva; a tervezés közben egy valódi ellentmondás merült fel (a `raw_relief` doménje korábban nem volt rögzítve, ütközve a `Mask` abszolút kép-pixel-koordinátái és a Raw Mesh réteg deklarált pixel-agnosztikussága között), amit a Szoftverarchitekt jelzett, nem önállóan oldott fel — a projektgazdai döntés `ADR-0020`-ban (Elfogadva) rögzítve: a `raw_relief` doménje normalizált `[0,1]×[0,1]`, a kép-pixel-koordinátákra való leképezés az Orchestration (13.8) felelőssége. `docs/plugins/relief_generator/IMAGE_RELIEF_RAW_MESH.md` (Elfogadva) rögzíti a Raw Mesh kontraktust; `IMAGE_RELIEF_GEOMETRIC_SURFACE.md` (13.6) egy ponton kiegészült (a `raw_relief` doménje), a tervezési draft 16.3 szakasza mellé egy jegyzet került, ami elavultnak jelöli a bemutatott closure-t. `ADR-0020` egyúttal azt is rögzíti, hogy a `GeometricSurfaceMeshGenerator` tudatosan **nem** osztja meg a triangulációs/vertex-indexelési logikát a meglévő `MeshGenerator`-ral (a jövőbeli "áttört" relief-testek, `BACKLOG.md` 1. tétele, és a bizonytalan formájú jövőbeli Vector Relief Generator miatt) — kizárólag a geometria-független `GeneratedMesh`/`MeshValidator` kerül újrafelhasználásra. Kód-szinten: `plugins/relief_generator/mesh/geometric_surface_mesh_generator.py` (`GeometricSurfaceMeshGenerator`, önálló trianguláció), `plugins/relief_generator/exceptions.py` bővítése (`GeometricSurfaceMeshGenerationError`), `tests/plugins/relief_generator/mesh/test_geometric_surface_mesh_generator.py` (10 teszt). Teljes tesztkészlet (879 teszt) regresszió nélkül zöld.
 * 13.8 — Orchestration adapter (`ImageReliefGeneratorMeshSource`) + alap GUI-integráció, új `"file"` `ParameterType` (ADR-0017 kiegészítés) — a 13.2 ideiglenes, fájl-alapú hozzárendelésével
 * 13.9 — Interaktív GUI a régió-hozzárendeléshez (kép megjelenítése, kattintható foltok kijelölése, hierarchia interaktív felépítése) — a 13.2 ideiglenes fájl-alapú mechanizmusát váltja ki
 * 13.10 — Integrációs teszt a teljes SliceDesigner pipeline-nal
@@ -657,6 +657,71 @@ Kilépési feltétel: mind a tíz tétel (13.1–13.10) elkészült, a szükség
 > ezért élő tesztelést nem igényelt. A Phase 13 aktív tétele
 > mostantól a 13.5 (Relief Representation) — ezzel megnyílik a
 > Geometry World réteg felé vezető út.
+
+> **Megjegyzés (2026-09-02, folytatás 67):** A 13.5 tétel (Relief
+> Representation) elkészült, review-n átment — a Szoftverarchitekt a
+> jóváhagyott prompt "Cél" szakasza ellenében ellenőrizte mind a
+> három érintett fájlt (`IMAGE_RELIEF_RELIEF_REPRESENTATION.md`,
+> `relief_representation.py`, `test_relief_representation.py`), szó
+> szerinti egyezéssel. A teljes tesztkészlet (861 teszt) regresszió
+> nélkül zöld.
+>
+> **Terminológiai önjavítás:** a "folytatás 66" jegyzet (fent,
+> változatlan formában) tévesen nevezte a Semantic World réteget
+> "13.1–13.4"-nek. A tervezési dokumentum
+> (`docs/drafts/image_relief_generator/IMAGE_RELIEF_GENERATOR_PLANNING.md`)
+> szerint helyesen: **Semantic World** = Image Interpretation → Region
+> Resolver → EffectSpec[] (Phase 13.1–13.3); **Relief World** = Effect
+> Processing → Relief Representation (Phase 13.4–13.5). A 13.4 (Effect
+> Processing) tehát nem a Semantic World lezárása volt, hanem a Relief
+> World *kezdete* — ami csak most, a 13.5-tel zárul le ténylegesen. A
+> "folytatás 66" szövege történeti bejegyzésként változatlan marad;
+> ezt a jegyzetet ez a bekezdés korrigálja, visszamenőleges szerkesztés
+> nélkül.
+>
+> Ezzel mind a Semantic World (13.1–13.3), mind a Relief World
+> (13.4–13.5) ténylegesen lezárult. A Phase 13 aktív tétele mostantól
+> a 13.6 (`GeometricSurface`, ADR-0018).
+
+> **Megjegyzés (2026-09-03, folytatás 68):** A 13.6 tétel
+> (`GeometricSurface`) elkészült, review-n átment — a Szoftverarchitekt
+> a jóváhagyott prompt "Cél" szakasza ellenében ellenőrizte mind az öt
+> érintett fájlt (`ADR-0018`, `IMAGE_RELIEF_GEOMETRIC_SURFACE.md`,
+> `geometric_surface.py`, `exceptions.py`, `test_geometric_surface.py`),
+> szó szerinti egyezéssel; az `exceptions.py`-ban az új
+> `GeometricSurfaceValueError` a fájl meglévő két-üres-sor
+> konvencióját követve, a korábbi 23 osztály változatlanul hagyásával
+> került be. A teljes tesztkészlet (869 teszt) regresszió nélkül zöld
+> (861 → 869, pontosan a várt 8 új teszttel). A tétel tisztán
+> domain-szintű, GUI-hoz még nem kötött, ezért élő tesztelést nem
+> igényelt.
+>
+> A Phase 13 aktív tétele mostantól a 13.7 (Raw Mesh generálás) —
+> ehhez a `docs/AI_WORKFLOW.md` "Kiegészítés procedurális Height
+> Field receptekhez" pontja szerint matplotlib-előnézet kötelező
+> jóváhagyás szükséges a Claude Code-nak szánt implementációs prompt
+> előtt.
+
+> **Megjegyzés (2026-09-03, folytatás 69):** A 13.7 tétel (Raw Mesh
+> generálás) elkészült, review-n átment — a Szoftverarchitekt a
+> jóváhagyott prompt "Cél" szakasza ellenében ellenőrizte mind a hét
+> érintett fájlt (`ADR-0020`, `IMAGE_RELIEF_RAW_MESH.md`, a két
+> célzott kiegészítés `IMAGE_RELIEF_GEOMETRIC_SURFACE.md`-ben és a
+> tervezési draftban, `geometric_surface_mesh_generator.py`,
+> `exceptions.py`, `test_geometric_surface_mesh_generator.py`). A
+> kód/teszt fájloknál három helyen tisztán kozmetikai sortördelési
+> eltérés (a `ruff format` 88 karakteres sorhossz-szabálya miatt) —
+> tartalmi eltérés nélkül, a Szoftverarchitekt ezt jogos, indokolt
+> korrekcióként fogadta el, nem hibaként. A teljes tesztkészlet (879
+> teszt) regresszió nélkül zöld (869 → 879, pontosan a várt 10 új
+> teszttel). Ez az alfázis a `docs/AI_WORKFLOW.md` szerinti
+> matplotlib-előnézeti jóváhagyáson is átment (szintetikus
+> House/Window/Door példa) — az előnézet és a hozzá tartozó
+> példa-fájlok (`example_house.png`, `example_house_assignment.json`)
+> a projektgazdának átadva, későbbi tesztekhez felhasználhatók.
+>
+> A Phase 13 aktív tétele mostantól a 13.8 (Orchestration adapter +
+> alap GUI-integráció, új `"file"` `ParameterType`).
 
 ---
 
