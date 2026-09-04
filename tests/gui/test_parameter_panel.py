@@ -725,3 +725,103 @@ def test_file_type_values_reflects_simulated_selection(qtbot: QtBot) -> None:
     form._file_widgets["image_path"].setText("C:/tmp/image.png")
 
     assert form.values() == {"image_path": "C:/tmp/image.png"}
+
+
+# --- `ParameterSpec.editor` — "Szerkesztés..." gomb (ADR-0022, 2026-09-04) ---
+
+
+def test_file_type_with_editor_gets_edit_button(qtbot: QtBot) -> None:
+    parameters = (
+        ParameterSpec(
+            name="assignment_path",
+            label="Hozzárendelési fájl (JSON)",
+            type="file",
+            default="",
+            editor=lambda values: "C:/tmp/edited.json",
+        ),
+    )
+    form = _GeneratorParameterForm(parameters)
+    qtbot.addWidget(form)
+
+    file_picker = form._file_widgets["assignment_path"].parentWidget()
+    edit_buttons = [
+        button
+        for button in file_picker.findChildren(QPushButton)
+        if button.text() == "Szerkesztés..."
+    ]
+    assert len(edit_buttons) == 1
+
+
+def test_file_type_without_editor_has_no_edit_button(qtbot: QtBot) -> None:
+    parameters = (
+        ParameterSpec(name="image_path", label="Kép fájl", type="file", default=""),
+    )
+    form = _GeneratorParameterForm(parameters)
+    qtbot.addWidget(form)
+
+    file_picker = form._file_widgets["image_path"].parentWidget()
+    edit_buttons = [
+        button
+        for button in file_picker.findChildren(QPushButton)
+        if button.text() == "Szerkesztés..."
+    ]
+    assert len(edit_buttons) == 0
+
+
+def test_edit_button_click_calls_editor_with_values_and_updates_label(
+    qtbot: QtBot,
+) -> None:
+    received_values: list[dict[str, Any]] = []
+
+    def _editor(values: dict[str, Any]) -> str | None:
+        received_values.append(values)
+        return "C:/tmp/edited.json"
+
+    parameters = (
+        ParameterSpec(
+            name="assignment_path",
+            label="Hozzárendelési fájl (JSON)",
+            type="file",
+            default="",
+            editor=_editor,
+        ),
+    )
+    form = _GeneratorParameterForm(parameters)
+    qtbot.addWidget(form)
+
+    file_picker = form._file_widgets["assignment_path"].parentWidget()
+    edit_button = next(
+        button
+        for button in file_picker.findChildren(QPushButton)
+        if button.text() == "Szerkesztés..."
+    )
+    edit_button.click()
+
+    assert received_values == [{"assignment_path": ""}]
+    assert form._file_widgets["assignment_path"].text() == "C:/tmp/edited.json"
+
+
+def test_edit_button_click_with_none_result_does_not_change_label(
+    qtbot: QtBot,
+) -> None:
+    parameters = (
+        ParameterSpec(
+            name="assignment_path",
+            label="Hozzárendelési fájl (JSON)",
+            type="file",
+            default="",
+            editor=lambda values: None,
+        ),
+    )
+    form = _GeneratorParameterForm(parameters)
+    qtbot.addWidget(form)
+
+    file_picker = form._file_widgets["assignment_path"].parentWidget()
+    edit_button = next(
+        button
+        for button in file_picker.findChildren(QPushButton)
+        if button.text() == "Szerkesztés..."
+    )
+    edit_button.click()
+
+    assert form._file_widgets["assignment_path"].text() == "(nincs kiválasztva)"

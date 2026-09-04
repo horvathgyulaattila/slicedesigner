@@ -6,20 +6,25 @@ Lásd: `plugins/relief_generator/source/image_relief_generator_registration.py`,
 """
 
 import json
+import os
 import sys
 from pathlib import Path
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 _REPO_ROOT = str(Path(__file__).resolve().parents[4])
 if _REPO_ROOT in sys.path:
     sys.path.remove(_REPO_ROOT)
 sys.path.insert(0, _REPO_ROOT)
 
+import pytest  # noqa: E402
 from PIL import Image  # noqa: E402
 
 from plugins.relief_generator.source.image_relief_generator_mesh_source import (  # noqa: E402
     ImageReliefGeneratorMeshSource,
 )
 from plugins.relief_generator.source.image_relief_generator_registration import (  # noqa: E402
+    _edit_region_assignment,
     build_mesh_source_descriptor,
 )
 
@@ -58,6 +63,54 @@ def _write_image(path: Path, pixels: list[list[tuple[int, int, int]]]) -> None:
 
 def _write_assignment(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_assignment_path_parameter_spec_has_editor() -> None:
+    """L. ADR-0022 — az `assignment_path` `ParameterSpec.editor` mezője
+    nem `None`."""
+    descriptor = build_mesh_source_descriptor()
+
+    spec_by_name = {spec.name: spec for spec in descriptor.parameters}
+    assert spec_by_name["assignment_path"].editor is not None
+
+
+def test_other_parameter_specs_have_no_editor() -> None:
+    descriptor = build_mesh_source_descriptor()
+
+    spec_by_name = {spec.name: spec for spec in descriptor.parameters}
+    for name in _EXPECTED_PARAMETER_NAMES:
+        if name == "assignment_path":
+            continue
+        assert spec_by_name[name].editor is None
+
+
+def test_edit_region_assignment_with_empty_image_path_warns_and_returns_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Üres `image_path` esetén a `RegionAssignmentDialog` meg sem
+    nyílik — csak egy figyelmeztetés jelenik meg, `None` a visszatérés."""
+    warnings: list[tuple[object, ...]] = []
+    monkeypatch.setattr(
+        "plugins.relief_generator.source.image_relief_generator_registration."
+        "QMessageBox.warning",
+        lambda *args, **kwargs: warnings.append(args),
+    )
+
+    def _fail_if_dialog_constructed(*args: object, **kwargs: object) -> None:
+        raise AssertionError(
+            "RegionAssignmentDialog nem nyílhat meg üres image_path esetén."
+        )
+
+    monkeypatch.setattr(
+        "plugins.relief_generator.source.image_relief_generator_registration."
+        "RegionAssignmentDialog",
+        _fail_if_dialog_constructed,
+    )
+
+    result = _edit_region_assignment({})
+
+    assert result is None
+    assert len(warnings) == 1
 
 
 def test_build_mesh_source_descriptor_has_expected_display_name() -> None:

@@ -41,7 +41,8 @@ precedense szerint:
 ImageReliefGeneratorParameters (carrier dataclass)
         ↓
 ImageReliefGeneratorMeshSource.get_mesh()
-├── interpret_image(image_path, assignment_path)      → Region-erdő
+├── interpret_assignment(image_path, assignment_path) → Region-erdő
+│     (13.9: 'strategy' mező szerint interpret_image/interpret_image_blob)
 ├── resolve_regions(region_tree)                        → EffectSpec[]
 ├── PIL.Image.open(image_path).size                     → (image_width, image_height)
 ├── raw_relief(x_norm, y_norm) closure (l. 3. szakasz)
@@ -55,16 +56,25 @@ ImageReliefGeneratorMeshSource.get_mesh()
 ```python
 def raw_relief(x_norm: float, y_norm: float) -> float:
     px = x_norm * (image_width - 1)
-    py = y_norm * (image_height - 1)
+    py = (1.0 - y_norm) * (image_height - 1)
     return combine(effect_specs, px, py)
 ```
 
 A Raw Mesh normalizált mintapontjai a kép diszkrét pixel-rácsának
 határpontjaihoz vannak leképezve — `x_norm=0 → px=0`, `x_norm=1 →
-px=image_width−1`, közte lineárisan. A leképezés folytonos marad, nem
-kerekít/csonkol pixelre; az egész-pixel értelmezés a `Mask`-backend
-(`PixelSetMask.member`) belső döntése. A pontos indoklást l. `ADR-0020`
-"Kiegészítés (2026-09-03)" szakasza.
+px=image_width−1`, közte lineárisan. **Az Y-tengely szándékosan
+tükrözött**: `y_norm=0` (a fizikai modell kis-Y pereme) a kép
+**utolsó** pixel-sorára (`py=image_height−1`, a kép alja), `y_norm=1`
+(a modell nagy-Y pereme) a kép **első** pixel-sorára (`py=0`, a kép
+teteje) képződik le — így a fizikai modell szabvány felülnézeti
+tájolásában a kép teteje a modell nagy-Y ("távoli") pereméhez kerül,
+megőrizve az emberi szemmel felismerhető, megszokott tájolást. A
+leképezés folytonos marad, nem kerekít/csonkol pixelre; az egész-pixel
+értelmezés a `Mask`-backend (`PixelSetMask.member`) belső döntése. A
+pontos indoklást l. `ADR-0020` "Kiegészítés (2026-09-04)" szakasza (az
+eredeti, 2026-09-03-i kiegészítés a pixel-index határkérdést — N vagy
+N−1 — rögzítette, ez a mostani kiegészítés egy attól független, korábban
+észre nem vett kérdést, a tengely-tájolást korrigálja).
 
 ## 4. Kép-dimenzió forrása
 
@@ -101,6 +111,16 @@ A downstream rétegek saját kivételei (`ImageInterpretationError`,
 `GeometricSurfaceValueError`, `GeometricSurfaceMeshGenerationError`,
 `MeshValidationError`) nem kerülnek újracsomagolásra, változatlanul
 propagálnak a `get_mesh()`-ből.
+
+**Kiegészítés (2026-09-04, ROADMAP Phase 13.9, 1. rész):** a fenti
+`interpret_image()` hívás `interpret_assignment()`-re cserélődött — l.
+`ADR-0021`, `docs/plugins/relief_generator/IMAGE_RELIEF_BLOB_INTERPRETATION.md`.
+Ez egy vékony dispatch-réteg, ami a hozzárendelési fájl opcionális
+`"strategy"` mezője alapján a változatlan, 13.2-es `interpret_image()`-hez
+vagy az új, blob-alapú `interpret_image_blob()`-hoz irányít — minden
+meglévő, `"strategy"` mező nélküli hozzárendelési fájl (l. a jelen
+dokumentum 6. szakaszának `"file"` `ParameterType`-hoz kapcsolódó
+tesztjei) változtatás nélkül, azonos eredménnyel fut tovább.
 
 ## 8. Réteghatár — mit NEM dönt el ez a dokumentum
 

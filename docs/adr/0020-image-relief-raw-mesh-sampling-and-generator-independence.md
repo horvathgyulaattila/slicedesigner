@@ -105,3 +105,59 @@ kiegészítés-precedens mintáját követve).
 - A Raw Mesh réteg (13.7, Elfogadva) és a `GeometricSurface` (13.6,
   Elfogadva) kontraktusa változatlan — a képlet kizárólag az Orchestration
   belső implementációja.
+
+## Kiegészítés (2026-09-04): Y-tengely tájolás-korrekció
+
+A projektgazda élő tesztelése (ROADMAP Phase 13.9 lezárása után) egy
+valós generálásnál azt találta, hogy a keletkező relief függőlegesen
+tükrözve jelenik meg a forrásképhez képest. A Szoftverarchitekt ezt
+reprodukálta és megerősítette: a hiba a `raw_relief` closure Y-tengely
+leképezésében van, **nem** az itt (2026-09-03) rögzített pixel-index
+határkérdésben (N vagy N−1) — az attól teljesen független, korábban
+egyik vizsgálat során sem tesztelt kérdés.
+
+**A pontos ok.** A kép sor-major konvenciója (`py=0` a kép teteje) és a
+fizikai Y-tengely szokásos, felülnézetben felfelé növekvő (Descartes-)
+tájolása ellentétes irányúak. Az eredeti képlet (`py = y_norm *
+(image_height - 1)`) ezt nem vette figyelembe: `y_norm=0` (a modell
+kis-Y pereme) a kép tetejéhez, `y_norm=1` (a modell nagy-Y pereme) a
+kép aljához kötötte — szabvány felülnézetben ez a kép tetejét a modell
+aljára helyezi.
+
+**A javított képlet:**
+
+```python
+py = (1.0 - y_norm) * (image_height - 1)
+```
+
+`y_norm=0` (a modell kis-Y pereme) mostantól a kép **utolsó** sorára
+(`py=image_height−1`, a kép alja), `y_norm=1` (a modell nagy-Y pereme)
+a kép **első** sorára (`py=0`, a kép teteje) képződik le — a fizikai
+modell szabvány felülnézeti tájolásában a kép teteje a modell nagy-Y
+("távoli") pereméhez kerül.
+
+**Az X-tengelyt ez a kiegészítés nem érinti** — az ellenőrzötten
+helyes, nincs balra-jobbra tükröződés.
+
+**Miért nem a megosztott Raw Mesh/`MESH_GENERATION_MODEL.md` §36
+vertex-formulában javítjuk.** Azt mind a hat generátor-típus (a másik
+öt procedurális — Wave/Voronoi/Crater/Dune/WoodGrain — is) használja;
+azoknál nincs értelmezhető "helyes tájolás" (egy Perlin-zaj mintázatnak
+nincs felismerhető fel/le iránya), és egy ottani módosítás
+visszamenőlegesen, indokolatlanul megváltoztatná mind az öt már
+kiszállított generátor kimenetét. A javítás ezért kizárólag az Image
+Relief Generator saját, plugin-belüli Orchestration-rétegében
+(`ImageReliefGeneratorMeshSource.get_mesh()`, 13.8) történik — ez az
+egyetlen hely, ahol a "kép" fogalma egyáltalán értelmezett.
+
+### Következmények
+
+- `plugins/relief_generator/source/image_relief_generator_mesh_source.py`
+  (`ImageReliefGeneratorMeshSource.get_mesh()`) `raw_relief`
+  closure-jének egyetlen sora módosul.
+- `docs/plugins/relief_generator/IMAGE_RELIEF_ORCHESTRATION.md` 3.
+  szakasza frissül a javított képlettel és indoklással.
+- A Raw Mesh réteg (13.7), a `GeometricSurface` (13.6), a Semantic World
+  (13.1–13.2, 13.9/1. rész) és a `RegionAssignmentDialog` (13.9/2. rész)
+  kontraktusa változatlan — egyik sem ismeri vagy kezeli a fizikai
+  Y-tengelyt, kizárólag kép-pixel-koordinátákkal dolgoznak.

@@ -9,9 +9,9 @@ from __future__ import annotations
 
 from PIL import Image
 
+from plugins.relief_generator.domain.assignment_dispatch import interpret_assignment
 from plugins.relief_generator.domain.effect_processing import combine
 from plugins.relief_generator.domain.geometric_surface import GeometricSurface
-from plugins.relief_generator.domain.image_interpretation import interpret_image
 from plugins.relief_generator.domain.region_resolution import resolve_regions
 from plugins.relief_generator.mesh.generated_mesh import GeneratedMesh
 from plugins.relief_generator.mesh.geometric_surface_mesh_generator import (
@@ -26,8 +26,11 @@ from slicedesigner.engines.mesh_import import BoundingBox, Mesh
 class ImageReliefGeneratorMeshSource:
     """Az Image Relief Generator MeshSource-adaptere.
 
-    A `get_mesh()` a teljes láncot végigfuttatja: `interpret_image() →
-    Region-erdő → resolve_regions() → EffectSpec[] → (a `raw_relief`
+    A `get_mesh()` a teljes láncot végigfuttatja: `interpret_assignment()
+    → Region-erdő (13.9: a hozzárendelési fájl 'strategy' mezője szerint
+    a színenkénti `interpret_image()`-hez vagy a blob-alapú
+    `interpret_image_blob()`-hoz irányítva) → resolve_regions() →
+    EffectSpec[] → (a `raw_relief`
     closure-ön, a normalizált → kép abszolút pixel-koordináta
     leképezésen keresztül) → GeometricSurface →
     GeometricSurfaceMeshGenerator → GeneratedMesh`, majd a
@@ -38,10 +41,14 @@ class ImageReliefGeneratorMeshSource:
     A `raw_relief` closure normalizált `(x_norm, y_norm) ∈ [0,1]²`
     bemenetet vár, és a kép abszolút, diszkrét pixel-rácsának
     határpontjaihoz képezi le: `px = x_norm · (image_width − 1)`,
-    `py = y_norm · (image_height − 1)` — a leképezés folytonos marad,
-    nem kerekít/csonkol pixelre; az egész-pixel értelmezés a
-    `Mask`-backend (`PixelSetMask.member`) belső döntése (l. `ADR-0020`
-    kiegészítés).
+    `py = (1 − y_norm) · (image_height − 1)` — az Y-tengely szándékosan
+    tükrözött a kép sor-major konvenciójához (py=0 a kép teteje) képest,
+    hogy a fizikai modell szabvány felülnézeti (Descartes-) tájolásában
+    a kép teteje a modell nagy-Y ("távoli") pereméhez kerüljön, ne a
+    kis-Y ("közeli") peremhez (l. `ADR-0020` "Kiegészítés (2026-09-04)"
+    szakasza). A leképezés folytonos marad, nem kerekít/csonkol
+    pixelre; az egész-pixel értelmezés a `Mask`-backend
+    (`PixelSetMask.member`) belső döntése.
 
     Az `interpret_image()` szerződése nem módosul; a kép méretét ez az
     osztály önállóan olvassa be egy második `Image.open()` hívással —
@@ -74,7 +81,9 @@ class ImageReliefGeneratorMeshSource:
             `warnings=()`.
 
         Raises:
-            ImageInterpretationError: l. `interpret_image`.
+            ImageInterpretationError: l. `interpret_assignment` — a
+                hozzárendelési fájl 'strategy' mezője szerint
+                `interpret_image` vagy `interpret_image_blob` saját hibája.
             RegionResolutionError: l. `resolve_regions`.
             EffectProcessingConflictError: l. `combine`.
             GeometricSurfaceValueError: l. `GeometricSurface.__post_init__`.
@@ -83,7 +92,7 @@ class ImageReliefGeneratorMeshSource:
         """
         params = self._parameters
 
-        region_tree = interpret_image(params.image_path, params.assignment_path)
+        region_tree = interpret_assignment(params.image_path, params.assignment_path)
         effect_specs = resolve_regions(region_tree)
 
         with Image.open(params.image_path) as image:
@@ -91,7 +100,7 @@ class ImageReliefGeneratorMeshSource:
 
         def raw_relief(x_norm: float, y_norm: float) -> float:
             px = x_norm * (image_width - 1)
-            py = y_norm * (image_height - 1)
+            py = (1.0 - y_norm) * (image_height - 1)
             return combine(effect_specs, px, py)
 
         surface = GeometricSurface(

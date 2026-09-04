@@ -64,6 +64,16 @@ class ParameterSpec:
             (alapértelmezés) esetén a mező mindig látható — ez a meglévő,
             Phase 10-ig egyetlen viselkedés, változatlanul. Kizárólag
             `"enum"` típusú vezérlő mezőre értelmezett.
+        editor: opcionális callable, kizárólag `"file"` típusnál
+            értelmezett (ADR-0022, 2026-09-04, ROADMAP Phase 13.9). Ha
+            megadott, a form-builder a `"Tallózás..."` gomb mellé egy
+            `"Szerkesztés..."` gombot is felvesz — kattintáskor a
+            callable a form jelenlegi `values()`-ét kapja, és egy
+            útvonalat ad vissza (vagy `None`-t, ha a felhasználó
+            megszakította, vagy a plugin egy előfeltétel hiányában
+            elutasította). `None` (alapértelmezés) esetén nincs
+            `"Szerkesztés..."` gomb — ez a meglévő, Phase 13.8-ig
+            egyetlen viselkedés, változatlanul.
     """
 
     name: str
@@ -77,6 +87,7 @@ class ParameterSpec:
     item_schema: tuple["ParameterSpec", ...] = ()
     group: str | None = None
     visible_when: tuple[str, str] | None = None
+    editor: Callable[[dict[str, Any]], str | None] | None = None
 
 
 @dataclass(frozen=True)

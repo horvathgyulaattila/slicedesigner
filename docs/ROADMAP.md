@@ -534,7 +534,7 @@ Feladata:
 * ~~13.6 — `GeometricSurface` (Relief → Geometry) — új, `HeightField`-del párhuzamos kontraktus~~ — kész: `ADR-0018` (`GeometricSurface` kontraktus) `Státusz: Elfogadva`-ra frissült — a kontraktus két részre bomlik (`raw_relief` pass-through a Relief Representationből + tiszta, mintavételezés-mentes `physical_z(raw_value, v_min, v_max) -> Z` képlet), nullponthoz rögzített, kétirányú, egymástól független normalizálással. `docs/plugins/relief_generator/IMAGE_RELIEF_GEOMETRIC_SURFACE.md` (Elfogadva) rögzíti a kontraktust részletesen. A réteg tudatosan kizárólag egyetlen fail-fast kényszert érvényesít (`base_thickness − relief_height_recessed > 0`) — a projektgazda explicit döntése alapján nincs `width`/`height`/`relief_height_raised`/`relief_height_recessed` nem-negativitási ellenőrzés ezen felül (l. `ADR-0018` "Mérlegelt alternatívák"). Kód-szinten: `plugins/relief_generator/domain/geometric_surface.py` (`GeometricSurface` frozen dataclass, `physical_z` metódus), `plugins/relief_generator/exceptions.py` bővítése (`GeometricSurfaceValueError`), `tests/plugins/relief_generator/domain/test_geometric_surface.py` (8 teszt). Teljes tesztkészlet (869 teszt) regresszió nélkül zöld.
 * ~~13.7 — Raw Mesh generálás (a `docs/AI_WORKFLOW.md` "Kiegészítés procedurális Height Field receptekhez" pontja szerint, matplotlib-előnézet kötelező jóváhagyás a Claude Code-nak szánt implementációs prompt előtt)~~ — kész: a matplotlib-előnézet (szintetikus House/Window/Door példa, a Szoftverarchitekt saját eszközeivel futtatva) a projektgazda által jóváhagyva; a tervezés közben egy valódi ellentmondás merült fel (a `raw_relief` doménje korábban nem volt rögzítve, ütközve a `Mask` abszolút kép-pixel-koordinátái és a Raw Mesh réteg deklarált pixel-agnosztikussága között), amit a Szoftverarchitekt jelzett, nem önállóan oldott fel — a projektgazdai döntés `ADR-0020`-ban (Elfogadva) rögzítve: a `raw_relief` doménje normalizált `[0,1]×[0,1]`, a kép-pixel-koordinátákra való leképezés az Orchestration (13.8) felelőssége. `docs/plugins/relief_generator/IMAGE_RELIEF_RAW_MESH.md` (Elfogadva) rögzíti a Raw Mesh kontraktust; `IMAGE_RELIEF_GEOMETRIC_SURFACE.md` (13.6) egy ponton kiegészült (a `raw_relief` doménje), a tervezési draft 16.3 szakasza mellé egy jegyzet került, ami elavultnak jelöli a bemutatott closure-t. `ADR-0020` egyúttal azt is rögzíti, hogy a `GeometricSurfaceMeshGenerator` tudatosan **nem** osztja meg a triangulációs/vertex-indexelési logikát a meglévő `MeshGenerator`-ral (a jövőbeli "áttört" relief-testek, `BACKLOG.md` 1. tétele, és a bizonytalan formájú jövőbeli Vector Relief Generator miatt) — kizárólag a geometria-független `GeneratedMesh`/`MeshValidator` kerül újrafelhasználásra. Kód-szinten: `plugins/relief_generator/mesh/geometric_surface_mesh_generator.py` (`GeometricSurfaceMeshGenerator`, önálló trianguláció), `plugins/relief_generator/exceptions.py` bővítése (`GeometricSurfaceMeshGenerationError`), `tests/plugins/relief_generator/mesh/test_geometric_surface_mesh_generator.py` (10 teszt). Teljes tesztkészlet (879 teszt) regresszió nélkül zöld.
 * ~~13.8 — Orchestration adapter (`ImageReliefGeneratorMeshSource`) + alap GUI-integráció, új `"file"` `ParameterType` (ADR-0017 kiegészítés) — a 13.2 ideiglenes, fájl-alapú hozzárendelésével~~ — kész: `docs/plugins/relief_generator/IMAGE_RELIEF_ORCHESTRATION.md` (Elfogadva) rögzíti a teljes Orchestration-láncot és a `raw_relief` closure végleges, normalizált→pixel leképezését (`px = x_norm·(image_width−1)`, `py = y_norm·(image_height−1)`) — a pontos képletet `ADR-0020`, a `"file"` `ParameterType`-ot `ADR-0017` kiegészítése rögzíti, mindkettő új ADR-sorszám nélkül. Kód-szinten: `plugins/relief_generator/source/image_relief_generator_parameters.py` (`ImageReliefGeneratorParameters`), `image_relief_generator_mesh_source.py` (`ImageReliefGeneratorMeshSource`), `image_relief_generator_registration.py` (önálló entry point, a meglévő `relief_generator` mellett, azt nem helyettesítve); a core `mesh_source_registry.py` `ParameterType`-ja és `src/slicedesigner/gui/parameter_panel.py` generikus form-builderje bővült a `"file"` típussal, a meglévő `_build_file_picker` újrafelhasználásával. Teljes tesztkészlet (892 teszt) regresszió nélkül zöld (879 → 892, 13 új teszttel).
-* 13.9 — Interaktív GUI a régió-hozzárendeléshez (kép megjelenítése, kattintható foltok kijelölése, hierarchia interaktív felépítése) — a 13.2 ideiglenes fájl-alapú mechanizmusát váltja ki
+* ~~13.9 — Interaktív GUI a régió-hozzárendeléshez (kép megjelenítése, kattintható foltok kijelölése, hierarchia interaktív felépítése) — a 13.2 ideiglenes fájl-alapú mechanizmusát váltja ki~~ — kész, két részre bontva: **1. rész (Domain-réteg)** — `docs/plugins/relief_generator/IMAGE_RELIEF_BLOB_INTERPRETATION.md` (Elfogadva) rögzíti a seed-pixel flood-fill alapú blob-stratégiát (`interpret_image_blob()`/`flood_fill_region()`, `ADR-0021`) — **testvér-stratégia**, nem váltja ki a 13.2-es színenkénti stratégiát; a hozzárendelési fájl opcionális `"strategy"` mezője (`assignment_dispatch.py::interpret_assignment()`) választ a kettő között. **2. rész (GUI-réteg)** — `docs/plugins/relief_generator/IMAGE_RELIEF_REGION_ASSIGNMENT_GUI.md` (Elfogadva) rögzíti a `RegionAssignmentDialog` interakciós szerződését (kattintás→flood-fill/kiválasztás, húzható hierarchia mint egyetlen igazságforrás, törlés=árvák a gyökérbe, tempfile-mentés) — a core `ParameterSpec.editor` extension pointon (`ADR-0022`) keresztül, egy "Szerkesztés..." gombbal érhető el; ez a plugin első közvetlen PySide6-függősége. **Élő tesztelés közben** egy korábban nem felismert hiba is előkerült és javításra került: a `raw_relief` closure Y-tengelye tükrözve volt a forrásképhez képest — `ADR-0020` "Kiegészítés (2026-09-04)" szakasza rögzíti a javított képletet (`py = (1−y_norm)·(image_height−1)`) és az indoklást (a hiba oka a kép sor-major konvenciója és a fizikai Y-tengely szokásos, felülnézetben-felfelé-növekvő tájolása közti eltérés volt). Teljes tesztkészlet: 892 → 924 (32 új teszttel a teljes 13.9 alatt).
 * 13.10 — Integrációs teszt a teljes SliceDesigner pipeline-nal
 
 Kilépési feltétel: mind a tíz tétel (13.1–13.10) elkészült, a szükséges domain-contract dokumentumok Elfogadva státusszal a `docs/plugins/relief_generator/` alá kerültek, az implementáció automatizált teszttel lefedve és a projektgazda élő tesztelésével megerősítve.
@@ -749,6 +749,33 @@ Kilépési feltétel: mind a tíz tétel (13.1–13.10) elkészült, a szükség
 > A Phase 13 aktív tétele mostantól a 13.9 (Interaktív GUI a
 > régió-hozzárendeléshez) — ez váltja ki a 13.2 ideiglenes, fájl-alapú
 > mechanizmusát.
+
+> **Megjegyzés (2026-09-04, folytatás 71):** A 13.9 tétel (mindkét rész
+> + az élő tesztelés során felmerült Y-tengely tükröződési hiba
+> javítása) elkészült, review-n átment — a Szoftverarchitekt minden
+> érintett fájlt (két új ADR — 0021, 0022 —, két új domain-contract
+> dokumentum, négy új/módosított plugin-modul, a core
+> `mesh_source_registry.py`/`parameter_panel.py` bővítése, öt új
+> teszt-modul, majd a korrekcióhoz további három módosított fájl) a
+> jóváhagyott promptok "Cél" szakasza ellenében ellenőrizte, szó
+> szerinti egyezéssel — néhány apró, jól indokolt eltéréssel (pl. a
+> `_edit_region_assignment` szükséges áthelyezése a `_PARAMETERS` elé,
+> egy `mypy`-hiba miatti típusjavítás, a bizonytalanként jelzett Qt-API
+> kérdések — `event.position().toPoint()`, `_RegionTreeWidget.dropEvent()`
+> — helyes feloldása), mindegyik dokumentálva és elfogadva. A teljes
+> tesztkészlet (924 teszt) regresszió nélkül zöld.
+>
+> A Phase 13 tervezett tíz tétele (13.1–13.10) közül kilenc kész — a
+> Kilépési feltétel szerinti utolsó, 13.10 (Integrációs teszt) van
+> hátra. A projektgazda explicit kérésére azonban a következő chat nem
+> ezzel, hanem a `IMAGE_RELIEF_GENERATOR_PLANNING.md` 9.6 tervezési
+> lépésével (Falloff-mechanizmus) indul — az élő tesztelés megerősítette
+> a korábban csak feltételesen ("csak ha igazolt igény") nyitva hagyott
+> igényt: jelenleg egyetlen régión belül sem szabályozható a relief
+> térbeli profilja (minden régió éles falú, lapos tetejű blokként
+> jelenik meg). Ennek pontos ROADMAP-elhelyezése (új tétel száma, a
+> 13.10-hez való viszonya) a következő chat élő ellenőrzése és Döntési
+> javaslata során dől el, nem itt.
 
 ---
 

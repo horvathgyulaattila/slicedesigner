@@ -169,6 +169,67 @@ def test_raw_relief_maps_normalized_corners_to_actual_pixel_corners(
     assert any(z == pytest.approx(3.0 - 1.0) for z in top_zs)
 
 
+def test_raw_relief_top_image_row_maps_to_upper_half_of_physical_y_range(
+    tmp_path: Path,
+) -> None:
+    """A kép **felső** sora (py=0) a fizikai Y-tartomány **felső**
+    (nagy-Y) felére képződik le, nem az aljára — l. ADR-0020
+    "Kiegészítés (2026-09-04)" szakasza.
+
+    Egy 2×2-es képen a felső sor (py=0) Raised, az alsó sor (py=1)
+    semleges (háttér) — minden, `base_thickness`-nél magasabb Z-jű
+    vertex fizikai Y-koordinátájának a teljes Y-tartomány felső felében
+    kell lennie (`v[1] > height / 2`). A régi (hibás) `py = y_norm *
+    (image_height - 1)` képlet mellett ez a teszt megbukna.
+    """
+    image_path = tmp_path / "image.png"
+    assignment_path = tmp_path / "assignment.json"
+    _write_image(
+        image_path,
+        [
+            [(255, 0, 0), (255, 0, 0)],
+            [(255, 255, 255), (255, 255, 255)],
+        ],
+    )
+    _write_assignment(
+        assignment_path,
+        {
+            "background": "#FFFFFF",
+            "regions": [
+                {
+                    "color": "#FF0000",
+                    "contribution": 0.5,
+                    "depth_behavior": "raised",
+                    "parent": None,
+                }
+            ],
+        },
+    )
+    height = 10.0
+    parameters = _make_parameters(
+        tmp_path,
+        image_path=str(image_path),
+        assignment_path=str(assignment_path),
+        height=height,
+        base_thickness=3.0,
+        relief_height_raised=2.0,
+        # A legkisebb megengedett mintaszám (`ny=2`, l.
+        # `GeometricSurfaceMeshGenerator.generate`) — csak a két szélső
+        # `y_norm ∈ {0, 1}` mintapont, elkerülve a `PixelSetMask`
+        # egész-pixel-csonkolásából adódó, e teszttől független
+        # rács-aliasing-ot egy 2 soros kép és sűrűbb mintavételezés
+        # között.
+        sampling_distance=height / 2,
+    )
+
+    mesh = ImageReliefGeneratorMeshSource(parameters).get_mesh()
+
+    raised_vertices = [v for v in mesh.vertices if v[2] > 3.0]
+    assert raised_vertices
+    for vertex in raised_vertices:
+        assert vertex[1] > height / 2
+
+
 def test_two_calls_differing_only_in_sampling_distance_yield_different_meshes(
     tmp_path: Path,
 ) -> None:
@@ -220,3 +281,42 @@ def test_get_mesh_propagates_geometric_surface_value_error(tmp_path: Path) -> No
 
     with pytest.raises(GeometricSurfaceValueError):
         ImageReliefGeneratorMeshSource(parameters).get_mesh()
+
+
+def test_get_mesh_with_blob_strategy_assignment_file(tmp_path: Path) -> None:
+    """`get_mesh()` `interpret_assignment()`-en keresztül a blob-alapú
+    (13.9, 1. rész) stratégiát is helyesen futtatja végig — l. ADR-0021."""
+    image_path = tmp_path / "image.png"
+    assignment_path = tmp_path / "assignment.json"
+    _write_image(
+        image_path,
+        [
+            [(139, 69, 19), (139, 69, 19)],
+            [(139, 69, 19), (139, 69, 19)],
+        ],
+    )
+    _write_assignment(
+        assignment_path,
+        {
+            "strategy": "blob",
+            "regions": [
+                {
+                    "seed_pixel": [0, 0],
+                    "contribution": 0.5,
+                    "depth_behavior": "raised",
+                    "parent": None,
+                }
+            ],
+        },
+    )
+    parameters = _make_parameters(
+        tmp_path, image_path=str(image_path), assignment_path=str(assignment_path)
+    )
+
+    mesh = ImageReliefGeneratorMeshSource(parameters).get_mesh()
+
+    assert mesh.source_path is None
+    assert mesh.is_valid is True
+    assert mesh.warnings == ()
+    assert len(mesh.vertices) > 0
+    assert len(mesh.triangles) > 0

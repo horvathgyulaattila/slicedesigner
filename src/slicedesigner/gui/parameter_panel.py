@@ -224,6 +224,19 @@ class _GeneratorParameterForm(QWidget):
                 f"{spec.label} kiválasztása"
             )
             self._file_widgets[spec.name] = path_label
+            if spec.editor is not None:
+                edit_button = QPushButton("Szerkesztés...")
+                editor = spec.editor
+
+                def _on_edit_clicked() -> None:
+                    result = editor(self.values())
+                    if result is not None:
+                        path_label.setText(result)
+
+                edit_button.clicked.connect(_on_edit_clicked)
+                file_picker_layout = file_picker.layout()
+                assert file_picker_layout is not None
+                file_picker_layout.addWidget(edit_button)
             return file_picker
         combo = QComboBox()
         for choice in spec.choices:

@@ -7,7 +7,7 @@ name = "slicedesigner-relief-generator"
 version = "0.1.0"
 description = "Relief Generator — opcionális, parametrikus MeshSource plugin a SliceDesignerhez."
 requires-python = ">=3.11"
-dependencies = ["Pillow"]
+dependencies = ["Pillow", "PySide6"]
 
 [project.entry-points."slicedesigner.mesh_sources"]
 relief_generator = "plugins.relief_generator.source.registration:build_mesh_source_descriptor"

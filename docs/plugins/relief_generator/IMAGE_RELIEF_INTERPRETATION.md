@@ -101,7 +101,14 @@ Azonos kép + azonos hozzárendelési fájl esetén azonos Region-erdő jön lé
 ## 6. Réteghatár — mit NEM dönt el ez a dokumentum
 
 * Region Resolution (`elevation`/`ParentRef`/`TieBreakPriority`, `combine`) — Phase 13.3, ADR-0019.
-* Az interaktív, GUI-alapú hozzárendelés — Phase 13.9 (ez a fájl-alapú mechanizmust váltja ki).
+* Az interaktív, GUI-alapú hozzárendelés — Phase 13.9. **Pontosítás
+  (2026-09-04):** a 13.9 nem váltja ki, hanem egy önálló, testvér-
+  stratégiával (`interpret_image_blob`, `ADR-0021`,
+  `IMAGE_RELIEF_BLOB_INTERPRETATION.md`) egészíti ki a jelen
+  dokumentumban leírt, színenkénti stratégiát — mindkettő elérhető
+  marad, a hozzárendelési fájl opcionális `strategy` mezője
+  (alapértelmezett `"color"`) választja ki, melyiket kell alkalmazni
+  (`assignment_dispatch.py`).
 
 ## 7. Visszafelé kompatibilitás
 

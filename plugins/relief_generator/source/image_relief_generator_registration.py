@@ -7,6 +7,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from PySide6.QtWidgets import QDialog, QMessageBox
+
+from plugins.relief_generator.gui.region_assignment_dialog import (
+    RegionAssignmentDialog,
+)
 from plugins.relief_generator.source.image_relief_generator_mesh_source import (
     ImageReliefGeneratorMeshSource,
 )
@@ -18,6 +23,35 @@ from slicedesigner.project.mesh_source_registry import (
     ParameterSpec,
 )
 
+
+def _edit_region_assignment(values: dict[str, Any]) -> str | None:
+    """A `"Szerkesztés..."` gomb `ParameterSpec.editor` callable-je
+    (ADR-0022) — megnyitja a `RegionAssignmentDialog`-ot.
+
+    Args:
+        values: a form jelenlegi állapota (l. `_GeneratorParameterForm.values()`).
+
+    Returns:
+        Sikeres szerkesztés után az újonnan írt ideiglenes hozzárendelési
+        fájl útvonala; `None`, ha nincs kiválasztott kép, vagy a
+        felhasználó megszakította a szerkesztést.
+    """
+    image_path = values.get("image_path", "")
+    if not image_path:
+        QMessageBox.warning(
+            None, "Régiók szerkesztése", "Először válassz ki egy kép fájlt."
+        )
+        return None
+    existing_assignment_path = values.get("assignment_path") or None
+    dialog = RegionAssignmentDialog(
+        image_path=image_path,
+        existing_assignment_path=existing_assignment_path,
+    )
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return None
+    return dialog.result_path
+
+
 _PARAMETERS: tuple[ParameterSpec, ...] = (
     ParameterSpec(name="image_path", label="Kép fájl", type="file", default=""),
     ParameterSpec(
@@ -25,6 +59,7 @@ _PARAMETERS: tuple[ParameterSpec, ...] = (
         label="Hozzárendelési fájl (JSON)",
         type="file",
         default="",
+        editor=_edit_region_assignment,
     ),
     ParameterSpec(
         name="width",
